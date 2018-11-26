@@ -102,6 +102,8 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
   InitializeVector(*rc, Ac->localNumberOfRows);
   InitializeVector(*xc, Ac->localNumberOfColumns);
   InitializeVector(*Axf, Af.localNumberOfColumns);
+  HIPInitializeVector(*rc, Ac->localNumberOfRows);
+  HIPInitializeVector(*xc, Ac->localNumberOfColumns);
   Af.Ac = Ac;
   MGData * mgData = new MGData;
   InitializeMGData(f2cOperator, rc, xc, Axf, *mgData);

@@ -22,6 +22,9 @@
 #define VECTOR_HPP
 #include <cassert>
 #include <cstdlib>
+#include <hip/hip_runtime_api.h>
+
+#include "utils.hpp"
 #include "Geometry.hpp"
 
 struct Vector_STRUCT {
@@ -33,6 +36,7 @@ struct Vector_STRUCT {
    */
   void * optimizationData;
 
+  double* hip;
 };
 typedef struct Vector_STRUCT Vector;
 
@@ -49,6 +53,12 @@ inline void InitializeVector(Vector & v, local_int_t localLength) {
   return;
 }
 
+inline void HIPInitializeVector(Vector& v, local_int_t localLength)
+{
+    v.localLength = localLength;
+    HIP_CHECK(hipMalloc((void**)&v.hip, sizeof(double) * localLength));
+}
+
 /*!
   Fill the input vector with zero values.
 
@@ -60,6 +70,12 @@ inline void ZeroVector(Vector & v) {
   for (int i=0; i<localLength; ++i) vv[i] = 0.0;
   return;
 }
+
+inline void HIPZeroVector(Vector& v)
+{
+    HIP_CHECK(hipMemset(v.hip, 0, sizeof(double) * v.localLength));
+}
+
 /*!
   Multiply (scale) a specific vector entry by a given value.
 
@@ -110,6 +126,12 @@ inline void DeleteVector(Vector & v) {
   delete [] v.values;
   v.localLength = 0;
   return;
+}
+
+inline void HIPDeleteVector(Vector& v)
+{
+    HIP_CHECK(hipFree(v.hip));
+    v.localLength = 0;
 }
 
 #endif // VECTOR_HPP

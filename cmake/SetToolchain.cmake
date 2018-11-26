@@ -3,7 +3,7 @@ find_package(OpenMP)
 if (NOT OPENMP_FOUND)
   message("-- OpenMP not found. Compiling WITHOUT OpenMP support.")
 else()
-  option(HPCG_OPENMP "Compile WITH OpenMP support." ON)
+  option(HPCG_OPENMP "Compile WITH OpenMP support." OFF) # TODO
 endif()
 
 # MPI
@@ -11,7 +11,7 @@ find_package(MPI)
 if (NOT MPI_FOUND)
   message("-- MPI not found. Compiling WITHOUT MPI support.")
 else()
-  option(HPCG_MPI "Compile WITH MPI support." ON)
+  option(HPCG_MPI "Compile WITH MPI support." OFF) # TODO
   if (HPCG_MPI)
     set(CMAKE_C_COMPILER ${MPI_COMPILER})
     set(CMAKE_CXX_COMPILER ${MPI_COMPILER})

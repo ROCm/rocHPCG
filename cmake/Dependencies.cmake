@@ -11,8 +11,7 @@ include(cmake/DownloadProject/DownloadProject.cmake)
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/hcc /opt/rocm/hip /opt/rocm)
 
 # HIP configuration
-# Ignore hcc warning: argument unused during compilation: '-isystem /opt/rocm/hip/include'
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-unused-command-line-argument")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 find_package(HIP REQUIRED CONFIG PATHS ${CMAKE_PREFIX_PATH})
 
 # rocPRIM package

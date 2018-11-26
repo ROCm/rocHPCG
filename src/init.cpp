@@ -34,9 +34,12 @@ const char* NULLDEVICE="/dev/null";
 #include <fstream>
 #include <iostream>
 
+#include "utils.hpp"
 #include "hpcg.hpp"
 
 #include "ReadHpcgDat.hpp"
+
+void* workspace;
 
 std::ofstream HPCG_fout; //!< output file stream for logging activities during HPCG run
 
@@ -141,6 +144,9 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 
   // TODO device management
   params.device = 0;
+
+  // Allocate device workspace
+  HIP_CHECK(hipMalloc((void**)&workspace, 8192));
 
 #ifdef HPCG_NO_OPENMP
   params.numThreads = 1;

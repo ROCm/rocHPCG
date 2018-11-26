@@ -13,6 +13,7 @@
 //@HEADER
 
 #include <fstream>
+#include <hip/hip_runtime_api.h>
 
 #include "hpcg.hpp"
 
@@ -26,5 +27,9 @@
 int
 HPCG_Finalize(void) {
   HPCG_fout.close();
+
+  // Reset HIP device
+  hipDeviceReset();
+
   return 0;
 }

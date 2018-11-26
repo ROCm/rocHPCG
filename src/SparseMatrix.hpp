@@ -23,6 +23,9 @@
 
 #include <vector>
 #include <cassert>
+#include <hip/hip_runtime_api.h>
+
+#include "utils.hpp"
 #include "Geometry.hpp"
 #include "Vector.hpp"
 #include "MGData.hpp"
@@ -73,6 +76,20 @@ struct SparseMatrix_STRUCT {
   local_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
   double * sendBuffer; //!< send buffer for non-blocking sends
 #endif
+
+  // ELL matrix storage format arrays
+  local_int_t ell_width; //!< Maximum nnz per row
+  local_int_t* ell_col_ind; //!< ELL column indices
+  double* ell_val; //!< ELL values
+
+  local_int_t* diag_idx; //!< Index to diagonal value in ell_val
+  double* inv_diag; //!< Inverse diagonal values
+
+  // SymGS structures
+  local_int_t nblocks; //!< Number of independent sets
+  local_int_t* sizes; //!< Number of rows of independent sets
+  local_int_t* offsets; //!< Pointer to the first row of each independent set
+  local_int_t* perm; //!< Permutation obtained by independent set
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;
 
@@ -114,6 +131,18 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
 #endif
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
   A.Ac =0;
+
+  A.ell_width = 0;
+  A.ell_col_ind = NULL;
+  A.ell_val = NULL;
+  A.diag_idx = NULL;
+  A.inv_diag = NULL;
+
+  A.nblocks = 0;
+  A.sizes = NULL;
+  A.offsets = NULL;
+  A.perm = NULL;
+
   return;
 }
 
@@ -179,6 +208,16 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}
   if (A.Ac!=0) { DeleteMatrix(*A.Ac); delete A.Ac; A.Ac = 0;} // Delete coarse matrix
   if (A.mgData!=0) { DeleteMGData(*A.mgData); delete A.mgData; A.mgData = 0;} // Delete MG data
+
+  HIP_CHECK(hipFree(A.ell_col_ind));
+  HIP_CHECK(hipFree(A.ell_val));
+  HIP_CHECK(hipFree(A.diag_idx));
+  HIP_CHECK(hipFree(A.inv_diag));
+  HIP_CHECK(hipFree(A.perm));
+
+  delete[] A.sizes;
+  delete[] A.offsets;
+
   return;
 }
 

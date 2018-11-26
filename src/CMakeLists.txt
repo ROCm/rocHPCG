@@ -15,12 +15,17 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Version.hpp.in"
 # HPCG HIP sources
 set(HIP_SOURCE
   ComputeDotProduct.cpp
-  ComputeMG.cpp
   ComputeSPMV.cpp
   ComputeSYMGS.cpp
+  ComputeProlongation.cpp
+  ComputeRestriction.cpp
   ComputeWAXPBY.cpp
   GenerateProblem.cpp
+  OptimizeProblem.cpp
+  Permute.cpp
   SetupHalo.cpp
+  SparseMatrix.cpp
+  Vector.cpp
 )
 
 # HPCG sources
@@ -30,6 +35,7 @@ set(SOURCE
   CheckAspectRatio.cpp
   CheckProblem.cpp
   ComputeDotProduct_ref.cpp
+  ComputeMG.cpp
   ComputeMG_ref.cpp
   ComputeOptimalShapeXYZ.cpp
   ComputeProlongation_ref.cpp
@@ -43,7 +49,6 @@ set(SOURCE
   GenerateGeometry.cpp
   GenerateProblem_ref.cpp
   MixedBaseCounter.cpp
-  OptimizeProblem.cpp
   OutputFile.cpp
   ReadHpcgDat.cpp
   ReportResults.cpp

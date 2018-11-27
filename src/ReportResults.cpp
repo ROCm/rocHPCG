@@ -35,6 +35,37 @@ using std::endl;
 #include "hpcg.hpp"
 #endif
 
+double ComputeTotalGFlops(const SparseMatrix& A, int numberOfMgLevels, int numberOfCgSets, int refMaxIters, int optMaxIters, double times[])
+{
+    double fNumberOfCgSets = numberOfCgSets;
+    double fniters = fNumberOfCgSets * (double) optMaxIters;
+    double fnrow = A.totalNumberOfRows;
+    double fnnz = A.totalNumberOfNonzeros;
+
+    // Op counts come from implementation of CG in CG.cpp (include 1 extra for the CG preamble ops)
+    double fnops_ddot = (3.0*fniters+fNumberOfCgSets)*2.0*fnrow; // 3 ddots with nrow adds and nrow mults
+    double fnops_waxpby = (3.0*fniters+fNumberOfCgSets)*2.0*fnrow; // 3 WAXPBYs with nrow adds and nrow mults
+    double fnops_sparsemv = (fniters+fNumberOfCgSets)*2.0*fnnz; // 1 SpMV with nnz adds and nnz mults
+    // Op counts from the multigrid preconditioners
+    double fnops_precond = 0.0;
+    const SparseMatrix * Af = &A;
+    for (int i=1; i<numberOfMgLevels; ++i) {
+        double fnnz_Af = Af->totalNumberOfNonzeros;
+        double fnumberOfPresmootherSteps = Af->mgData->numberOfPresmootherSteps;
+        double fnumberOfPostsmootherSteps = Af->mgData->numberOfPostsmootherSteps;
+        fnops_precond += fnumberOfPresmootherSteps*fniters*4.0*fnnz_Af; // number of presmoother flops
+        fnops_precond += fniters*2.0*fnnz_Af; // cost of fine grid residual calculation
+        fnops_precond += fnumberOfPostsmootherSteps*fniters*4.0*fnnz_Af;  // number of postsmoother flops
+        Af = Af->Ac; // Go to next coarse level
+    }
+
+    fnops_precond += fniters*4.0*((double) Af->totalNumberOfNonzeros); // One symmetric GS sweep at the coarsest level
+    double fnops = fnops_ddot+fnops_waxpby+fnops_sparsemv+fnops_precond;
+    double frefnops = fnops * ((double) refMaxIters)/((double) optMaxIters);
+
+    return frefnops/(times[0]+fNumberOfCgSets*(times[7]/10.0+times[9]/10.0))/1.0E9;
+}
+
 /*!
  Creates a YAML file and writes the information about the HPCG run, its results, and validity.
 
@@ -411,6 +442,39 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
 #ifdef HPCG_DEBUG
     HPCG_fout << yaml;
 #endif
+
+    // Print some numbers to screen
+    printf("\nNumber of CG sets:     %d\n", numberOfCgSets);
+    printf("Iterations per set:    %d\n", 0);
+    printf("scaled res mean:       %le\n", 0.0);
+    printf("scaled res variance:   %le\n", 0.0);
+
+    printf("\nTotal Time: %le sec\n", times[0]);
+    printf("Setup        Overhead: %0.2lf%%\n", 0.0);
+    printf("Optimization Overhead: %0.2lf%%\n", 0.0);
+    printf("Convergence  Overhead: %0.2lf%%\n", 0.0);
+
+    printf("\n%dx%dx%d process grid\n", A.geom->npx, A.geom->npy, A.geom->npz);
+    printf("%dx%dx%d local domain\n", A.geom->nx, A.geom->ny, A.geom->nz);
+    printf("Dot    = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           fnops_ddot / times[1] / 1e9,
+           (fnreads_ddot + fnwrites_ddot) / times[1] / 1e9);
+    printf("waxpby = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           fnops_waxpby / times[2] / 1e9,
+           (fnreads_waxpby + fnwrites_waxpby) / times[2] / 1e9);
+    printf("SpMV   = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           fnops_sparsemv / (times[3]) / 1e9,
+           (fnreads_sparsemv + fnwrites_sparsemv) / times[3] / 1e9);
+    printf("MG     = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           fnops_precond / (times[5]) / 1e9,
+           (fnreads_precond + fnwrites_precond) / times[5] / 1e9);
+    printf("total  = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           fnops / times[0] / 1e9,
+           (fnreads + fnwrites) / times[0] / 1e9);
+    printf("final  = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           totalGflops,
+           (frefnreads + frefnwrites) / (times[0] + fNumberOfCgSets * (times[7] / 10.0 + times[9] / 10.0)) / 1e9);
   }
+
   return;
 }

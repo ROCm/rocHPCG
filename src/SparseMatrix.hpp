@@ -159,6 +159,9 @@ inline void CopyMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) dv[i] = *(curDiagA[i]);
   return;
 }
+
+void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal);
+
 /*!
   Replace specified matrix diagonal value.
 
@@ -172,6 +175,9 @@ inline void ReplaceMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) *(curDiagA[i]) = dv[i];
   return;
 }
+
+void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal);
+
 /*!
   Deallocates the members of the data structure of the known system matrix provided they are not 0.
 

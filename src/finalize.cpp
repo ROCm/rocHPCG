@@ -14,7 +14,9 @@
 
 #include <fstream>
 #include <hip/hip_runtime_api.h>
+#include <rocrand/rocrand.h>
 
+#include "utils.hpp"
 #include "hpcg.hpp"
 
 /*!
@@ -27,6 +29,12 @@
 int
 HPCG_Finalize(void) {
   HPCG_fout.close();
+
+  // Free workspace
+  HIP_CHECK(hipFree(workspace));
+
+  // Free RNG
+  rocrand_destroy_generator(rng);
 
   // Reset HIP device
   hipDeviceReset();

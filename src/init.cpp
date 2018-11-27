@@ -33,6 +33,8 @@ const char* NULLDEVICE="/dev/null";
 
 #include <fstream>
 #include <iostream>
+#include <hip/hip_runtime_api.h>
+#include <rocrand/rocrand.h>
 
 #include "utils.hpp"
 #include "hpcg.hpp"
@@ -40,6 +42,7 @@ const char* NULLDEVICE="/dev/null";
 #include "ReadHpcgDat.hpp"
 
 void* workspace;
+rocrand_generator rng;
 
 std::ofstream HPCG_fout; //!< output file stream for logging activities during HPCG run
 
@@ -145,8 +148,12 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   // TODO device management
   params.device = 0;
 
-  // Allocate device workspace
-  HIP_CHECK(hipMalloc((void**)&workspace, 8192));
+  // Allocate 1MB of device workspace
+  HIP_CHECK(hipMalloc((void**)&workspace, 1 << 20));
+
+  // Initialize random number generator
+  rocrand_create_generator(&rng, ROCRAND_RNG_PSEUDO_DEFAULT);
+  rocrand_set_seed(rng, 12345ULL);
 
 #ifdef HPCG_NO_OPENMP
   params.numThreads = 1;

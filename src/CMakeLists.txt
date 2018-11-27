@@ -18,14 +18,16 @@ set(HIP_SOURCE
   ComputeSPMV.cpp
   ComputeSYMGS.cpp
   ComputeProlongation.cpp
+  ComputeResidual.cpp
   ComputeRestriction.cpp
   ComputeWAXPBY.cpp
+  GenerateCoarseProblem.cpp
   GenerateProblem.cpp
   OptimizeProblem.cpp
   Permute.cpp
   SetupHalo.cpp
   SparseMatrix.cpp
-  Vector.cpp
+  TestCG.cpp
 )
 
 # HPCG sources
@@ -39,13 +41,13 @@ set(SOURCE
   ComputeMG_ref.cpp
   ComputeOptimalShapeXYZ.cpp
   ComputeProlongation_ref.cpp
-  ComputeResidual.cpp
+  ComputeResidual_ref.cpp
   ComputeRestriction_ref.cpp
   ComputeSPMV_ref.cpp
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
   ExchangeHalo.cpp
-  GenerateCoarseProblem.cpp
+  GenerateCoarseProblem_ref.cpp
   GenerateGeometry.cpp
   GenerateProblem_ref.cpp
   MixedBaseCounter.cpp
@@ -53,7 +55,6 @@ set(SOURCE
   ReadHpcgDat.cpp
   ReportResults.cpp
   SetupHalo_ref.cpp
-  TestCG.cpp
   TestNorms.cpp
   TestSymmetry.cpp
   WriteProblem.cpp
@@ -102,15 +103,16 @@ target_include_directories(rocHPCG PRIVATE
                              ${PROJECT_BINARY_DIR}/include
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
-                             ${ROCPRIM_INCLUDE_DIRS})
+                             ${ROCPRIM_INCLUDE_DIRS}
+                             ${ROCRAND_INCLUDE_DIRS})
 if(HPCG_MPI)
   target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_DIRS})
 endif()
 
 
 
-
 # Target link libraries
+target_link_libraries(rocHPCG PRIVATE ${rocrand_LIBRARIES})
 foreach(target ${AMDGPU_TARGETS})
   target_link_libraries(rocHPCG PRIVATE --amdgpu-target=${target})
 endforeach()

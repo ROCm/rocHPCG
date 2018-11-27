@@ -28,3 +28,10 @@ extern rocrand_generator rng;
     }                                                               \
 }
 
+#define RETURN_IF_HPCG_ERROR(err)   \
+{                                   \
+    if(err != 0)                    \
+    {                               \
+        return err;                 \
+    }                               \
+}

@@ -19,7 +19,9 @@
  */
 
 #include "ComputeMG.hpp"
-#include "ComputeMG_ref.hpp"
+#include "ComputeSYMGS.hpp"
+#include "ComputeRestriction.hpp"
+#include "ComputeProlongation.hpp"
 
 /*!
   @param[in] A the known system matrix
@@ -30,9 +32,36 @@
 
   @see ComputeMG_ref
 */
-int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
+int ComputeMG(const SparseMatrix& A, const Vector& r, Vector& x)
+{
+    assert(x.localLength == A.localNumberOfColumns);
 
-  // This line and the next two lines should be removed and your version of ComputeSYMGS should be used.
-  A.isMgOptimized = false;
-  return ComputeMG_ref(A, r, x);
+    if(A.mgData != 0)
+    {
+        RETURN_IF_HPCG_ERROR(ComputeSYMGSZeroGuess(A, r, x));
+
+        int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
+
+        for(int i = 1; i < numberOfPresmootherSteps; ++i)
+        {
+            RETURN_IF_HPCG_ERROR(ComputeSYMGS(A, r, x));
+        }
+
+        RETURN_IF_HPCG_ERROR(ComputeFusedSpMVRestriction(A, r, x));
+        RETURN_IF_HPCG_ERROR(ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc));
+        RETURN_IF_HPCG_ERROR(ComputeProlongation(A, x));
+
+        int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
+
+        for(int i = 0; i < numberOfPostsmootherSteps; ++i)
+        {
+            RETURN_IF_HPCG_ERROR(ComputeSYMGS(A, r, x));
+        }
+    }
+    else
+    {
+        RETURN_IF_HPCG_ERROR(ComputeSYMGSZeroGuess(A, r, x));
+    }
+
+    return 0;
 }

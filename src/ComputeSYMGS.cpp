@@ -233,7 +233,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     return 0;
 }
 
-int ComputeSYMGS0(const SparseMatrix& A, const Vector& r, Vector& x)
+int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 {
     assert(x.localLength == A.localNumberOfColumns);
 

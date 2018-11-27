@@ -19,6 +19,6 @@
 #include "Vector.hpp"
 
 int ComputeSYMGS(const SparseMatrix & A, const Vector& r, Vector& x);
-int ComputeSYMGS0(const SparseMatrix & A, const Vector& r, Vector& x);
+int ComputeSYMGSZeroGuess(const SparseMatrix & A, const Vector& r, Vector& x);
 
 #endif // COMPUTESYMGS_HPP

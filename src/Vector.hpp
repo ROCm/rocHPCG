@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <hip/hip_runtime_api.h>
+#include <rocrand/rocrand.h>
 
 #include "utils.hpp"
 #include "Geometry.hpp"
@@ -100,6 +101,12 @@ inline void FillRandomVector(Vector & v) {
   for (int i=0; i<localLength; ++i) vv[i] = rand() / (double)(RAND_MAX) + 1.0;
   return;
 }
+
+inline void HIPFillRandomVector(Vector& v)
+{
+    rocrand_generate_uniform_double(rng, v.hip, v.localLength);
+}
+
 /*!
   Copy input vector to output vector.
 
@@ -115,6 +122,12 @@ inline void CopyVector(const Vector & v, Vector & w) {
   return;
 }
 
+inline void HIPCopyVector(const Vector& v, Vector& w)
+{
+    assert(w.localLength >= v.localLength);
+
+    HIP_CHECK(hipMemcpy(w.hip, v.hip, sizeof(double) * v.localLength, hipMemcpyDeviceToDevice));
+}
 
 /*!
   Deallocates the members of the data structure of the known system matrix provided they are not 0.

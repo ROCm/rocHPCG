@@ -19,7 +19,39 @@
  */
 
 #include "ComputeSPMV.hpp"
-#include "ComputeSPMV_ref.hpp"
+
+#include <hip/hip_runtime.h>
+
+__global__ void kernel_spmv_ell(local_int_t m,
+                                local_int_t n,
+                                local_int_t ell_width,
+                                const local_int_t* ell_col_ind,
+                                const double* ell_val,
+                                const double* x,
+                                double* y)
+{
+    local_int_t row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    double sum = 0.0;
+
+    for(local_int_t p = 0; p < ell_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col >= 0 && col < n)
+        {
+            sum = fma(ell_val[idx], x[col], sum);
+        }
+    }
+
+    y[row] = sum;
+}
 
 /*!
   Routine to compute sparse matrix vector product y = Ax where:
@@ -37,9 +69,27 @@
 
   @see ComputeSPMV_ref
 */
-int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
+int ComputeSPMV(const SparseMatrix& A, const Vector& x, Vector& y)
+{
+    assert(x.localLength >= A.localNumberOfColumns);
+    assert(y.localLength >= A.localNumberOfRows);
 
-  // This line and the next two lines should be removed and your version of ComputeSPMV should be used.
-  A.isSpmvOptimized = false;
-  return ComputeSPMV_ref(A, x, y);
+#ifndef HPCG_NO_MPI
+//    ExchangeHalo(A, x); TODO
+#endif
+
+    hipLaunchKernelGGL((kernel_spmv_ell),
+                       dim3((A.localNumberOfRows - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       0,
+                       A.localNumberOfRows,
+                       A.localNumberOfColumns,
+                       A.ell_width,
+                       A.ell_col_ind,
+                       A.ell_val,
+                       x.hip,
+                       y.hip);
+
+    return 0;
 }

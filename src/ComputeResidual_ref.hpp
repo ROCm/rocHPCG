@@ -12,11 +12,8 @@
 // ***************************************************
 //@HEADER
 
-#ifndef COMPUTERESIDUAL_HPP
-#define COMPUTERESIDUAL_HPP
-
+#ifndef COMPUTERESIDUAL_REF_HPP
+#define COMPUTERESIDUAL_REF_HPP
 #include "Vector.hpp"
-
-int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& residual);
-
-#endif // COMPUTERESIDUAL_HPP
+int ComputeResidual_ref(const local_int_t n, const Vector & v1, const Vector & v2, double & residual);
+#endif // COMPUTERESIDUAL_REF_HPP

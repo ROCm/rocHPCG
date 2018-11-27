@@ -30,10 +30,29 @@
 #include <iostream>
 using std::endl;
 #include <vector>
+#include <hip/hip_runtime.h>
+
 #include "hpcg.hpp"
 
 #include "TestCG.hpp"
 #include "CG.hpp"
+
+__global__ void kernel_scale_vector_values(local_int_t size,
+                                           double* x,
+                                           double* y)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= size)
+    {
+        return;
+    }
+
+    double scale = (gid < 9) ? (gid + 2) * 1e6 : 1e6;
+
+    x[gid] *= scale;
+    y[gid] *= scale;
+}
 
 /*!
   Test the correctness of the Preconditined CG implementation by using a system matrix with a dominant diagonal.
@@ -56,15 +75,24 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   std::vector< double > times(8,0.0);
   // Temporary storage for holding original diagonal and RHS
   Vector origDiagA, exaggeratedDiagA, origB;
-  InitializeVector(origDiagA, A.localNumberOfRows);
-  InitializeVector(exaggeratedDiagA, A.localNumberOfRows);
-  InitializeVector(origB, A.localNumberOfRows);
-  CopyMatrixDiagonal(A, origDiagA);
-  CopyVector(origDiagA, exaggeratedDiagA);
-  CopyVector(b, origB);
+  HIPInitializeVector(origDiagA, A.localNumberOfRows);
+  HIPInitializeVector(exaggeratedDiagA, A.localNumberOfRows);
+  HIPInitializeVector(origB, A.localNumberOfRows);
+  HIPCopyMatrixDiagonal(A, origDiagA);
+  HIPCopyVector(origDiagA, exaggeratedDiagA);
+  HIPCopyVector(b, origB);
 
   // Modify the matrix diagonal to greatly exaggerate diagonal values.
   // CG should converge in about 10 iterations for this problem, regardless of problem size
+  hipLaunchKernelGGL((kernel_scale_vector_values), // TODO does not work for global problems
+                     dim3((A.localNumberOfRows - 1) / 1024 + 1),
+                     dim3(1024),
+                     0,
+                     0,
+                     A.localNumberOfRows,
+                     exaggeratedDiagA.hip,
+                     b.hip);
+/*
   for (local_int_t i=0; i< A.localNumberOfRows; ++i) {
     global_int_t globalRowID = A.localToGlobalMap[i];
     if (globalRowID<9) {
@@ -76,7 +104,9 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
       ScaleVectorValue(b, i, 1.0e6);
     }
   }
-  ReplaceMatrixDiagonal(A, exaggeratedDiagA);
+*/
+
+  HIPReplaceMatrixDiagonal(A, exaggeratedDiagA);
 
   int niters = 0;
   double normr = 0.0;
@@ -92,8 +122,8 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     int expected_niters = testcg_data.expected_niters_no_prec;
     if (k==1) expected_niters = testcg_data.expected_niters_prec;
     for (int i=0; i< numberOfCgCalls; ++i) {
-      ZeroVector(x); // Zero out x
-      int ierr = CG(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1);
+      HIPZeroVector(x); // Zero out x
+      int ierr = CG(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1, false);
       if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
       if (niters <= expected_niters) {
         ++testcg_data.count_pass;
@@ -111,12 +141,12 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
 
   // Restore matrix diagonal and RHS
-  ReplaceMatrixDiagonal(A, origDiagA);
-  CopyVector(origB, b);
+  HIPReplaceMatrixDiagonal(A, origDiagA);
+  HIPCopyVector(origB, b);
   // Delete vectors
-  DeleteVector(origDiagA);
-  DeleteVector(exaggeratedDiagA);
-  DeleteVector(origB);
+  HIPDeleteVector(origDiagA);
+  HIPDeleteVector(exaggeratedDiagA);
+  HIPDeleteVector(origB);
   testcg_data.normr = normr;
 
   return 0;

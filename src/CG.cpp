@@ -33,8 +33,8 @@
 
 
 // Use TICK and TOCK to time a code section in MATLAB-like fashion
-#define TICK()  t0 = mytimer() //!< record current time in 't0'
-#define TOCK(t) t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
+#define TICK()  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
+#define TOCK(t) hipDeviceSynchronize(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
 
 /*!
   Routine to compute an approximate solution to Ax = b
@@ -58,7 +58,7 @@
 */
 int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr, double & normr0,
-    double * times, bool doPreconditioning) {
+    double * times, bool doPreconditioning, bool verbose) {
 
   double t_begin = mytimer();  // Start timing right away
   normr = 0.0;
@@ -83,7 +83,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   if (print_freq<1)  print_freq=1;
 #endif
   // p is of length ncols, copy x to p for sparse MV operation
-  CopyVector(x, p);
+  HIPCopyVector(x, p);
   TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
   TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
@@ -91,6 +91,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
 #endif
+  if(A.geom->rank == 0 && verbose) printf("HIP Initial Residual = %le\n", normr);
 
   // Record initial residual for convergence testing
   normr0 = normr;
@@ -102,7 +103,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     if (doPreconditioning)
       ComputeMG(A, r, z); // Apply preconditioner
     else
-      CopyVector (r, z); // copy r to z (no preconditioning)
+      HIPCopyVector (r, z); // copy r to z (no preconditioning)
     TOCK(t5); // Preconditioner apply time
 
     if (k == 1) {
@@ -126,6 +127,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     if (A.geom->rank==0 && (k%print_freq == 0 || k == max_iter))
       HPCG_fout << "Iteration = "<< k << "   Scaled Residual = "<< normr/normr0 << std::endl;
 #endif
+    if(A.geom->rank == 0 && verbose) printf("HIP Iteration = %d   Scaled Residual = %le\n", k, normr / normr0);
     niters = k;
   }
 

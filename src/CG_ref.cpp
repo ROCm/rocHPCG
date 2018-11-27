@@ -92,6 +92,7 @@ int CG_ref(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
 #endif
+  if(A.geom->rank == 0) printf("REFERENCE Initial Residual = %le\n", normr);
 
   // Record initial residual for convergence testing
   normr0 = normr;
@@ -127,6 +128,7 @@ int CG_ref(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     if (A.geom->rank==0 && (k%print_freq == 0 || k == max_iter))
       HPCG_fout << "Iteration = "<< k << "   Scaled Residual = "<< normr/normr0 << std::endl;
 #endif
+    if(A.geom->rank == 0) printf("REFERENCE Iteration = %d   Scaled Residual = %le\n", k, normr / normr0);
     niters = k;
   }
 

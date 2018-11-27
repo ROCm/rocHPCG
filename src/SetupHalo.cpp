@@ -29,7 +29,6 @@
 #endif
 
 #include "SetupHalo.hpp"
-#include "SetupHalo_ref.hpp"
 
 /*!
   Prepares system matrix data structure and creates data necessary necessary
@@ -45,5 +44,5 @@ void SetupHalo(SparseMatrix & A) {
   // However, any code must work for general unstructured sparse matrices.  Special knowledge about the
   // specific nature of the sparsity pattern may not be explicitly used.
 
-  return(SetupHalo_ref(A));
+//  return(SetupHalo_ref(A));
 }

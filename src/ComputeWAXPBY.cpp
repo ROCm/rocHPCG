@@ -18,14 +18,37 @@
  HPCG routine
  */
 
+#include <cassert>
 #include <hip/hip_runtime.h>
 
 #include "ComputeWAXPBY.hpp"
-#include "ComputeWAXPBY_ref.hpp"
 
-__global__ void kernel_waxpby()
+__global__ void kernel_waxpby(local_int_t size,
+                              double alpha,
+                              const double* x,
+                              double beta,
+                              const double* y,
+                              double* w)
 {
-    int gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= size)
+    {
+        return;
+    }
+
+    if(alpha == 1.0)
+    {
+        w[gid] = fma(beta, y[gid], x[gid]);
+    }
+    else if(beta == 1.0)
+    {
+        w[gid] = fma(alpha, x[gid], y[gid]);
+    }
+    else
+    {
+        w[gid] = fma(alpha, x[gid], beta * y[gid]);
+    }
 }
 
 /*!
@@ -46,10 +69,29 @@ __global__ void kernel_waxpby()
 
   @see ComputeWAXPBY_ref
 */
-int ComputeWAXPBY(const local_int_t n, const double alpha, const Vector & x,
-    const double beta, const Vector & y, Vector & w, bool & isOptimized) {
+int ComputeWAXPBY(local_int_t n,
+                  double alpha,
+                  const Vector& x,
+                  double beta,
+                  const Vector& y,
+                  Vector& w,
+                  bool& isOptimized)
+{
+    assert(x.localLength >= n);
+    assert(y.localLength >= n);
+    assert(w.localLength >= n);
 
-  // This line and the next two lines should be removed and your version of ComputeWAXPBY should be used.
-  isOptimized = false;
-  return ComputeWAXPBY_ref(n, alpha, x, beta, y, w);
+    hipLaunchKernelGGL((kernel_waxpby),
+                       dim3((n - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       n,
+                       alpha,
+                       x.hip,
+                       beta,
+                       y.hip,
+                       w.hip);
+
+    return 0;
 }

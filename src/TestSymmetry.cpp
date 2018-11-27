@@ -63,9 +63,9 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  local_int_t ncol = A.localNumberOfColumns;
 
  Vector x_ncol, y_ncol, z_ncol;
- InitializeVector(x_ncol, ncol);
- InitializeVector(y_ncol, ncol);
- InitializeVector(z_ncol, ncol);
+ HIPInitializeVector(x_ncol, ncol);
+ HIPInitializeVector(y_ncol, ncol);
+ HIPInitializeVector(z_ncol, ncol);
 
  double t4 = 0.0; // Needed for dot-product call, otherwise unused
  testsymmetry_data.count_fail = 0;
@@ -73,8 +73,8 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  // Test symmetry of matrix
 
  // First load vectors with random values
- FillRandomVector(x_ncol);
- FillRandomVector(y_ncol);
+ HIPFillRandomVector(x_ncol);
+ HIPFillRandomVector(y_ncol);
 
  double xNorm2, yNorm2;
  double ANorm = 2 * 26.0;
@@ -119,7 +119,7 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  if (testsymmetry_data.depsym_mg > 1.0) ++testsymmetry_data.count_fail;  // If the difference is > 1, count it wrong
  if (A.geom->rank==0) HPCG_fout << "Departure from symmetry (scaled) for MG abs(x'*Minv*y - y'*Minv*x) = " << testsymmetry_data.depsym_mg << endl;
 
- CopyVector(xexact, x_ncol); // Copy exact answer into overlap vector
+ HIPCopyVector(xexact, x_ncol); // Copy exact answer into overlap vector
 
  int numberOfCalls = 2;
  double residual = 0.0;
@@ -130,9 +130,9 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
      HPCG_fout << "Error in call to compute_residual: " << ierr << ".\n" << endl;
    if (A.geom->rank==0) HPCG_fout << "SpMV call [" << i << "] Residual [" << residual << "]" << endl;
  }
- DeleteVector(x_ncol);
- DeleteVector(y_ncol);
- DeleteVector(z_ncol);
+ HIPDeleteVector(x_ncol);
+ HIPDeleteVector(y_ncol);
+ HIPDeleteVector(z_ncol);
 
  return 0;
 }

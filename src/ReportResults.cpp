@@ -24,8 +24,9 @@
 
 #include <vector>
 #include "ReportResults.hpp"
-#include "OutputFile.hpp"
+//#include "OutputFile.hpp"
 #include "OptimizeProblem.hpp"
+#include "YAML_Doc.hpp"
 
 #ifdef HPCG_DEBUG
 #include <fstream>
@@ -208,7 +209,8 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
     double fnbytesPerEquation = fnbytes/fnrow;
 
     // Instantiate YAML document
-    OutputFile doc("HPCG-Benchmark", "3.0");
+//    OutputFile doc("HPCG-Benchmark", "3.0");
+    YAML_Doc doc("HPCG-Benchmark", "3.0");
     doc.add("Release date", "November 11, 2015");
 
     doc.add("Machine Summary","");
@@ -404,7 +406,8 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
       doc.get("Final Summary")->add("Please review the YAML file contents","You may NOT submit these results for consideration.");
     }
 
-    std::string yaml = doc.generate();
+//    std::string yaml = doc.generate();
+    std::string yaml = doc.generateYAML();
 #ifdef HPCG_DEBUG
     HPCG_fout << yaml;
 #endif

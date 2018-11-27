@@ -6,13 +6,12 @@ find_package(Git REQUIRED)
 # DownloadProject package
 include(cmake/DownloadProject/DownloadProject.cmake)
 
-# Workaround until hcc & hip cmake modules fixes symlink logic in their config files.
-# (Thanks to rocBLAS devs for finding workaround for this problem!)
+# Add some paths
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/hcc /opt/rocm/hip /opt/rocm)
 
 # HIP configuration
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
-find_package(HIP REQUIRED CONFIG PATHS ${CMAKE_PREFIX_PATH})
+find_package(hip REQUIRED CONFIG PATHS ${CMAKE_PREFIX_PATH})
 
 # rocPRIM package
 find_package(ROCPRIM QUIET CONFIG PATHS ${CMAKE_PREFIX_PATH})

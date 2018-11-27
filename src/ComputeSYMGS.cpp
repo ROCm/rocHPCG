@@ -19,7 +19,144 @@
  */
 
 #include "ComputeSYMGS.hpp"
-#include "ComputeSYMGS_ref.hpp"
+
+#include <hip/hip_runtime.h>
+
+__global__ void kernel_pointwise_mult(local_int_t size,
+                                      const local_int_t* diag_idx,
+                                      const double* ell_val,
+                                      double* val)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= size)
+    {
+        return;
+    }
+
+    val[gid] *= ell_val[diag_idx[gid]];
+}
+
+__global__ void kernel_symgs_sweep(local_int_t m,
+                                   local_int_t block_nrow,
+                                   local_int_t offset,
+                                   local_int_t ell_width,
+                                   const local_int_t* ell_col_ind,
+                                   const double* ell_val,
+                                   const double* inv_diag,
+                                   const double* x,
+                                   double* y)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= block_nrow)
+    {
+        return;
+    }
+
+    local_int_t row = gid + offset;
+
+    double sum = x[row];
+
+    for(local_int_t p = 0; p < ell_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col >= 0 && col < m && col != row)
+        {
+            sum = fma(-ell_val[idx], y[col], sum);
+        }
+    }
+
+    y[row] = sum * inv_diag[row];
+}
+
+__global__ void kernel_pointwise_mult2(local_int_t size,
+                                       const double* x,
+                                       const double* y,
+                                       double* out)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= size)
+    {
+        return;
+    }
+
+    out[gid] = x[gid] * y[gid];
+}
+
+__global__ void kernel_forward_sweep_0(local_int_t m,
+                                       local_int_t block_nrow,
+                                       local_int_t offset,
+                                       local_int_t ell_width,
+                                       const local_int_t* ell_col_ind,
+                                       const double* ell_val,
+                                       const local_int_t* diag_idx,
+                                       const double* x,
+                                       double* y)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= block_nrow)
+    {
+        return;
+    }
+
+    local_int_t row = gid + offset;
+
+    double sum = x[row];
+    local_int_t diag = diag_idx[row];
+
+    for(local_int_t p = 0; p < diag; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col >= 0 && col < m)
+        {
+            sum = fma(-ell_val[idx], y[col], sum);
+        }
+    }
+
+    y[row] = sum / ell_val[diag * m + row];
+}
+
+__global__ void kernel_backward_sweep_0(local_int_t m,
+                                        local_int_t block_nrow,
+                                        local_int_t offset,
+                                        local_int_t ell_width,
+                                        const local_int_t* ell_col_ind,
+                                        const double* ell_val,
+                                        const local_int_t* diag_idx,
+                                        double* x)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= block_nrow)
+    {
+        return;
+    }
+
+    local_int_t row = gid + offset;
+    local_int_t diag = diag_idx[row];
+
+    double sum = x[row];
+
+    for(local_int_t p = diag + 1; p < ell_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col >= 0 && col < m)
+        {
+            sum = fma(-ell_val[idx], x[col], sum);
+        }
+    }
+
+    x[row] = sum / ell_val[diag * m + row];
+}
 
 /*!
   Routine to compute one step of symmetric Gauss-Seidel:
@@ -47,9 +184,121 @@
 
   @see ComputeSYMGS_ref
 */
-int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
+int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
+{
+    assert(x.localLength == A.localNumberOfColumns);
 
-  // This line and the next two lines should be removed and your version of ComputeSYMGS should be used.
-  return ComputeSYMGS_ref(A, r, x);
+#ifndef HPCG_NO_MPI
+//    ExchangeHalo(A, x); TODO
+#endif
 
+    // Solve L
+    for(local_int_t i = 0; i < A.nblocks; ++i)
+    {
+        hipLaunchKernelGGL((kernel_symgs_sweep),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.localNumberOfRows,
+                           A.sizes[i],
+                           A.offsets[i],
+                           A.ell_width,
+                           A.ell_col_ind,
+                           A.ell_val,
+                           A.inv_diag,
+                           r.hip,
+                           x.hip);
+    }
+
+    // Solve U
+    for(local_int_t i = A.nblocks - 1; i > 0; --i) //TODO
+    {
+        hipLaunchKernelGGL((kernel_symgs_sweep),
+                           dim3((A.sizes[i - 1] - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.localNumberOfRows,
+                           A.sizes[i - 1],
+                           A.offsets[i - 1],
+                           A.ell_width,
+                           A.ell_col_ind,
+                           A.ell_val,
+                           A.inv_diag,
+                           r.hip,
+                           x.hip);
+    }
+
+    return 0;
+}
+
+int ComputeSYMGS0(const SparseMatrix& A, const Vector& r, Vector& x)
+{
+    assert(x.localLength == A.localNumberOfColumns);
+
+#ifndef HPCG_NO_MPI
+//    ExchangeHalo(A, x); TODO
+#endif
+
+    // Solve L
+    hipLaunchKernelGGL((kernel_pointwise_mult2),
+                       dim3((A.sizes[0] - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       A.sizes[0],
+                       r.hip,
+                       A.inv_diag,
+                       x.hip);
+
+    for(local_int_t i = 1; i < A.nblocks; ++i)
+    {
+        hipLaunchKernelGGL((kernel_forward_sweep_0),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.localNumberOfRows,
+                           A.sizes[i],
+                           A.offsets[i],
+                           A.ell_width,
+                           A.ell_col_ind,
+                           A.ell_val,
+                           A.diag_idx,
+                           r.hip,
+                           x.hip);
+    }
+
+    // Solve D
+    local_int_t ndiag = A.localNumberOfRows / A.nblocks * (A.nblocks - 1);
+    hipLaunchKernelGGL((kernel_pointwise_mult),
+                       dim3((ndiag - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       ndiag,
+                       A.diag_idx,
+                       A.ell_val,
+                       x.hip);
+
+    // Solve U
+    for(local_int_t i = A.nblocks - 1; i > 0; --i) // TODO
+    {
+        hipLaunchKernelGGL((kernel_backward_sweep_0),
+                           dim3((A.sizes[i - 1] - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.localNumberOfRows,
+                           A.sizes[i - 1],
+                           A.offsets[i - 1],
+                           A.ell_width,
+                           A.ell_col_ind,
+                           A.ell_val,
+                           A.diag_idx,
+                           x.hip);
+    }
+
+    return 0;
 }

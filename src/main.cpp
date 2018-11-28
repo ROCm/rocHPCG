@@ -41,8 +41,11 @@ using std::endl;
 #include "CheckAspectRatio.hpp"
 #include "GenerateGeometry.hpp"
 #include "GenerateProblem.hpp"
+#include "GenerateProblem_ref.hpp"
 #include "GenerateCoarseProblem.hpp"
+#include "GenerateCoarseProblem_ref.hpp"
 #include "SetupHalo.hpp"
+#include "SetupHalo_ref.hpp"
 #include "CheckProblem.hpp"
 #include "ExchangeHalo.hpp"
 #include "OptimizeProblem.hpp"
@@ -163,6 +166,15 @@ int main(int argc, char * argv[]) {
   setup_time = mytimer() - setup_time; // Capture total time of setup
   times[9] = setup_time; // Save it for reporting
 
+  // Generate host problem to compute reference solution
+  GenerateProblem_ref(A, &b, &x, &xexact);
+  SetupHalo_ref(A);
+  curLevelMatrix = &A;
+  for (int level = 1; level< numberOfMgLevels; ++level) {
+    GenerateCoarseProblem_ref(*curLevelMatrix);
+    curLevelMatrix = curLevelMatrix->Ac; // Make the just-constructed coarse grid the next level
+  }
+
   curLevelMatrix = &A;
   Vector * curb = &b;
   Vector * curx = &x;
@@ -251,6 +263,8 @@ int main(int argc, char * argv[]) {
   if (rank==0) HPCG_fout << "Total problem setup time in main (sec) = " << mytimer() - t1 << endl;
 #endif
 
+  if(rank == 0) printf("\nOptimization Phase took %0.1lf sec\n", times[7]);
+
 #ifdef HPCG_DETAILED_DEBUG
   if (geom->size == 1) WriteProblem(*geom, A, b, x, xexact);
 #endif
@@ -259,6 +273,8 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////
+
+  if(rank == 0) printf("\nValidation Testing Phase...\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -282,6 +298,8 @@ int main(int argc, char * argv[]) {
   // Optimized CG Setup Phase //
   //////////////////////////////
 
+  if(rank == 0) printf("\nOptimized CG Setup...\n");
+
   niters = 0;
   normr = 0.0;
   normr0 = 0.0;
@@ -292,13 +310,13 @@ int main(int argc, char * argv[]) {
   int optNiters = refMaxIters;
   double opt_worst_time = 0.0;
 
-  std::vector< double > opt_times(9,0.0);
+  std::vector< double > opt_times(10,0.0);
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
-    ZeroVector(x); // start x at all zeros
+    HIPZeroVector(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
-    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
+    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true, true);
     if (ierr) ++err_count; // count the number of errors in CG
     if (normr / normr0 > refTolerance) ++tolerance_failures; // the number of failures to reduce residual
 
@@ -327,6 +345,8 @@ int main(int argc, char * argv[]) {
   // Optimized CG Timing Phase //
   ///////////////////////////////
 
+  if(rank == 0) printf("\nStarting Benchmarking Phase...\n");
+
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
 
@@ -348,11 +368,35 @@ int main(int argc, char * argv[]) {
   testnorms_data.samples = numberOfCgSets;
   testnorms_data.values = new double[numberOfCgSets];
 
+  if(rank == 0)
+  {
+    opt_times[7] = times[7];
+    opt_times[9] = times[9];
+
+    printf("Performing %d CG sets        expected time: %0.1lf sec        expected Perf: %0.3lf GF\n",
+           numberOfCgSets,
+           total_runtime,
+           ComputeTotalGFlops(A, numberOfMgLevels, 1, refMaxIters, optMaxIters, &opt_times[0]));
+  }
+
   for (int i=0; i< numberOfCgSets; ++i) {
-    ZeroVector(x); // Zero out x
-    ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
+    HIPZeroVector(x); // Zero out x
+    ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
+
+    if(rank == 0 && i < numberOfCgSets)
+    {
+      printf("progress = %5.1lf%%        CG run %3d / %3d        elapsed time = %6.1lf sec / %6.1lf sec     %6.1lf sec remaining       %7.3lf GF\n",
+             (i + 1) / (double)numberOfCgSets * 100.0,
+             i + 1,
+             numberOfCgSets,
+             times[0],
+             total_runtime,
+             (total_runtime - times[0]) < 0.0 ? 0.0 : total_runtime - times[0],
+             ComputeTotalGFlops(A, numberOfMgLevels, i + 1, refMaxIters, optMaxIters, &times[0]));
+    }
+
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
   }
 
@@ -383,9 +427,10 @@ int main(int argc, char * argv[]) {
   DeleteVector(xexact);
   DeleteVector(x_overlap);
   DeleteVector(b_computed);
+  HIPDeleteVector(x);
+  HIPDeleteVector(b);
+  HIPDeleteVector(xexact);
   delete [] testnorms_data.values;
-
-
 
   HPCG_Finalize();
 

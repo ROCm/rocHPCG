@@ -31,7 +31,6 @@
 
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
-#include "GenerateProblem_ref.hpp"
 
 __global__ void kernel_fill_rhs(int m, const int* row_nnz, double* b)
 {
@@ -149,10 +148,10 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
 //    global_int_t giz0 = A.geom->giz0;
 
     // Size of the subblock
-    local_int_t m = A.localNumberOfRows = nx * ny * nz;
+    local_int_t localNumberOfRows = nx * ny * nz;
 
     // If this assert fails, it most likely means that the local_int_t is set to int and should be set to long long
-    assert(A.localNumberOfRows > 0);
+    assert(localNumberOfRows > 0);
 
     // We are approximating a 27-point finite element/volume/difference 3D stencil
     local_int_t numberOfNonzerosPerRow = 27;
@@ -165,16 +164,16 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     assert(totalNumberOfRows > 0);
 
     // Allocate arrays
-    HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * m));
-    HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * m));
-    HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * m));
+    HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * localNumberOfRows));
+    HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * localNumberOfRows));
+    HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * localNumberOfRows));
 
     // Fill ELL structure
-    dim3 genprob_blocks((nx - 1) / 2 + 1,
-                        (ny - 1) / 2 + 1,
-                        (nz - 1) / 2 + 1);
-    dim3 genprob_threads(2, 2, 2);
+    dim3 genprob_blocks((nx - 1) / 8 + 1,
+                        (ny - 1) / 8 + 1,
+                        (nz - 1) / 8 + 1);
+    dim3 genprob_threads(8, 8, 8);
 
     hipLaunchKernelGGL((kernel_fill_ell),
                       genprob_blocks,
@@ -193,34 +192,34 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     // Allocate vectors
     if(b != NULL)
     {
-        HIPInitializeVector(*b, m);
+        HIPInitializeVector(*b, localNumberOfRows);
 
         hipLaunchKernelGGL((kernel_fill_rhs),
-                           dim3((m - 1) / 1024 + 1),
+                           dim3((localNumberOfRows - 1) / 1024 + 1),
                            dim3(1024),
                            0,
                            0,
-                           m,
+                           localNumberOfRows,
                            A.diag_idx,
                            b->hip);
     }
 
     if(x != NULL)
     {
-        HIPInitializeVector(*x, m);
+        HIPInitializeVector(*x, localNumberOfRows);
         HIPZeroVector(*x);
     }
 
     if(xexact != NULL)
     {
-        HIPInitializeVector(*xexact, m);
+        HIPInitializeVector(*xexact, localNumberOfRows);
 
         hipLaunchKernelGGL((kernel_fill_xexact),
-                           dim3((m - 1) / 1024 + 1),
+                           dim3((localNumberOfRows - 1) / 1024 + 1),
                            dim3(1024),
                            0,
                            0,
-                           m,
+                           localNumberOfRows,
                            xexact->hip);
     }
 
@@ -229,19 +228,42 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     HIP_CHECK(hipMalloc((void**)&dnnz, sizeof(local_int_t)));
 
     size_t size;
-    HIP_CHECK(hipcub::DeviceReduce::Sum(NULL, size, A.diag_idx, dnnz, m)); // TODO
-    assert(size <= 8192);
-    HIP_CHECK(hipcub::DeviceReduce::Sum(workspace, size, A.diag_idx, dnnz, m));
+    HIP_CHECK(hipcub::DeviceReduce::Sum(NULL, size, A.diag_idx, dnnz, localNumberOfRows)); // TODO
+    assert(size <= (1 << 20));
+    HIP_CHECK(hipcub::DeviceReduce::Sum(workspace, size, A.diag_idx, dnnz, localNumberOfRows));
 
-    HIP_CHECK(hipMemcpy(&A.localNumberOfNonzeros, dnnz, sizeof(local_int_t), hipMemcpyDeviceToHost));
+    local_int_t localNumberOfNonzeros;
+    HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, dnnz, sizeof(local_int_t), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(dnnz));
 
-    printf("Allocated %d x %d matrix with %d nnz\n", m, m, A.localNumberOfNonzeros);
+    global_int_t totalNumberOfNonzeros = 0;
+#ifndef HPCG_NO_MPI
+    // Use MPI's reduce function to sum all nonzeros
+#ifdef HPCG_NO_LONG_LONG
+    MPI_Allreduce(&localNumberOfNonzeros, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#else
+    long long lnnz = localNumberOfNonzeros, gnnz = 0;
+    MPI_Allreduce(&lnnz, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+    totalNumberOfNonzeros = gnnz;
+#endif
+#else
+    totalNumberOfNonzeros = localNumberOfNonzeros;
+#endif
 
+    // If this assert fails, it most likely means that the global_int_t is set to int and should be set to long long
+    // This assert is usually the first to fail as problem size increases beyond the 32-bit integer range.
+    assert(totalNumberOfNonzeros > 0);
 
+    A.title = 0;
+    A.totalNumberOfRows = totalNumberOfRows;
+    A.totalNumberOfNonzeros = totalNumberOfNonzeros;
+    A.localNumberOfRows = localNumberOfRows;
+    A.localNumberOfColumns = localNumberOfRows;
+    A.localNumberOfNonzeros = localNumberOfNonzeros;
 
-
-
-
-    // TODO generate reference problem should not be part of measured setup time
-    GenerateProblem_ref(A, b, x, xexact);
+#ifndef HPCG_NO_MPI
+    if(A.geom->rank == 0) printf("Allocated %lld x %lld matrix with %lld nnz\n", totalNumberOfRows, totalNumberOfRows, totalNumberOfNonzeros);
+#else
+    printf("Allocated %d x %d matrix with %d nnz\n", localNumberOfRows, localNumberOfRows, localNumberOfNonzeros);
+#endif
 }

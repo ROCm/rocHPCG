@@ -204,9 +204,9 @@ void PermuteMatrix(SparseMatrix& A)
     // Sort each row by column index
 #define SORT_DIM_X 32
 #define SORT_DIM_Y 32
-    hipLaunchKernelGGL((kernel_sort_ell_rows<DIM_X * DIM_Y, DIM_Y>),
-                       dim3((m * DIM_Y - 1) / (DIM_X * DIM_Y) + 1),
-                       dim3(DIM_X, DIM_Y),
+    hipLaunchKernelGGL((kernel_sort_ell_rows<SORT_DIM_X * SORT_DIM_Y, SORT_DIM_Y>),
+                       dim3((m * SORT_DIM_Y - 1) / (SORT_DIM_X * SORT_DIM_Y) + 1),
+                       dim3(SORT_DIM_X, SORT_DIM_Y),
                        0,
                        0,
                        m,

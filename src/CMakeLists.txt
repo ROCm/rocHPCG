@@ -106,7 +106,7 @@ target_include_directories(rocHPCG PRIVATE
                              ${ROCPRIM_INCLUDE_DIRS}
                              ${ROCRAND_INCLUDE_DIRS})
 if(HPCG_MPI)
-  target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_DIRS})
+  target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH})
 endif()
 
 

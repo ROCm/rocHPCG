@@ -41,6 +41,6 @@ if(NOT HIP_HCC_EXECUTABLE)
 endif()
 mark_as_advanced(HIP_HCC_EXECUTABLE)
 
-# rocrand TODO fix - while rocrand puts its cmake into another subdir!?
-list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/rocrand/rocrand)
-find_package(rocrand REQUIRED)
+# hiprand TODO fix - while hiprand puts its cmake into another subdir!?
+list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/hiprand/hiprand)
+find_package(hiprand REQUIRED)

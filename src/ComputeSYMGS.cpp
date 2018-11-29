@@ -207,8 +207,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.ell_col_ind,
                            A.ell_val,
                            A.inv_diag,
-                           r.hip,
-                           x.hip);
+                           r.d_values,
+                           x.d_values);
     }
 
     // Solve U
@@ -226,8 +226,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.ell_col_ind,
                            A.ell_val,
                            A.inv_diag,
-                           r.hip,
-                           x.hip);
+                           r.d_values,
+                           x.d_values);
     }
 
     return 0;
@@ -248,9 +248,9 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
                        0,
                        0,
                        A.sizes[0],
-                       r.hip,
+                       r.d_values,
                        A.inv_diag,
-                       x.hip);
+                       x.d_values);
 
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
@@ -266,8 +266,8 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.ell_col_ind,
                            A.ell_val,
                            A.diag_idx,
-                           r.hip,
-                           x.hip);
+                           r.d_values,
+                           x.d_values);
     }
 
     // Solve D
@@ -280,7 +280,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
                        ndiag,
                        A.diag_idx,
                        A.ell_val,
-                       x.hip);
+                       x.d_values);
 
     // Solve U
     for(local_int_t i = A.nblocks - 1; i > 0; --i) // TODO
@@ -297,7 +297,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.ell_col_ind,
                            A.ell_val,
                            A.diag_idx,
-                           x.hip);
+                           x.d_values);
     }
 
     return 0;

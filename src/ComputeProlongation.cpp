@@ -60,9 +60,9 @@ int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
                        0,
                        0,
                        Af.mgData->xc->localLength,
-                       Af.mgData->hip,
-                       Af.mgData->xc->hip,
-                       xf.hip,
+                       Af.mgData->d_f2cOperator,
+                       Af.mgData->xc->d_values,
+                       xf.d_values,
                        Af.perm,
                        Af.Ac->perm);
 

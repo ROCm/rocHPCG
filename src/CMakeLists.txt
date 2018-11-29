@@ -104,7 +104,7 @@ target_include_directories(rocHPCG PRIVATE
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
-                             ${ROCRAND_INCLUDE_DIRS})
+                             ${HIPRAND_INCLUDE_DIRS})
 if(HPCG_MPI)
   target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH})
 endif()
@@ -112,7 +112,7 @@ endif()
 
 
 # Target link libraries
-target_link_libraries(rocHPCG PRIVATE ${rocrand_LIBRARIES})
+target_link_libraries(rocHPCG PRIVATE ${hiprand_LIBRARIES})
 foreach(target ${AMDGPU_TARGETS})
   target_link_libraries(rocHPCG PRIVATE --amdgpu-target=${target})
 endforeach()
@@ -138,6 +138,7 @@ endif()
 if(HPCG_MPI)
   target_compile_options(rocHPCG PRIVATE ${MPI_COMPILE_OPTIONS})
 endif()
+
 
 
 

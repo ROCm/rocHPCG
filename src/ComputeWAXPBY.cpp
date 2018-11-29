@@ -88,10 +88,10 @@ int ComputeWAXPBY(local_int_t n,
                        0,
                        n,
                        alpha,
-                       x.hip,
+                       x.d_values,
                        beta,
-                       y.hip,
-                       w.hip);
+                       y.d_values,
+                       w.d_values);
 
     return 0;
 }

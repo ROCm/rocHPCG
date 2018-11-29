@@ -41,7 +41,7 @@ struct MGData_STRUCT {
    */
   void * optimizationData;
 
-  local_int_t* hip; //!< f2cOperator on device
+  local_int_t* d_f2cOperator; //!< f2cOperator on device
 };
 typedef struct MGData_STRUCT MGData;
 
@@ -61,7 +61,7 @@ inline void HIPInitializeMGData(local_int_t* f2cOperator, Vector* rc, Vector* xc
 {
     data.numberOfPresmootherSteps = 1;
     data.numberOfPostsmootherSteps = 1;
-    data.hip = f2cOperator;
+    data.d_f2cOperator = f2cOperator;
     data.rc = rc;
     data.xc = xc;
     data.Axf = Axf;
@@ -84,7 +84,7 @@ inline void DeleteMGData(MGData & data) {
   delete data.rc;
   delete data.xc;
 
-  HIP_CHECK(hipFree(data.hip));
+  HIP_CHECK(hipFree(data.d_f2cOperator));
 
   return;
 }

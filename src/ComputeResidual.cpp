@@ -101,8 +101,8 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
                        0,
                        0,
                        n,
-                       v1.hip,
-                       v2.hip,
+                       v1.d_values,
+                       v2.d_values,
                        tmp);
 
     hipLaunchKernelGGL((kernel_residual_part2<RES_DIM>),

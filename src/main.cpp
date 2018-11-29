@@ -166,7 +166,7 @@ int main(int argc, char * argv[]) {
   setup_time = mytimer() - setup_time; // Capture total time of setup
   times[9] = setup_time; // Save it for reporting
 
-  if(rank == 0) printf("\nSetup Phase took %0.1lf sec\n", times[9]);
+  if(rank == 0) printf("\nSetup Phase took %0.1lf sec\n\n", times[9]);
 
   // Generate host problem to compute reference solution
   GenerateProblem_ref(A, &b, &x, &xexact);
@@ -300,7 +300,7 @@ int main(int argc, char * argv[]) {
   // Optimized CG Setup Phase //
   //////////////////////////////
 
-  if(rank == 0) printf("\nOptimized CG Setup...\n");
+  if(rank == 0) printf("\nOptimized CG Setup...\n\n");
 
   niters = 0;
   normr = 0.0;
@@ -375,7 +375,7 @@ int main(int argc, char * argv[]) {
     opt_times[7] = times[7];
     opt_times[9] = times[9];
 
-    printf("Performing %d CG sets        expected time: %0.1lf sec        expected Perf: %0.3lf GF\n",
+    printf("Performing %d CG sets        expected time: %0.1lf sec        expected Perf: %0.3lf GF\n\n",
            numberOfCgSets,
            total_runtime,
            ComputeTotalGFlops(A, numberOfMgLevels, 1, refMaxIters, optMaxIters, &opt_times[0]));
@@ -389,13 +389,10 @@ int main(int argc, char * argv[]) {
 
     if(rank == 0 && i < numberOfCgSets)
     {
-      printf("progress = %5.1lf%%        CG run %3d / %3d        elapsed time = %6.1lf sec / %6.1lf sec     %6.1lf sec remaining       %7.3lf GF\n",
+      printf("progress = %5.1lf%%        CG run %3d        elapsed time = %6.1lf sec     %7.3lf GF\n",
              (i + 1) / (double)numberOfCgSets * 100.0,
              i + 1,
-             numberOfCgSets,
              times[0],
-             total_runtime,
-             (total_runtime - times[0]) < 0.0 ? 0.0 : total_runtime - times[0],
              ComputeTotalGFlops(A, numberOfMgLevels, i + 1, refMaxIters, optMaxIters, &times[0]));
     }
 

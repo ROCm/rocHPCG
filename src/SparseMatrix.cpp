@@ -48,7 +48,7 @@ void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,
-                       diagonal.hip);
+                       diagonal.d_values);
 }
 
 __global__ void kernel_replace_diagonal(local_int_t m,
@@ -99,7 +99,7 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
                        0,
                        A.localNumberOfRows,
                        A.localNumberOfColumns,
-                       diagonal.hip,
+                       diagonal.d_values,
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,

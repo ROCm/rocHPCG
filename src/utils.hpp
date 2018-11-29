@@ -1,11 +1,11 @@
 #include <cstdio>
 #include <hip/hip_runtime_api.h>
-#include <rocrand/rocrand.h>
+#include <hiprand/hiprand.h>
 
 // Workspace
 extern void* workspace;
 // RNG generator
-extern rocrand_generator rng;
+extern hiprandGenerator_t rng;
 
 #define HIP_CHECK(err)                                              \
 {                                                                   \

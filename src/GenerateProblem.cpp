@@ -56,52 +56,65 @@ __global__ void kernel_fill_xexact(int m, double* xexact)
     xexact[row] = 1.0;
 }
 
-__global__ void kernel_fill_ell(int nx,
-                                int ny,
-                                int nz,
-                                int ell_width,
-                                int* ell_col_ind,
+__global__ void kernel_fill_ell(local_int_t nx,
+                                local_int_t ny,
+                                local_int_t nz,
+                                global_int_t gnx,
+                                global_int_t gny,
+                                global_int_t gnz,
+                                global_int_t gix0,
+                                global_int_t giy0,
+                                global_int_t giz0,
+                                local_int_t ell_width,
+                                local_int_t* ell_col_ind,
                                 double* ell_val,
-                                int* row_nnz,
+                                local_int_t* row_nnz,
                                 double* inv_diag)
 {
-    int ix = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-    int iy = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
-    int iz = hipBlockIdx_z * hipBlockDim_z + hipThreadIdx_z;
+    local_int_t ix = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t iy = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t iz = hipBlockIdx_z * hipBlockDim_z + hipThreadIdx_z;
 
     if(iz >= nz || iy >= ny || ix >= nx)
     {
         return;
     }
 
-    int row = iz * nx * ny + iy * nx + ix;
-    int p = 0;
+    global_int_t giz = giz0 + iz;
+    global_int_t giy = giy0 + iy;
+    global_int_t gix = gix0 + ix;
 
-    row_nnz[row] = 0;
+    local_int_t currentLocalRow = iz * nx * ny + iy * nx + ix;
+    global_int_t currentGlobalRow = giz * gnx * gny + giy * gnx + gix;
+
+    int p = 0;
+    local_int_t m = nx * ny * nz;
+
+    row_nnz[currentLocalRow] = 0;
 
     for(int sz = -1; sz <= 1; ++sz)
     {
-        if(iz + sz > -1 && iz + sz < nz)
+        if(giz + sz > -1 && giz + sz < gnz)
         {
             for(int sy = -1; sy <= 1; ++sy)
             {
-                if(iy + sy > -1 && iy + sy < ny)
+                if(giy + sy > -1 && giy + sy < gny)
                 {
                     for(int sx = -1; sx <= 1; ++sx)
                     {
-                        if(ix + sx > -1 && ix + sx < nx)
+                        if(gix + sx > -1 && gix + sx < gnx)
                         {
-                            int idx = p * nx * ny * nz + row;
-                            int col = row + sz * nx * ny + sy * nx + sx;
+                            int idx = p * m + currentLocalRow;
+                            int col = currentGlobalRow + sz * gnx * gny + sy * gnx + sx;
 
-                            ++row_nnz[row];
+                            ++row_nnz[currentLocalRow];
 
                             ell_col_ind[idx] = col;
 
-                            if(row == col)
+                            if(currentGlobalRow == col)
                             {
                                 ell_val[idx] = 26.0;
-                                inv_diag[row] = 1.0 / 26.0;
+                                inv_diag[currentLocalRow] = 1.0 / 26.0;
                             }
                             else
                             {
@@ -118,8 +131,8 @@ __global__ void kernel_fill_ell(int nx,
 
     for(; p < ell_width; ++p)
     {
-        int idx = p * nx * ny * nz + row;
-        ell_col_ind[idx] = nx * ny * nz;
+        int idx = p * m + currentLocalRow;
+        ell_col_ind[idx] = m;
         ell_val[idx] = 0.0;
     }
 }
@@ -143,9 +156,9 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     global_int_t gnx = A.geom->gnx;
     global_int_t gny = A.geom->gny;
     global_int_t gnz = A.geom->gnz;
-//    global_int_t gix0 = A.geom->gix0;
-//    global_int_t giy0 = A.geom->giy0;
-//    global_int_t giz0 = A.geom->giz0;
+    global_int_t gix0 = A.geom->gix0;
+    global_int_t giy0 = A.geom->giy0;
+    global_int_t giz0 = A.geom->giz0;
 
     // Size of the subblock
     local_int_t localNumberOfRows = nx * ny * nz;
@@ -183,6 +196,12 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
                       nx,
                       ny,
                       nz,
+                      gnx,
+                      gny,
+                      gnz,
+                      gix0,
+                      giy0,
+                      giz0,
                       A.ell_width,
                       A.ell_col_ind,
                       A.ell_val,
@@ -201,7 +220,7 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
                            0,
                            localNumberOfRows,
                            A.diag_idx,
-                           b->hip);
+                           b->d_values);
     }
 
     if(x != NULL)
@@ -220,7 +239,7 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
                            0,
                            0,
                            localNumberOfRows,
-                           xexact->hip);
+                           xexact->d_values);
     }
 
     // Obtain non zero entries
@@ -260,10 +279,4 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     A.localNumberOfRows = localNumberOfRows;
     A.localNumberOfColumns = localNumberOfRows;
     A.localNumberOfNonzeros = localNumberOfNonzeros;
-
-#ifndef HPCG_NO_MPI
-    if(A.geom->rank == 0) printf("Allocated %lld x %lld matrix with %lld nnz\n", totalNumberOfRows, totalNumberOfRows, totalNumberOfNonzeros);
-#else
-    printf("Allocated %d x %d matrix with %d nnz\n", localNumberOfRows, localNumberOfRows, localNumberOfNonzeros);
-#endif
 }

@@ -23,7 +23,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <hip/hip_runtime_api.h>
-#include <rocrand/rocrand.h>
+#include <hiprand/hiprand.h>
 
 #include "utils.hpp"
 #include "Geometry.hpp"
@@ -37,7 +37,7 @@ struct Vector_STRUCT {
    */
   void * optimizationData;
 
-  double* hip;
+  double* d_values;
 };
 typedef struct Vector_STRUCT Vector;
 
@@ -57,7 +57,7 @@ inline void InitializeVector(Vector & v, local_int_t localLength) {
 inline void HIPInitializeVector(Vector& v, local_int_t localLength)
 {
     v.localLength = localLength;
-    HIP_CHECK(hipMalloc((void**)&v.hip, sizeof(double) * localLength));
+    HIP_CHECK(hipMalloc((void**)&v.d_values, sizeof(double) * localLength));
 }
 
 /*!
@@ -74,7 +74,7 @@ inline void ZeroVector(Vector & v) {
 
 inline void HIPZeroVector(Vector& v)
 {
-    HIP_CHECK(hipMemset(v.hip, 0, sizeof(double) * v.localLength));
+    HIP_CHECK(hipMemset(v.d_values, 0, sizeof(double) * v.localLength));
 }
 
 /*!
@@ -104,7 +104,7 @@ inline void FillRandomVector(Vector & v) {
 
 inline void HIPFillRandomVector(Vector& v)
 {
-    rocrand_generate_uniform_double(rng, v.hip, v.localLength);
+    hiprandGenerateUniformDouble(rng, v.d_values, v.localLength);
 }
 
 /*!
@@ -126,7 +126,7 @@ inline void HIPCopyVector(const Vector& v, Vector& w)
 {
     assert(w.localLength >= v.localLength);
 
-    HIP_CHECK(hipMemcpy(w.hip, v.hip, sizeof(double) * v.localLength, hipMemcpyDeviceToDevice));
+    HIP_CHECK(hipMemcpy(w.d_values, v.d_values, sizeof(double) * v.localLength, hipMemcpyDeviceToDevice));
 }
 
 /*!
@@ -143,7 +143,7 @@ inline void DeleteVector(Vector & v) {
 
 inline void HIPDeleteVector(Vector& v)
 {
-    HIP_CHECK(hipFree(v.hip));
+    HIP_CHECK(hipFree(v.d_values));
     v.localLength = 0;
 }
 

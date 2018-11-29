@@ -257,9 +257,9 @@ void PermuteVector(Vector& v, const local_int_t* perm)
                        0,
                        v.localLength,
                        perm,
-                       v.hip,
+                       v.d_values,
                        buffer);
 
-    HIP_CHECK(hipFree(v.hip));
-    v.hip = buffer;
+    HIP_CHECK(hipFree(v.d_values));
+    v.d_values = buffer;
 }

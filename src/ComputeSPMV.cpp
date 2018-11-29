@@ -88,8 +88,8 @@ int ComputeSPMV(const SparseMatrix& A, const Vector& x, Vector& y)
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,
-                       x.hip,
-                       y.hip);
+                       x.d_values,
+                       y.d_values);
 
     return 0;
 }

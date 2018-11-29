@@ -444,18 +444,11 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
 #endif
 
     // Print some numbers to screen
-    printf("\nNumber of CG sets:     %d\n", numberOfCgSets);
-    printf("Iterations per set:    %d\n", 0);
-    printf("scaled res mean:       %le\n", 0.0);
-    printf("scaled res variance:   %le\n", 0.0);
+    printf("\nTotal Time: %0.2lf sec\n", times[0]);
+    printf("Setup Time: %0.2lf sec\n", times[9]);
+    printf("Optimization Time: %0.2lf sec\n", times[7]);
 
-    printf("\nTotal Time: %le sec\n", times[0]);
-    printf("Setup        Overhead: %0.2lf%%\n", 0.0);
-    printf("Optimization Overhead: %0.2lf%%\n", 0.0);
-    printf("Convergence  Overhead: %0.2lf%%\n", 0.0);
-
-    printf("\n%dx%dx%d process grid\n", A.geom->npx, A.geom->npy, A.geom->npz);
-    printf("%dx%dx%d local domain\n", A.geom->nx, A.geom->ny, A.geom->nz);
+    printf("\n");
     printf("Dot    = %0.1lf GF ( %0.1lf GB/s Effective )\n",
            fnops_ddot / times[1] / 1e9,
            (fnreads_ddot + fnwrites_ddot) / times[1] / 1e9);

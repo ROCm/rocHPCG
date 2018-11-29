@@ -14,7 +14,7 @@
 
 #include <fstream>
 #include <hip/hip_runtime_api.h>
-#include <rocrand/rocrand.h>
+#include <hiprand/hiprand.h>
 
 #include "utils.hpp"
 #include "hpcg.hpp"
@@ -34,7 +34,7 @@ HPCG_Finalize(void) {
   HIP_CHECK(hipFree(workspace));
 
   // Free RNG
-  rocrand_destroy_generator(rng);
+  hiprandDestroyGenerator(rng);
 
   // Reset HIP device
   hipDeviceReset();

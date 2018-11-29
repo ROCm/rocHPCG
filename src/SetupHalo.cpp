@@ -38,11 +38,11 @@
 
   @see ExchangeHalo
 */
-void SetupHalo(SparseMatrix & A) {
+void SetupHalo(SparseMatrix& A)
+{
+#ifndef HPCG_NO_MPI
+    local_int_t localNumberOfRows = A.localNumberOfRows;
 
-  // The call to this reference version of SetupHalo can be replaced with custom code.
-  // However, any code must work for general unstructured sparse matrices.  Special knowledge about the
-  // specific nature of the sparsity pattern may not be explicitly used.
 
-//  return(SetupHalo_ref(A));
+#endif
 }

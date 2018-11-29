@@ -151,7 +151,7 @@ int ComputeDotProduct(local_int_t n,
     dim3 dot_blocks(DOT_DIM);
     dim3 dot_threads(DOT_DIM);
 
-    if(x.hip == y.hip)
+    if(x.d_values == y.d_values)
     {
         hipLaunchKernelGGL((kernel_dot1_part1<DOT_DIM>),
                            dot_blocks,
@@ -159,7 +159,7 @@ int ComputeDotProduct(local_int_t n,
                            0,
                            0,
                            n,
-                           x.hip,
+                           x.d_values,
                            tmp);
     }
     else
@@ -170,8 +170,8 @@ int ComputeDotProduct(local_int_t n,
                            0,
                            0,
                            n,
-                           x.hip,
-                           y.hip,
+                           x.d_values,
+                           y.d_values,
                            tmp);
     }
 

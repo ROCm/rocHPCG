@@ -90,8 +90,8 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
                      0,
                      0,
                      A.localNumberOfRows,
-                     exaggeratedDiagA.hip,
-                     b.hip);
+                     exaggeratedDiagA.d_values,
+                     b.d_values);
 /*
   for (local_int_t i=0; i< A.localNumberOfRows; ++i) {
     global_int_t globalRowID = A.localToGlobalMap[i];

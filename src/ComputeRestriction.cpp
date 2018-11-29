@@ -79,14 +79,14 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, const V
                        0,
                        0,
                        A.mgData->rc->localLength,
-                       A.mgData->hip,
-                       rf.hip,
+                       A.mgData->d_f2cOperator,
+                       rf.d_values,
                        A.localNumberOfRows,
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,
-                       xf.hip,
-                       A.mgData->rc->hip,
+                       xf.d_values,
+                       A.mgData->rc->d_values,
                        A.perm,
                        A.Ac->perm);
 

@@ -42,7 +42,7 @@ option(HPCG_DETAILED_TIMING "Enable detail timers" OFF)
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.0.1.0 NO_GIT_TAG_VERSION)
+rocm_setup_version(VERSION 0.1.0.0 NO_GIT_TAG_VERSION)
 
 # AMD targets
 set(AMDGPU_TARGETS gfx803;gfx900;gfx906 CACHE STRING "List of specific machine types for library to target")

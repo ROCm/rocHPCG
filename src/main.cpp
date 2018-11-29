@@ -348,13 +348,13 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
 
   size_t used_mem;
-  size_t free_mem;
-  hipMemGetInfo(&free_mem, &used_mem);
-  used_mem = used_mem - free_mem;
+  size_t total_mem;
+  hipMemGetInfo(&used_mem, &total_mem);
+  used_mem = total_mem - used_mem;
 
   if(rank == 0) printf("\nTotal device memory usage: %lu MByte (%lu MByte)\n",
                        used_mem >> 20,
-                       free_mem >> 20);
+                       total_mem >> 20);
 
   if(rank == 0) printf("\nStarting Benchmarking Phase...\n");
 

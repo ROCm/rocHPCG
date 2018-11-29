@@ -23,7 +23,7 @@ set(HIP_SOURCE
   ComputeWAXPBY.cpp
   GenerateCoarseProblem.cpp
   GenerateProblem.cpp
-  OptimizeProblem.cpp
+  MultiColoring.cpp
   Permute.cpp
   SetupHalo.cpp
   SparseMatrix.cpp
@@ -51,6 +51,7 @@ set(SOURCE
   GenerateGeometry.cpp
   GenerateProblem_ref.cpp
   MixedBaseCounter.cpp
+  OptimizeProblem.cpp
   OutputFile.cpp
   ReadHpcgDat.cpp
   ReportResults.cpp

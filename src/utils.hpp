@@ -1,3 +1,20 @@
+
+//@HEADER
+// ***************************************************
+//
+// HPCG: High Performance Conjugate Gradient Benchmark
+//
+// Contact:
+// Michael A. Heroux ( maherou@sandia.gov)
+// Jack Dongarra     (dongarra@eecs.utk.edu)
+// Piotr Luszczek    (luszczek@eecs.utk.edu)
+//
+// ***************************************************
+//@HEADER
+
+#ifndef UTILS_HPP
+#define UTILS_HPP
+
 #include <cstdio>
 #include <hip/hip_runtime_api.h>
 #ifdef __HIP_PLATFORM_HCC__
@@ -43,3 +60,5 @@ extern curandGenerator_t rng;
         return err;                 \
     }                               \
 }
+
+#endif // UTILS_HPP

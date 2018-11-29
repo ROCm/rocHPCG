@@ -17,12 +17,12 @@ extern hiprandGenerator_t rng;
                 __FILE__,                                           \
                 __LINE__);                                          \
                                                                     \
-        size_t freeMem;                                             \
-        size_t totalMem;                                            \
-        hipMemGetInfo(&freeMem, &totalMem);                         \
+        size_t free_mem;                                            \
+        size_t total_mem;                                           \
+        hipMemGetInfo(&free_mem, &total_mem);                       \
                                                                     \
         fprintf(stderr, "%lu (%lu) MByte\n",                        \
-                freeMem >> 20, totalMem >> 20);                     \
+                free_mem >> 20, total_mem >> 20);                   \
                                                                     \
         exit(1);                                                    \
     }                                                               \

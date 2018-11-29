@@ -166,6 +166,8 @@ int main(int argc, char * argv[]) {
   setup_time = mytimer() - setup_time; // Capture total time of setup
   times[9] = setup_time; // Save it for reporting
 
+  if(rank == 0) printf("\nSetup Phase took %0.1lf sec\n", times[9]);
+
   // Generate host problem to compute reference solution
   GenerateProblem_ref(A, &b, &x, &xexact);
   SetupHalo_ref(A);

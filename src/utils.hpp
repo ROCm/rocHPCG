@@ -1,11 +1,19 @@
 #include <cstdio>
 #include <hip/hip_runtime_api.h>
+#ifdef __HIP_PLATFORM_HCC__
 #include <hiprand/hiprand.h>
+#else
+#include <curand.h>
+#endif
 
 // Workspace
 extern void* workspace;
 // RNG generator
+#ifdef __HIP_PLATFORM_HCC__
 extern hiprandGenerator_t rng;
+#else
+extern curandGenerator_t rng;
+#endif
 
 #define HIP_CHECK(err)                                              \
 {                                                                   \

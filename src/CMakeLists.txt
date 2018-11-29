@@ -75,7 +75,12 @@ endforeach()
 hip_add_executable(rocHPCG ${SOURCE} ${HIP_SOURCE})
 
 # Target compile definitions
-target_compile_definitions(rocHPCG PRIVATE __HIP_PLATFORM_HCC__)
+if(HIP_PLATFORM STREQUAL "nvcc")
+  target_compile_definitions(rocHPCG PRIVATE __HIP_PLATFORM_NVCC__)
+else()
+  target_compile_definitions(rocHPCG PRIVATE __HIP_PLATFORM_HCC__)
+endif()
+
 if(NOT HPCG_OPENMP)
   target_compile_definitions(rocHPCG PRIVATE HPCG_NO_OPENMP)
 endif()
@@ -110,15 +115,18 @@ if(HPCG_MPI)
 endif()
 
 
-
 # Target link libraries
-target_link_libraries(rocHPCG PRIVATE ${hiprand_LIBRARIES})
-foreach(target ${AMDGPU_TARGETS})
-  target_link_libraries(rocHPCG PRIVATE --amdgpu-target=${target})
-endforeach()
+if(HIP_PLATFORM STREQUAL "nvcc")
+  target_link_libraries(rocHPCG PRIVATE omp curand)
+else()
+  target_link_libraries(rocHPCG PRIVATE ${hiprand_LIBRARIES})
+  foreach(target ${AMDGPU_TARGETS})
+    target_link_libraries(rocHPCG PRIVATE --amdgpu-target=${target})
+  endforeach()
 
-if(HPCG_OPENMP)
-  target_link_libraries(rocHPCG PRIVATE ${OpenMP_CXX_FLAGS})
+  if(HPCG_OPENMP)
+    target_link_libraries(rocHPCG PRIVATE ${OpenMP_CXX_FLAGS})
+  endif()
 endif()
 
 if(HPCG_MPI)

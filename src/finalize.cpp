@@ -14,7 +14,12 @@
 
 #include <fstream>
 #include <hip/hip_runtime_api.h>
+
+#ifdef __HIP_PLATFORM_HCC__
 #include <hiprand/hiprand.h>
+#else
+#include <curand.h>
+#endif
 
 #include "utils.hpp"
 #include "hpcg.hpp"
@@ -34,7 +39,11 @@ HPCG_Finalize(void) {
   HIP_CHECK(hipFree(workspace));
 
   // Free RNG
+#ifdef __HIP_PLATFORM_HCC__
   hiprandDestroyGenerator(rng);
+#else
+  curandDestroyGenerator(rng);
+#endif
 
   // Reset HIP device
   hipDeviceReset();

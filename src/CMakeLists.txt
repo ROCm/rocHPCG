@@ -110,7 +110,7 @@ target_include_directories(rocHPCG PRIVATE
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
-                             ${HIPRAND_INCLUDE_DIRS})
+                             ${hiprand_INCLUDE_DIRS})
 if(HPCG_MPI)
   target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH})
 endif()

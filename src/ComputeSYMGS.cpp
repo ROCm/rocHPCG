@@ -212,16 +212,16 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     }
 
     // Solve U
-    for(local_int_t i = A.nblocks - 1; i > 0; --i) //TODO
+    for(local_int_t i = A.nblocks - 1; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
-                           dim3((A.sizes[i - 1] - 1) / 128 + 1),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
                            dim3(128),
                            0,
                            0,
                            A.localNumberOfRows,
-                           A.sizes[i - 1],
-                           A.offsets[i - 1],
+                           A.sizes[i],
+                           A.offsets[i],
                            A.ell_width,
                            A.ell_col_ind,
                            A.ell_val,
@@ -271,28 +271,27 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     }
 
     // Solve D
-    local_int_t ndiag = A.localNumberOfRows / A.nblocks * (A.nblocks - 1);
     hipLaunchKernelGGL((kernel_pointwise_mult),
-                       dim3((ndiag - 1) / 1024 + 1),
+                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
                        dim3(1024),
                        0,
                        0,
-                       ndiag,
+                       A.localNumberOfRows,
                        A.diag_idx,
                        A.ell_val,
                        x.d_values);
 
     // Solve U
-    for(local_int_t i = A.nblocks - 1; i > 0; --i) // TODO
+    for(local_int_t i = A.nblocks - 1; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_backward_sweep_0),
-                           dim3((A.sizes[i - 1] - 1) / 128 + 1),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
                            dim3(128),
                            0,
                            0,
                            A.localNumberOfRows,
-                           A.sizes[i - 1],
-                           A.offsets[i - 1],
+                           A.sizes[i],
+                           A.offsets[i],
                            A.ell_width,
                            A.ell_col_ind,
                            A.ell_val,

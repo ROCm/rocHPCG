@@ -75,6 +75,8 @@ struct SparseMatrix_STRUCT {
   local_int_t * receiveLength; //!< lenghts of messages received from neighboring processes
   local_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
   double * sendBuffer; //!< send buffer for non-blocking sends
+
+  local_int_t* d_elementsToSend;
 #endif
 
   // ELL matrix storage format arrays
@@ -128,6 +130,8 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.receiveLength = 0;
   A.sendLength = 0;
   A.sendBuffer = 0;
+
+  A.d_elementsToSend = NULL;
 #endif
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
   A.Ac =0;
@@ -209,6 +213,8 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if (A.receiveLength)            delete [] A.receiveLength;
   if (A.sendLength)            delete [] A.sendLength;
   if (A.sendBuffer)            delete [] A.sendBuffer;
+
+  if(A.d_elementsToSend) HIP_CHECK(hipFree(A.d_elementsToSend));
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}

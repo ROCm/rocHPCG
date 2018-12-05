@@ -20,14 +20,9 @@
 
 #ifndef HPCG_NO_MPI
 #include <mpi.h>
-#include <map>
-#include <set>
 #endif
 
-#ifndef HPCG_NO_OPENMP
-#include <omp.h>
-#endif
-
+#include "utils.hpp"
 #include "SetupHalo.hpp"
 
 /*!
@@ -41,8 +36,7 @@
 void SetupHalo(SparseMatrix& A)
 {
 #ifndef HPCG_NO_MPI
-    local_int_t localNumberOfRows = A.localNumberOfRows;
-
-
+    HIP_CHECK(hipMalloc((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(hipMemcpy(A.d_elementsToSend, A.elementsToSend, sizeof(local_int_t) * A.totalToBeSent, hipMemcpyHostToDevice));
 #endif
 }

@@ -69,7 +69,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
 
   @see ComputeSPMV_ref
 */
-int ComputeSPMV(const SparseMatrix& A, const Vector& x, Vector& y)
+int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 {
     assert(x.localLength >= A.localNumberOfColumns);
     assert(y.localLength >= A.localNumberOfRows);

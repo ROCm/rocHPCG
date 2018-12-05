@@ -42,8 +42,8 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     MultiColoring(A);
 //    JPLColoring(A);
     PermuteMatrix(A);
-    PermuteVector(b, A.perm);
-    PermuteVector(xexact, A.perm);
+    PermuteVector(A.localNumberOfRows, b, A.perm);
+    PermuteVector(A.localNumberOfRows, xexact, A.perm);
 
     SparseMatrix* M = A.Ac;
 

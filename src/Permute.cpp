@@ -153,15 +153,23 @@ __global__ void kernel_permute_ell_column(local_int_t m,
     local_int_t idx = p * m + perm[row];
     local_int_t col = tmp_cols[row];
 
-    if(col >= 0 && col < n)
+    if(col >= 0 && col < m)
     {
         ell_col_ind[idx] = perm[col];
         ell_val[idx] = tmp_vals[row];
     }
     else
     {
-        ell_col_ind[idx] = n;
-        ell_val[idx] = 0.0;
+        if(col >= m && col < n)
+        {
+            ell_col_ind[idx] = col;
+            ell_val[idx] = tmp_vals[row];
+        }
+        else
+        {
+            ell_col_ind[idx] = n;
+            ell_val[idx] = 0.0;
+        }
     }
 }
 
@@ -245,17 +253,17 @@ __global__ void kernel_permute(local_int_t size,
     out[perm[gid]] = in[gid];
 }
 
-void PermuteVector(Vector& v, const local_int_t* perm)
+void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
 {
     double* buffer;
     HIP_CHECK(hipMalloc((void**)&buffer, sizeof(double) * v.localLength));
 
     hipLaunchKernelGGL((kernel_permute),
-                       dim3((v.localLength - 1) / 1024 + 1),
+                       dim3((size - 1) / 1024 + 1),
                        dim3(1024),
                        0,
                        0,
-                       v.localLength,
+                       size,
                        perm,
                        v.d_values,
                        buffer);

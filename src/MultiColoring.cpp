@@ -276,7 +276,6 @@ __device__ unsigned int get_hash(unsigned int h)
 }
 
 __global__ void kernel_jpl(local_int_t m,
-                           local_int_t n,
                            int color,
                            local_int_t ell_width,
                            const local_int_t* ell_col_ind,
@@ -306,7 +305,7 @@ __global__ void kernel_jpl(local_int_t m,
         local_int_t idx = p * m + row;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < n)
+        if(col >= 0 && col < m)
         {
             // Skip diagonal
             if(col == row)
@@ -370,7 +369,6 @@ void JPLColoring(SparseMatrix& A)
                            0,
                            0,
                            m,
-                           A.localNumberOfColumns,
                            A.nblocks,
                            A.ell_width,
                            A.ell_col_ind,

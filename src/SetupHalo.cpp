@@ -24,6 +24,7 @@
 
 #include "utils.hpp"
 #include "SetupHalo.hpp"
+#include "SetupHalo_ref.hpp"
 
 /*!
   Prepares system matrix data structure and creates data necessary necessary
@@ -35,6 +36,8 @@
 */
 void SetupHalo(SparseMatrix& A)
 {
+    SetupHalo_ref(A);
+
 #ifndef HPCG_NO_MPI
     // Allocate structures
     A.recv_request = new MPI_Request[A.numberOfSendNeighbors];

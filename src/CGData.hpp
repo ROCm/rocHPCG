@@ -45,10 +45,6 @@ inline void InitializeSparseCGData(SparseMatrix & A, CGData & data) {
   InitializeVector(data.z, ncol);
   InitializeVector(data.p, ncol);
   InitializeVector(data.Ap, nrow);
-  HIPInitializeVector(data.r, nrow);
-  HIPInitializeVector(data.z, ncol);
-  HIPInitializeVector(data.p, ncol);
-  HIPInitializeVector(data.Ap, nrow);
   return;
 }
 
@@ -63,10 +59,6 @@ inline void DeleteCGData(CGData & data) {
   DeleteVector (data.z);
   DeleteVector (data.p);
   DeleteVector (data.Ap);
-  HIPDeleteVector (data.r);
-  HIPDeleteVector (data.z);
-  HIPDeleteVector (data.p);
-  HIPDeleteVector (data.Ap);
   return;
 }
 

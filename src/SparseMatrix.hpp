@@ -169,21 +169,23 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   return;
 }
 
+void ConvertToELL(SparseMatrix& A);
+
 /*!
   Copy values from matrix diagonal into user-provided vector.
 
   @param[in] A the known system matrix.
   @param[inout] diagonal  Vector of diagonal values (must be allocated before call to this function).
  */
+void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal);
 inline void CopyMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     double ** curDiagA = A.matrixDiagonal;
     double * dv = diagonal.values;
     assert(A.localNumberOfRows==diagonal.localLength);
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) dv[i] = *(curDiagA[i]);
+    HIPCopyMatrixDiagonal(A, diagonal);
   return;
 }
-
-void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal);
 
 /*!
   Replace specified matrix diagonal value.
@@ -191,15 +193,15 @@ void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal);
   @param[inout] A The system matrix.
   @param[in] diagonal  Vector of diagonal values that will replace existing matrix diagonal values.
  */
+void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal);
 inline void ReplaceMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     double ** curDiagA = A.matrixDiagonal;
     double * dv = diagonal.values;
     assert(A.localNumberOfRows==diagonal.localLength);
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) *(curDiagA[i]) = dv[i];
+    HIPReplaceMatrixDiagonal(A, diagonal);
   return;
 }
-
-void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal);
 
 /*!
   Deallocates the members of the data structure of the known system matrix provided they are not 0.

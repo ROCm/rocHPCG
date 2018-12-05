@@ -41,11 +41,8 @@ using std::endl;
 #include "CheckAspectRatio.hpp"
 #include "GenerateGeometry.hpp"
 #include "GenerateProblem.hpp"
-#include "GenerateProblem_ref.hpp"
 #include "GenerateCoarseProblem.hpp"
-#include "GenerateCoarseProblem_ref.hpp"
 #include "SetupHalo.hpp"
-#include "SetupHalo_ref.hpp"
 #include "CheckProblem.hpp"
 #include "ExchangeHalo.hpp"
 #include "OptimizeProblem.hpp"
@@ -167,15 +164,6 @@ int main(int argc, char * argv[]) {
   times[9] = setup_time; // Save it for reporting
 
   if(rank == 0) printf("\nSetup Phase took %0.1lf sec\n\n", times[9]);
-
-  // Generate host problem to compute reference solution
-  GenerateProblem_ref(A, &b, &x, &xexact);
-  SetupHalo_ref(A);
-  curLevelMatrix = &A;
-  for (int level = 1; level< numberOfMgLevels; ++level) {
-    GenerateCoarseProblem_ref(*curLevelMatrix);
-    curLevelMatrix = curLevelMatrix->Ac; // Make the just-constructed coarse grid the next level
-  }
 
   curLevelMatrix = &A;
   Vector * curb = &b;
@@ -316,7 +304,7 @@ int main(int argc, char * argv[]) {
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
-    HIPZeroVector(x); // start x at all zeros
+    ZeroVector(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
     ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true, true);
     if (ierr) ++err_count; // count the number of errors in CG
@@ -391,7 +379,7 @@ int main(int argc, char * argv[]) {
   }
 
   for (int i=0; i< numberOfCgSets; ++i) {
-    HIPZeroVector(x); // Zero out x
+    ZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
@@ -435,9 +423,6 @@ int main(int argc, char * argv[]) {
   DeleteVector(xexact);
   DeleteVector(x_overlap);
   DeleteVector(b_computed);
-  HIPDeleteVector(x);
-  HIPDeleteVector(b);
-  HIPDeleteVector(xexact);
   delete [] testnorms_data.values;
 
   HPCG_Finalize();

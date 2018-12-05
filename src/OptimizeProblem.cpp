@@ -18,6 +18,7 @@
  HPCG routine
  */
 
+#include "SparseMatrix.hpp"
 #include "OptimizeProblem.hpp"
 #include "Permute.hpp"
 #include "MultiColoring.hpp"
@@ -39,6 +40,7 @@
 */
 int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vector & xexact)
 {
+    ConvertToELL(A);
     MultiColoring(A);
 //    JPLColoring(A);
     PermuteMatrix(A);
@@ -49,6 +51,7 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
 
     while(M != NULL)
     {
+        ConvertToELL(*M);
         MultiColoring(*M);
 //        JPLColoring(*M);
         PermuteMatrix(*M);

@@ -22,13 +22,11 @@ set(HIP_SOURCE
   ComputeRestriction.cpp
   ComputeWAXPBY.cpp
   ExchangeHalo.cpp
-  GenerateCoarseProblem.cpp
   GenerateProblem.cpp
   MultiColoring.cpp
   Permute.cpp
   SetupHalo.cpp
   SparseMatrix.cpp
-  TestCG.cpp
 )
 
 # HPCG sources
@@ -47,7 +45,7 @@ set(SOURCE
   ComputeSPMV_ref.cpp
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
-  GenerateCoarseProblem_ref.cpp
+  GenerateCoarseProblem.cpp
   GenerateGeometry.cpp
   GenerateProblem_ref.cpp
   MixedBaseCounter.cpp
@@ -56,6 +54,7 @@ set(SOURCE
   ReadHpcgDat.cpp
   ReportResults.cpp
   SetupHalo_ref.cpp
+  TestCG.cpp
   TestNorms.cpp
   TestSymmetry.cpp
   WriteProblem.cpp

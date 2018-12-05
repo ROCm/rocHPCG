@@ -49,6 +49,7 @@ extern curandGenerator_t rng;
         fprintf(stderr, "%lu (%lu) MByte\n",                        \
                 free_mem >> 20, total_mem >> 20);                   \
                                                                     \
+        hipDeviceReset();                                           \
         exit(1);                                                    \
     }                                                               \
 }

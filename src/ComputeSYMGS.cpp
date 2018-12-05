@@ -19,6 +19,7 @@
  */
 
 #include "ComputeSYMGS.hpp"
+#include "ExchangeHalo.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -38,6 +39,7 @@ __global__ void kernel_pointwise_mult(local_int_t size,
 }
 
 __global__ void kernel_symgs_sweep(local_int_t m,
+                                   local_int_t n,
                                    local_int_t block_nrow,
                                    local_int_t offset,
                                    local_int_t ell_width,
@@ -63,7 +65,7 @@ __global__ void kernel_symgs_sweep(local_int_t m,
         local_int_t idx = p * m + row;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < m && col != row)
+        if(col >= 0 && col < n && col != row)
         {
             sum = fma(-ell_val[idx], y[col], sum);
         }
@@ -189,7 +191,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
 #ifndef HPCG_NO_MPI
-//    ExchangeHalo(A, x); TODO
+    ExchangeHaloAsync(A, x);
+    ExchangeHaloSync(A, x); // TODO first block of lower sweeps can be done before sync
 #endif
 
     // Solve L
@@ -201,6 +204,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            0,
                            0,
                            A.localNumberOfRows,
+                           A.localNumberOfColumns,
                            A.sizes[i],
                            A.offsets[i],
                            A.ell_width,
@@ -220,6 +224,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            0,
                            0,
                            A.localNumberOfRows,
+                           A.localNumberOfColumns,
                            A.sizes[i],
                            A.offsets[i],
                            A.ell_width,
@@ -236,10 +241,6 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
 int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 {
     assert(x.localLength == A.localNumberOfColumns);
-
-#ifndef HPCG_NO_MPI
-//    ExchangeHalo(A, x); TODO
-#endif
 
     // Solve L
     hipLaunchKernelGGL((kernel_pointwise_mult2),

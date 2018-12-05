@@ -77,7 +77,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
 #ifndef HPCG_NO_MPI
     ExchangeHaloAsync(A, x);
-    ExchangeHaloSync(A, x); // TODO
+    ExchangeHaloSync(A, x); // TODO interior spmv can be done before sync
 #endif
 
     hipLaunchKernelGGL((kernel_spmv_ell),

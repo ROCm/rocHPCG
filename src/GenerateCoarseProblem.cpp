@@ -145,6 +145,7 @@ void GenerateCoarseProblem(const SparseMatrix& Af)
 
     HIPInitializeVector(*rc, Ac->localNumberOfRows);
     HIPInitializeVector(*xc, Ac->localNumberOfColumns);
+    HIPInitializeVector(*Axf, Af.localNumberOfColumns);
 
     Af.Ac = Ac;
 

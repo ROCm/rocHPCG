@@ -22,6 +22,26 @@
 
 #include <hip/hip_runtime.h>
 
+__global__ void kernel_restrict(local_int_t size,
+                                const local_int_t* f2cOperator,
+                                const double* fine,
+                                const double* data,
+                                double* coarse,
+                                const local_int_t* perm_fine,
+                                const local_int_t* perm_coarse)
+{
+    local_int_t idx_coarse = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(idx_coarse >= size)
+    {
+        return;
+    }
+
+    local_int_t idx_fine = perm_fine[f2cOperator[idx_coarse]];
+
+    coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - data[idx_fine];
+}
+
 __global__ void kernel_fused_restrict_spmv(local_int_t size,
                                            const local_int_t* f2cOperator,
                                            const double* fine,
@@ -71,6 +91,24 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
 
   @return Returns zero on success and a non-zero value otherwise.
 */
+int ComputeRestriction(const SparseMatrix& A, const Vector& rf)
+{
+    hipLaunchKernelGGL((kernel_restrict),
+                       dim3((A.mgData->rc->localLength - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       0,
+                       A.mgData->rc->localLength,
+                       A.mgData->d_f2cOperator,
+                       rf.d_values,
+                       A.mgData->Axf->d_values,
+                       A.mgData->rc->d_values,
+                       A.perm,
+                       A.Ac->perm);
+
+    return 0;
+}
+
 int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, const Vector& xf)
 {
     hipLaunchKernelGGL((kernel_fused_restrict_spmv),

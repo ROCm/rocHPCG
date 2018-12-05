@@ -55,11 +55,11 @@ __global__ void kernel_prolongation(local_int_t size,
 int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
 {
     hipLaunchKernelGGL((kernel_prolongation),
-                       dim3((Af.mgData->xc->localLength - 1) / 1024 + 1),
+                       dim3((Af.mgData->rc->localLength - 1) / 1024 + 1),
                        dim3(1024),
                        0,
                        0,
-                       Af.mgData->xc->localLength,
+                       Af.mgData->rc->localLength,
                        Af.mgData->d_f2cOperator,
                        Af.mgData->xc->d_values,
                        xf.d_values,

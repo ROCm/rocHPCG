@@ -21,6 +21,10 @@
 #ifndef SPARSEMATRIX_HPP
 #define SPARSEMATRIX_HPP
 
+#ifndef HPCG_NO_MPI
+#include <mpi.h>
+#endif
+
 #include <vector>
 #include <cassert>
 #include <hip/hip_runtime_api.h>
@@ -76,7 +80,17 @@ struct SparseMatrix_STRUCT {
   local_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
   double * sendBuffer; //!< send buffer for non-blocking sends
 
+
+
+  // HIP related structures
+  MPI_Request* recv_request;
+  MPI_Request* send_request;
+
   local_int_t* d_elementsToSend;
+
+  double* recv_buffer;
+  double* send_buffer;
+  double* d_send_buffer;
 #endif
 
   // ELL matrix storage format arrays
@@ -131,7 +145,12 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.sendLength = 0;
   A.sendBuffer = 0;
 
+  A.recv_request = NULL;
+  A.send_request = NULL;
   A.d_elementsToSend = NULL;
+  A.recv_buffer = NULL;
+  A.send_buffer = NULL;
+  A.d_send_buffer = NULL;
 #endif
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
   A.Ac =0;
@@ -214,7 +233,12 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if (A.sendLength)            delete [] A.sendLength;
   if (A.sendBuffer)            delete [] A.sendBuffer;
 
+  if(A.recv_request) delete[] A.recv_request;
+  if(A.send_request) delete[] A.send_request;
   if(A.d_elementsToSend) HIP_CHECK(hipFree(A.d_elementsToSend));
+  if(A.recv_buffer) delete[] A.recv_buffer;
+  if(A.send_buffer) delete[] A.send_buffer;
+  if(A.d_send_buffer) HIP_CHECK(hipFree(A.d_send_buffer));
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}

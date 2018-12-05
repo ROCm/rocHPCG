@@ -24,6 +24,7 @@
 #include "Geometry.hpp"
 #include "ExchangeHalo.hpp"
 #include <cstdlib>
+#include <hip/hip_runtime.h>
 
 /*!
   Communicates data that is at the border of the part of the domain assigned to this processor.
@@ -107,6 +108,94 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   delete [] request;
 
   return;
+}
+
+__global__ void kernel_scatter(local_int_t size,
+                               const double* in,
+                               const local_int_t* map,
+                               const local_int_t* perm,
+                               double* out)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= size)
+    {
+        return;
+    }
+
+    out[gid] = in[perm[map[gid]]];
+}
+
+void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
+{
+    int num_neighbors = A.numberOfSendNeighbors;
+    int MPI_MY_TAG = 99;
+
+    // Post async boundary receives
+    local_int_t offset = 0;
+
+    for(int n = 0; n < num_neighbors; ++n)
+    {
+        local_int_t nrecv = A.receiveLength[n];
+
+        MPI_Irecv(A.recv_buffer + offset,
+                  nrecv,
+                  MPI_DOUBLE,
+                  A.neighbors[n],
+                  MPI_MY_TAG,
+                  MPI_COMM_WORLD,
+                  A.recv_request + n);
+
+        offset += nrecv;
+    }
+
+    // Prepare send buffer
+    hipLaunchKernelGGL((kernel_scatter),
+                       dim3((A.totalToBeSent - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       A.totalToBeSent,
+                       x.d_values,
+                       A.d_elementsToSend,
+                       A.perm,
+                       A.d_send_buffer);
+
+    // Copy send buffer to host
+    HIP_CHECK(hipMemcpy(A.send_buffer, A.d_send_buffer, sizeof(double) * A.totalToBeSent, hipMemcpyDeviceToHost));
+
+    // Post async boundary sends
+    offset = 0;
+
+    for(int n = 0; n < num_neighbors; ++n)
+    {
+        local_int_t nsend = A.sendLength[n];
+
+        MPI_Isend(A.send_buffer + offset,
+                  nsend,
+                  MPI_DOUBLE,
+                  A.neighbors[n],
+                  MPI_MY_TAG,
+                  MPI_COMM_WORLD,
+                  A.send_request + n);
+
+        offset += nsend;
+    }
+}
+
+void ExchangeHaloSync(const SparseMatrix& A, Vector& x)
+{
+    int num_neighbors = A.numberOfSendNeighbors;
+
+    // Synchronize boundary transfers
+    EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.recv_request, MPI_STATUSES_IGNORE));
+    EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.send_request, MPI_STATUSES_IGNORE));
+
+    // Update boundary values
+    HIP_CHECK(hipMemcpy(x.d_values + A.localNumberOfRows,
+                        A.recv_buffer,
+                        sizeof(double) * A.totalToBeSent,
+                        hipMemcpyHostToDevice));
 }
 #endif
 // ifndef HPCG_NO_MPI

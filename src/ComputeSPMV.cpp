@@ -19,6 +19,7 @@
  */
 
 #include "ComputeSPMV.hpp"
+#include "ExchangeHalo.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -75,7 +76,8 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
     assert(y.localLength >= A.localNumberOfRows);
 
 #ifndef HPCG_NO_MPI
-//    ExchangeHalo(A, x); TODO
+    ExchangeHaloAsync(A, x);
+    ExchangeHaloSync(A, x); // TODO
 #endif
 
     hipLaunchKernelGGL((kernel_spmv_ell),

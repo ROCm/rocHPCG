@@ -62,4 +62,13 @@ extern curandGenerator_t rng;
     }                               \
 }
 
+#define EXIT_IF_HPCG_ERROR(err) \
+{                               \
+    if(err != 0)                \
+    {                           \
+        hipDeviceReset();       \
+        exit(1);                \
+    }                           \
+}
+
 #endif // UTILS_HPP

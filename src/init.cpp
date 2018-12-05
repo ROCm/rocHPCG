@@ -154,7 +154,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 #endif
 
   // TODO device management
-  params.device = 0;
+  params.device = params.comm_rank % 4; // 4 GPUs per node
 
   // Allocate 1MB of device workspace
   HIP_CHECK(hipMalloc((void**)&workspace, 1 << 20));

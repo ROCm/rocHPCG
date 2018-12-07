@@ -24,7 +24,6 @@
 #include <hip/hip_runtime.h>
 
 __global__ void kernel_spmv_ell(local_int_t m,
-                                local_int_t n,
                                 local_int_t ell_width,
                                 const local_int_t* ell_col_ind,
                                 const double* ell_val,
@@ -45,13 +44,50 @@ __global__ void kernel_spmv_ell(local_int_t m,
         local_int_t idx = p * m + row;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < n)
+        if(col >= 0 && col < m)
         {
             sum = fma(ell_val[idx], x[col], sum);
+        }
+        else
+        {
+            break;
         }
     }
 
     y[row] = sum;
+}
+
+__global__ void kernel_spmv_halo(local_int_t m,
+                                 local_int_t n,
+                                 local_int_t halo_width,
+                                 const local_int_t* halo_row_ind,
+                                 const local_int_t* halo_col_ind,
+                                 const double* halo_val,
+                                 const local_int_t* perm,
+                                 const double* x,
+                                 double* y)
+{
+    local_int_t row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    double sum = 0.0;
+
+    for(local_int_t p = 0; p < halo_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = halo_col_ind[idx];
+
+        if(col >= 0 && col < n)
+        {
+            sum = fma(halo_val[idx], x[col], sum);
+        }
+    }
+
+    y[perm[halo_row_ind[row]]] += sum;
 }
 
 /*!
@@ -76,22 +112,40 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
     assert(y.localLength >= A.localNumberOfRows);
 
 #ifndef HPCG_NO_MPI
-    ExchangeHaloAsync(A, x);
-    ExchangeHaloSync(A, x); // TODO interior spmv can be done before sync
+    PrepareSendBuffer(A, x);
 #endif
 
     hipLaunchKernelGGL((kernel_spmv_ell),
                        dim3((A.localNumberOfRows - 1) / 128 + 1),
                        dim3(128),
                        0,
-                       0,
+                       stream_interior,
                        A.localNumberOfRows,
-                       A.localNumberOfColumns,
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,
                        x.d_values,
                        y.d_values);
+
+#ifndef HPCG_NO_MPI
+    ExchangeHaloAsync(A);
+    ObtainRecvBuffer(A, x);
+
+    hipLaunchKernelGGL((kernel_spmv_halo),
+                       dim3((A.totalToBeSent - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       0,
+                       A.totalToBeSent,
+                       A.localNumberOfColumns,
+                       A.ell_width,
+                       A.halo_row_ind,
+                       A.halo_col_ind,
+                       A.halo_val,
+                       A.perm,
+                       x.d_values,
+                       y.d_values);
+#endif
 
     return 0;
 }

@@ -41,8 +41,8 @@
 int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vector & xexact)
 {
     ConvertToELL(A);
-    MultiColoring(A);
-//    JPLColoring(A);
+//    MultiColoring(A);
+    JPLColoring(A);
     PermuteMatrix(A);
     PermuteVector(A.localNumberOfRows, b, A.perm);
     PermuteVector(A.localNumberOfRows, xexact, A.perm);
@@ -52,8 +52,8 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     while(M != NULL)
     {
         ConvertToELL(*M);
-        MultiColoring(*M);
-//        JPLColoring(*M);
+//        MultiColoring(*M);
+        JPLColoring(*M);
         PermuteMatrix(*M);
 
         M = M->Ac;

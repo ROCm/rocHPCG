@@ -35,6 +35,10 @@ int
 HPCG_Finalize(void) {
   HPCG_fout.close();
 
+  // Destroy streams
+  HIP_CHECK(hipStreamDestroy(stream_interior));
+  HIP_CHECK(hipStreamDestroy(stream_halo));
+
   // Free workspace
   HIP_CHECK(hipFree(workspace));
 

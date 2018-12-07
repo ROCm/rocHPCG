@@ -110,11 +110,11 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   return;
 }
 
-__global__ void kernel_scatter(local_int_t size,
-                               const double* in,
-                               const local_int_t* map,
-                               const local_int_t* perm,
-                               double* out)
+__global__ void kernel_gather(local_int_t size,
+                              const double* in,
+                              const local_int_t* map,
+                              const local_int_t* perm,
+                              double* out)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -126,7 +126,29 @@ __global__ void kernel_scatter(local_int_t size,
     out[gid] = in[perm[map[gid]]];
 }
 
-void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
+void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
+{
+    // Prepare send buffer
+    hipLaunchKernelGGL((kernel_gather),
+                       dim3((A.totalToBeSent - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       stream_halo,
+                       A.totalToBeSent,
+                       x.d_values,
+                       A.d_elementsToSend,
+                       A.perm,
+                       A.d_send_buffer);
+
+    // Copy send buffer to host
+    HIP_CHECK(hipMemcpyAsync(A.send_buffer,
+                             A.d_send_buffer,
+                             sizeof(double) * A.totalToBeSent,
+                             hipMemcpyDeviceToHost,
+                             stream_halo));
+}
+
+void ExchangeHaloAsync(const SparseMatrix& A)
 {
     int num_neighbors = A.numberOfSendNeighbors;
     int MPI_MY_TAG = 99;
@@ -149,20 +171,8 @@ void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
         offset += nrecv;
     }
 
-    // Prepare send buffer
-    hipLaunchKernelGGL((kernel_scatter),
-                       dim3((A.totalToBeSent - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       A.totalToBeSent,
-                       x.d_values,
-                       A.d_elementsToSend,
-                       A.perm,
-                       A.d_send_buffer);
-
-    // Copy send buffer to host
-    HIP_CHECK(hipMemcpy(A.send_buffer, A.d_send_buffer, sizeof(double) * A.totalToBeSent, hipMemcpyDeviceToHost));
+    // Synchronize stream to make sure that send buffer is available
+    HIP_CHECK(hipStreamSynchronize(stream_halo));
 
     // Post async boundary sends
     offset = 0;
@@ -183,7 +193,7 @@ void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
     }
 }
 
-void ExchangeHaloSync(const SparseMatrix& A, Vector& x)
+void ObtainRecvBuffer(const SparseMatrix& A, Vector& x)
 {
     int num_neighbors = A.numberOfSendNeighbors;
 
@@ -192,10 +202,11 @@ void ExchangeHaloSync(const SparseMatrix& A, Vector& x)
     EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.send_request, MPI_STATUSES_IGNORE));
 
     // Update boundary values
-    HIP_CHECK(hipMemcpy(x.d_values + A.localNumberOfRows,
-                        A.recv_buffer,
-                        sizeof(double) * A.totalToBeSent,
-                        hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpyAsync(x.d_values + A.localNumberOfRows,
+                             A.recv_buffer,
+                             sizeof(double) * A.totalToBeSent,
+                             hipMemcpyHostToDevice,
+                             stream_halo));
 }
 #endif
 // ifndef HPCG_NO_MPI

@@ -113,17 +113,27 @@ void ConvertToELL(SparseMatrix& A)
     // Allocate arrays
     HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
     HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(hipMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.totalToBeSent));
+    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.totalToBeSent));
     HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
     HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
 
     std::vector<local_int_t> ell_col_ind(A.ell_width * A.localNumberOfRows);
     std::vector<double> ell_val(A.ell_width * A.localNumberOfRows);
+    std::vector<local_int_t> halo_row_ind(A.totalToBeSent);
+    std::vector<local_int_t> halo_col_ind(A.ell_width * A.totalToBeSent);
+    std::vector<double> halo_val(A.ell_width * A.totalToBeSent);
     std::vector<double> inv_diag(A.localNumberOfRows);
 
+    local_int_t h = 0;
     for(local_int_t i = 0; i < A.localNumberOfRows; ++i)
     {
         local_int_t j = 0;
         local_int_t p = 0;
+        local_int_t q = 0;
+        bool flag = false;
+
         for(; j < A.nonzerosInRow[i]; ++j)
         {
             local_int_t col = A.mtxIndL[i][j];
@@ -132,6 +142,15 @@ void ConvertToELL(SparseMatrix& A)
             local_int_t idx = p++ * A.localNumberOfRows + i;
             ell_col_ind[idx] = col;
             ell_val[idx] = val;
+
+            if(col >= A.localNumberOfRows)
+            {
+                idx = q++ * A.totalToBeSent + h;
+                halo_row_ind[h] = i;
+                halo_col_ind[idx] = col;
+                halo_val[idx] = val;
+                flag = true;
+            }
 
             if(col == i)
             {
@@ -145,9 +164,24 @@ void ConvertToELL(SparseMatrix& A)
             ell_col_ind[idx] = -1;
             ell_val[idx] = 0.0;
         }
+
+        if(flag == true)
+        {
+            for(; q < A.ell_width; ++q)
+            {
+                local_int_t idx = q * A.totalToBeSent + h;
+                halo_col_ind[idx] = -1;
+                halo_val[idx] = 0.0;
+            }
+
+            ++h;
+        }
     }
 
     HIP_CHECK(hipMemcpy(A.ell_col_ind, ell_col_ind.data(), sizeof(local_int_t) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(A.ell_val, ell_val.data(), sizeof(double) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(A.halo_row_ind, halo_row_ind.data(), sizeof(local_int_t) * A.totalToBeSent, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(A.halo_col_ind, halo_col_ind.data(), sizeof(local_int_t) * A.ell_width * A.totalToBeSent, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(A.halo_val, halo_val.data(), sizeof(double) * A.ell_width * A.totalToBeSent, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(A.inv_diag, inv_diag.data(), sizeof(double) * A.localNumberOfRows, hipMemcpyHostToDevice));
 }

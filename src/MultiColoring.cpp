@@ -25,6 +25,8 @@
 #include <hip/hip_runtime.h>
 #include <hipcub/hipcub.hpp>
 
+#define MAX_COLORS 128
+
 __global__ void kernel_identity(local_int_t size, local_int_t* data)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
@@ -332,10 +334,6 @@ __global__ void kernel_jpl(local_int_t m,
                 break;
             }
         }
-        else
-        {
-            break;
-        }
     }
 
     // If vertex is a maximum, color it
@@ -358,10 +356,17 @@ void JPLColoring(SparseMatrix& A)
     local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
 
     // Counter for uncolored vertices
-    local_int_t uncolored = m;
+    local_int_t colored = 0;
+
+    // Number of vertices of each block
+    A.sizes = new int[MAX_COLORS];
+
+    // Offset into blocks
+    A.offsets = new int[MAX_COLORS];
+    A.offsets[0] = 0;
 
     // Run Jones-Plassmann Luby algorithm until all vertices have been colored
-    while(uncolored != 0)
+    while(colored != m)
     {
         hipLaunchKernelGGL((kernel_jpl),
                            dim3((m - 1) / 1024 + 1),
@@ -374,16 +379,14 @@ void JPLColoring(SparseMatrix& A)
                            A.ell_col_ind,
                            A.perm);
 
-        ++A.nblocks;
-
-        // Count uncolored vertices
+        // Count colored vertices
         hipLaunchKernelGGL((kernel_count_color_part1<128>),
                            dim3(128),
                            dim3(128),
                            0,
                            0,
                            m,
-                           -1,
+                           A.nblocks,
                            A.perm,
                            tmp);
 
@@ -395,35 +398,14 @@ void JPLColoring(SparseMatrix& A)
                            128,
                            tmp);
 
-        HIP_CHECK(hipMemcpy(&uncolored, tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
-    }
+        // Copy colored vertices for current iteration to host
+        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
 
-    printf("Jones-Plassmann Luby - #colors: %d\n", A.nblocks);
+        // Total number of colored vertices
+        colored += A.sizes[A.nblocks];
+        A.offsets[A.nblocks + 1] = colored;
 
-    // Determine number of rows per color
-    A.sizes = new int[A.nblocks];
-
-    for(int i = 0; i < A.nblocks; ++i)
-    {
-        hipLaunchKernelGGL((kernel_count_color_part1<512>),
-                           dim3(512),
-                           dim3(512),
-                           0,
-                           0,
-                           m,
-                           i,
-                           A.perm,
-                           tmp);
-
-        hipLaunchKernelGGL((kernel_count_color_part2<512>),
-                           dim3(1),
-                           dim3(512),
-                           0,
-                           0,
-                           512,
-                           tmp);
-
-        HIP_CHECK(hipMemcpy(&A.sizes[i], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
+        ++A.nblocks;
     }
 
     local_int_t* tmp_color;
@@ -468,13 +450,4 @@ void JPLColoring(SparseMatrix& A)
     HIP_CHECK(hipFree(tmp_color));
     HIP_CHECK(hipFree(tmp_perm));
     HIP_CHECK(hipFree(perm));
-
-    // Compute color offsets
-    A.offsets = new int[A.nblocks];
-    A.offsets[0] = 0;
-
-    for(int i = 0; i < A.nblocks - 1; ++i)
-    {
-        A.offsets[i + 1] = A.offsets[i] + A.sizes[i];
-    }
 }

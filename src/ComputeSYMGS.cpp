@@ -74,6 +74,81 @@ __global__ void kernel_symgs_sweep(local_int_t m,
     y[row] = sum * inv_diag[row];
 }
 
+__global__ void kernel_symgs_interior(local_int_t m,
+                                      local_int_t block_nrow,
+                                      local_int_t ell_width,
+                                      const local_int_t* ell_col_ind,
+                                      const double* ell_val,
+                                      const double* inv_diag,
+                                      const double* x,
+                                      double* y)
+{
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(row >= block_nrow)
+    {
+        return;
+    }
+
+    double sum = x[row];
+
+    for(local_int_t p = 0; p < ell_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col >= 0 && col < m && col != row)
+        {
+            sum = fma(-ell_val[idx], y[col], sum);
+        }
+    }
+
+    y[row] = sum * inv_diag[row];
+}
+
+__global__ void kernel_symgs_halo(local_int_t m,
+                                  local_int_t n,
+                                  local_int_t block_nrow,
+                                  local_int_t halo_width,
+                                  const local_int_t* halo_row_ind,
+                                  const local_int_t* halo_col_ind,
+                                  const double* halo_val,
+                                  const double* inv_diag,
+                                  const local_int_t* perm,
+                                  const double* x,
+                                  double* y)
+{
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    local_int_t halo_idx = halo_row_ind[row];
+    local_int_t perm_idx = perm[halo_idx];
+
+    if(perm_idx >= block_nrow)
+    {
+        return;
+    }
+
+    double sum = 0.0;
+
+    for(local_int_t p = 0; p < halo_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = halo_col_ind[idx];
+
+        if(col >= 0 && col < n)
+        {
+            sum = fma(-halo_val[idx], y[col], sum);
+        }
+    }
+
+    y[perm_idx] += sum * inv_diag[halo_idx];
+}
+
 __global__ void kernel_pointwise_mult2(local_int_t size,
                                        const double* x,
                                        const double* y,
@@ -191,12 +266,47 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
 #ifndef HPCG_NO_MPI
-    ExchangeHaloAsync(A, x);
-    ExchangeHaloSync(A, x); // TODO first block of lower sweeps can be done before sync
+    PrepareSendBuffer(A, x);
+#endif
+
+    hipLaunchKernelGGL((kernel_symgs_interior),
+                       dim3((A.sizes[0] - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       stream_interior,
+                       A.localNumberOfRows,
+                       A.sizes[0],
+                       A.ell_width,
+                       A.ell_col_ind,
+                       A.ell_val,
+                       A.inv_diag,
+                       r.d_values,
+                       x.d_values);
+
+#ifndef HPCG_NO_MPI
+    ExchangeHaloAsync(A);
+    ObtainRecvBuffer(A, x);
+
+    hipLaunchKernelGGL((kernel_symgs_halo),
+                       dim3((A.totalToBeSent - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       0,
+                       A.totalToBeSent,
+                       A.localNumberOfColumns,
+                       A.sizes[0],
+                       A.ell_width,
+                       A.halo_row_ind,
+                       A.halo_col_ind,
+                       A.halo_val,
+                       A.inv_diag,
+                       A.perm,
+                       r.d_values,
+                       x.d_values);
 #endif
 
     // Solve L
-    for(local_int_t i = 0; i < A.nblocks; ++i)
+    for(local_int_t i = 1; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
                            dim3((A.sizes[i] - 1) / 128 + 1),

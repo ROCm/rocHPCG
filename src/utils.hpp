@@ -23,6 +23,9 @@
 #include <curand.h>
 #endif
 
+// Streams
+extern hipStream_t stream_interior;
+extern hipStream_t stream_halo;
 // Workspace
 extern void* workspace;
 // RNG generator

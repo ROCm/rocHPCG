@@ -45,6 +45,8 @@ const char* NULLDEVICE="/dev/null";
 
 #include "ReadHpcgDat.hpp"
 
+hipStream_t stream_interior;
+hipStream_t stream_halo;
 void* workspace;
 #ifdef __HIP_PLATFORM_HCC__
 hiprandGenerator_t rng;
@@ -153,8 +155,17 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   params.comm_size = 1;
 #endif
 
-  // TODO device management
-  params.device = params.comm_rank % 4; // 4 GPUs per node
+  // Simple device management
+  int ndevs = 0;
+  HIP_CHECK(hipGetDeviceCount(&ndevs));
+  params.device = params.comm_rank % ndevs;
+
+  // Set device
+  HIP_CHECK(hipSetDevice(params.device));
+
+  // Create streams
+  HIP_CHECK(hipStreamCreate(&stream_interior));
+  HIP_CHECK(hipStreamCreate(&stream_halo));
 
   // Allocate 1MB of device workspace
   HIP_CHECK(hipMalloc((void**)&workspace, 1 << 20));

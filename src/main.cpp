@@ -97,11 +97,13 @@ int main(int argc, char * argv[]) {
            __ROCHPCG_VER_PATCH,
            __ROCHPCG_VER_TWEAK,
            __ROCHPCG_GIT_REV);
-
-    hipDeviceProp_t prop;
-    hipGetDeviceProperties(&prop, params.device);
-    printf("HIP device: %s\n", prop.name);
   }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  hipDeviceProp_t prop;
+  hipGetDeviceProperties(&prop, params.device);
+  printf("Using HIP device (%d): %s\n", params.device, prop.name);
 
 #ifdef HPCG_DETAILED_DEBUG
   if (size < 100 && rank==0) HPCG_fout << "Process "<<rank<<" of "<<size<<" is alive with " << params.numThreads << " threads." <<endl;

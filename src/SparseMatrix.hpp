@@ -91,6 +91,11 @@ struct SparseMatrix_STRUCT {
   double* recv_buffer;
   double* send_buffer;
   double* d_send_buffer;
+
+  // ELL matrix storage format arrays for halo part
+  local_int_t* halo_row_ind;
+  local_int_t* halo_col_ind;
+  double* halo_val;
 #endif
 
   // ELL matrix storage format arrays
@@ -151,6 +156,10 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.recv_buffer = NULL;
   A.send_buffer = NULL;
   A.d_send_buffer = NULL;
+
+  A.halo_row_ind = NULL;
+  A.halo_col_ind = NULL;
+  A.halo_val = NULL;
 #endif
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
   A.Ac =0;
@@ -238,9 +247,13 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if(A.recv_request) delete[] A.recv_request;
   if(A.send_request) delete[] A.send_request;
   if(A.d_elementsToSend) HIP_CHECK(hipFree(A.d_elementsToSend));
-  if(A.recv_buffer) delete[] A.recv_buffer;
-  if(A.send_buffer) delete[] A.send_buffer;
+  if(A.recv_buffer) HIP_CHECK(hipHostFree(A.recv_buffer));
+  if(A.send_buffer) HIP_CHECK(hipHostFree(A.send_buffer));
   if(A.d_send_buffer) HIP_CHECK(hipFree(A.d_send_buffer));
+
+  if(A.halo_row_ind) HIP_CHECK(hipFree(A.halo_row_ind));
+  if(A.halo_col_ind) HIP_CHECK(hipFree(A.halo_col_ind));
+  if(A.halo_val) HIP_CHECK(hipFree(A.halo_val));
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}

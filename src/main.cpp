@@ -99,7 +99,9 @@ int main(int argc, char * argv[]) {
            __ROCHPCG_GIT_REV);
   }
 
+#ifndef HPCG_NO_MPI
   MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
   hipDeviceProp_t prop;
   hipGetDeviceProperties(&prop, params.device);

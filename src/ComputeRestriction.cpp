@@ -19,6 +19,7 @@
  */
 
 #include "ComputeRestriction.hpp"
+#include "ExchangeHalo.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -46,6 +47,7 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
                                            const local_int_t* f2cOperator,
                                            const double* fine,
                                            local_int_t m,
+                                           local_int_t n,
                                            local_int_t ell_width,
                                            const local_int_t* ell_col_ind,
                                            const double* ell_val,
@@ -70,7 +72,7 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
         local_int_t idx = p * m + idx_fine;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < m)
+        if(col >= 0 && col < n)
         {
             sum += ell_val[idx] * xf[col];
         }
@@ -109,8 +111,14 @@ int ComputeRestriction(const SparseMatrix& A, const Vector& rf)
     return 0;
 }
 
-int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, const Vector& xf)
+int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector& xf)
 {
+#ifndef HPCG_NO_MPI
+    PrepareSendBuffer(A, xf);
+    ExchangeHaloAsync(A);
+    ObtainRecvBuffer(A, xf);
+#endif
+
     hipLaunchKernelGGL((kernel_fused_restrict_spmv),
                        dim3((A.mgData->rc->localLength - 1) / 128 + 1),
                        dim3(128),
@@ -120,6 +128,7 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, const V
                        A.mgData->d_f2cOperator,
                        rf.d_values,
                        A.localNumberOfRows,
+                       A.localNumberOfColumns,
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,

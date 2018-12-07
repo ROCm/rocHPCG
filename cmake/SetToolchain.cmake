@@ -43,4 +43,9 @@ mark_as_advanced(HIP_HCC_EXECUTABLE)
 
 # hiprand TODO fix - while hiprand puts its cmake into another subdir!?
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/hiprand/hiprand)
+list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/rocrand/rocrand)
 find_package(hiprand REQUIRED)
+
+if(NOT HIP_PLATFORM STREQUAL "nvcc")
+  find_package(rocrand REQUIRED)
+endif()

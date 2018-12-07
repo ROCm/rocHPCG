@@ -19,6 +19,6 @@
 #include "SparseMatrix.hpp"
 
 int ComputeRestriction(const SparseMatrix& A, const Vector& rf);
-int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, const Vector& xf);
+int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector& xf);
 
 #endif // COMPUTERESTRICTION_HPP

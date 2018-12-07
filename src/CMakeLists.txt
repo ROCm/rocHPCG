@@ -76,9 +76,9 @@ hip_add_executable(rocHPCG ${SOURCE} ${HIP_SOURCE})
 
 # Target compile definitions
 if(HIP_PLATFORM STREQUAL "nvcc")
-  target_compile_definitions(rocHPCG PRIVATE __HIP_PLATFORM_NVCC__)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_NVCC__")
 else()
-  target_compile_definitions(rocHPCG PRIVATE __HIP_PLATFORM_HCC__)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_HCC__")
 endif()
 
 if(NOT HPCG_OPENMP)
@@ -110,6 +110,10 @@ target_include_directories(rocHPCG PRIVATE
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
                              ${hiprand_INCLUDE_DIRS})
+if(NOT HIP_PLATFORM STREQUAL "nvcc")
+  target_include_directories(rocHPCG PRIVATE ${rocrand_INCLUDE_DIRS})
+endif()
+
 if(HPCG_MPI)
   target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH})
 endif()

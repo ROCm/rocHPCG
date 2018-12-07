@@ -35,7 +35,7 @@ const char* NULLDEVICE="/dev/null";
 #include <iostream>
 #include <hip/hip_runtime_api.h>
 #ifdef __HIP_PLATFORM_HCC__
-#include <hiprand/hiprand.h>
+#include <hiprand.h>
 #else
 #include <curand.h>
 #endif

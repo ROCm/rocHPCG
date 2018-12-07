@@ -266,7 +266,10 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
 #ifndef HPCG_NO_MPI
-    PrepareSendBuffer(A, x);
+    if(A.geom->size > 1)
+    {
+        PrepareSendBuffer(A, x);
+    }
 #endif
 
     hipLaunchKernelGGL((kernel_symgs_interior),
@@ -284,25 +287,28 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                        x.d_values);
 
 #ifndef HPCG_NO_MPI
-    ExchangeHaloAsync(A);
-    ObtainRecvBuffer(A, x);
+    if(A.geom->size > 1)
+    {
+        ExchangeHaloAsync(A);
+        ObtainRecvBuffer(A, x);
 
-    hipLaunchKernelGGL((kernel_symgs_halo),
-                       dim3((A.totalToBeSent - 1) / 128 + 1),
-                       dim3(128),
-                       0,
-                       0,
-                       A.totalToBeSent,
-                       A.localNumberOfColumns,
-                       A.sizes[0],
-                       A.ell_width,
-                       A.halo_row_ind,
-                       A.halo_col_ind,
-                       A.halo_val,
-                       A.inv_diag,
-                       A.perm,
-                       r.d_values,
-                       x.d_values);
+        hipLaunchKernelGGL((kernel_symgs_halo),
+                           dim3((A.totalToBeSent - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.totalToBeSent,
+                           A.localNumberOfColumns,
+                           A.sizes[0],
+                           A.ell_width,
+                           A.halo_row_ind,
+                           A.halo_col_ind,
+                           A.halo_val,
+                           A.inv_diag,
+                           A.perm,
+                           r.d_values,
+                           x.d_values);
+    }
 #endif
 
     // Solve L

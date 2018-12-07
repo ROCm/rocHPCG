@@ -112,7 +112,10 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
     assert(y.localLength >= A.localNumberOfRows);
 
 #ifndef HPCG_NO_MPI
-    PrepareSendBuffer(A, x);
+    if(A.geom->size > 1)
+    {
+        PrepareSendBuffer(A, x);
+    }
 #endif
 
     hipLaunchKernelGGL((kernel_spmv_ell),
@@ -128,23 +131,26 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
                        y.d_values);
 
 #ifndef HPCG_NO_MPI
-    ExchangeHaloAsync(A);
-    ObtainRecvBuffer(A, x);
+    if(A.geom->size > 1)
+    {
+        ExchangeHaloAsync(A);
+        ObtainRecvBuffer(A, x);
 
-    hipLaunchKernelGGL((kernel_spmv_halo),
-                       dim3((A.totalToBeSent - 1) / 128 + 1),
-                       dim3(128),
-                       0,
-                       0,
-                       A.totalToBeSent,
-                       A.localNumberOfColumns,
-                       A.ell_width,
-                       A.halo_row_ind,
-                       A.halo_col_ind,
-                       A.halo_val,
-                       A.perm,
-                       x.d_values,
-                       y.d_values);
+        hipLaunchKernelGGL((kernel_spmv_halo),
+                           dim3((A.totalToBeSent - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.totalToBeSent,
+                           A.localNumberOfColumns,
+                           A.ell_width,
+                           A.halo_row_ind,
+                           A.halo_col_ind,
+                           A.halo_val,
+                           A.perm,
+                           x.d_values,
+                           y.d_values);
+    }
 #endif
 
     return 0;

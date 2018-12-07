@@ -25,4 +25,11 @@ int ComputeWAXPBY(local_int_t n,
                   Vector& w,
                   bool& isOptimized);
 
+int ComputeFusedWAXPBYDot(local_int_t n,
+                          double alpha,
+                          const Vector& x,
+                          Vector& y,
+                          double& result,
+                          double& time_allreduce);
+
 #endif // COMPUTEWAXPBY_HPP

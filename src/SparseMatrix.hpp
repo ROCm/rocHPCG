@@ -108,8 +108,8 @@ struct SparseMatrix_STRUCT {
 
   // SymGS structures
   int nblocks; //!< Number of independent sets
-  int* sizes; //!< Number of rows of independent sets
-  int* offsets; //!< Pointer to the first row of each independent set
+  local_int_t* sizes; //!< Number of rows of independent sets
+  local_int_t* offsets; //!< Pointer to the first row of each independent set
   local_int_t* perm; //!< Permutation obtained by independent set
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;

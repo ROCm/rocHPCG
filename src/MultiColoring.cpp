@@ -179,7 +179,7 @@ void MultiColoring(SparseMatrix& A)
     }
 
     // Determine number of rows per color
-    A.sizes = new int[A.nblocks];
+    A.sizes = new local_int_t[A.nblocks];
 
     int* colors;
     HIP_CHECK(hipMalloc((void**)&colors, sizeof(int) * m));
@@ -207,7 +207,7 @@ void MultiColoring(SparseMatrix& A)
                            512,
                            tmp);
 
-        HIP_CHECK(hipMemcpy(&A.sizes[i], tmp, sizeof(int), hipMemcpyDeviceToHost));
+        HIP_CHECK(hipMemcpy(&A.sizes[i], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
     }
 
     int* tmp_color;
@@ -256,7 +256,7 @@ void MultiColoring(SparseMatrix& A)
     HIP_CHECK(hipFree(perm));
 
     // Compute color offsets
-    A.offsets = new int[A.nblocks];
+    A.offsets = new local_int_t[A.nblocks];
     A.offsets[0] = 0;
 
     for(int i = 0; i < A.nblocks - 1; ++i)
@@ -298,6 +298,7 @@ __global__ void kernel_jpl(local_int_t m,
 
     // Assume current vertex is maximum
     bool max = true;
+    bool min = true;
 
     // Compute row hash value
     unsigned int row_hash = get_hash(row);
@@ -331,7 +332,12 @@ __global__ void kernel_jpl(local_int_t m,
             if(col_hash >= row_hash)
             {
                 max = false;
-                break;
+            }
+
+            // If neighbor has lesser weight, vertex is not a minimum
+            if(col_hash <= row_hash)
+            {
+                min = false;
             }
         }
     }
@@ -340,6 +346,10 @@ __global__ void kernel_jpl(local_int_t m,
     if(max == true)
     {
         colors[row] = color;
+    }
+    else if(min == true)
+    {
+        colors[row] = color + 1;
     }
 }
 
@@ -359,10 +369,10 @@ void JPLColoring(SparseMatrix& A)
     local_int_t colored = 0;
 
     // Number of vertices of each block
-    A.sizes = new int[MAX_COLORS];
+    A.sizes = new local_int_t[MAX_COLORS];
 
     // Offset into blocks
-    A.offsets = new int[MAX_COLORS];
+    A.offsets = new local_int_t[MAX_COLORS];
     A.offsets[0] = 0;
 
     // Run Jones-Plassmann Luby algorithm until all vertices have been colored
@@ -398,13 +408,38 @@ void JPLColoring(SparseMatrix& A)
                            128,
                            tmp);
 
-        // Copy colored vertices for current iteration to host
+        // Copy colored max vertices for current iteration to host
         HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
 
-        // Total number of colored vertices
+        hipLaunchKernelGGL((kernel_count_color_part1<128>),
+                           dim3(128),
+                           dim3(128),
+                           0,
+                           0,
+                           m,
+                           A.nblocks + 1,
+                           A.perm,
+                           tmp);
+
+        hipLaunchKernelGGL((kernel_count_color_part2<128>),
+                           dim3(1),
+                           dim3(128),
+                           0,
+                           0,
+                           128,
+                           tmp);
+
+        // Copy colored min vertices for current iteration to host
+        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks + 1], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
+
+        // Total number of colored vertices after max
         colored += A.sizes[A.nblocks];
         A.offsets[A.nblocks + 1] = colored;
+        ++A.nblocks;
 
+        // Total number of colored vertices after min
+        colored += A.sizes[A.nblocks];
+        A.offsets[A.nblocks + 1] = colored;
         ++A.nblocks;
     }
 

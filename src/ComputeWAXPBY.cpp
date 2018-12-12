@@ -18,6 +18,11 @@
  HPCG routine
  */
 
+#ifndef HPCG_NO_MPI
+#include <mpi.h>
+#include "mytimer.hpp"
+#endif
+
 #include <cassert>
 #include <hip/hip_runtime.h>
 

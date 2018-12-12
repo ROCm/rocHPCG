@@ -181,11 +181,11 @@ void MultiColoring(SparseMatrix& A)
     // Determine number of rows per color
     A.sizes = new local_int_t[A.nblocks];
 
-    int* colors;
-    HIP_CHECK(hipMalloc((void**)&colors, sizeof(int) * m));
-    HIP_CHECK(hipMemcpy(colors, color.data(), sizeof(int) * m, hipMemcpyHostToDevice));
+    local_int_t* colors;
+    HIP_CHECK(hipMalloc((void**)&colors, sizeof(local_int_t) * m));
+    HIP_CHECK(hipMemcpy(colors, color.data(), sizeof(local_int_t) * m, hipMemcpyHostToDevice));
 
-    int* tmp = reinterpret_cast<int*>(workspace);
+    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
 
     for(int i = 0; i < A.nblocks; ++i)
     {
@@ -210,13 +210,13 @@ void MultiColoring(SparseMatrix& A)
         HIP_CHECK(hipMemcpy(&A.sizes[i], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
     }
 
-    int* tmp_color;
-    int* tmp_perm;
-    int* perm;
+    local_int_t* tmp_color;
+    local_int_t* tmp_perm;
+    local_int_t* perm;
 
-    HIP_CHECK(hipMalloc((void**)&tmp_color, sizeof(int) * m));
-    HIP_CHECK(hipMalloc((void**)&tmp_perm, sizeof(int) * m));
-    HIP_CHECK(hipMalloc((void**)&perm, sizeof(int) * m));
+    HIP_CHECK(hipMalloc((void**)&tmp_color, sizeof(local_int_t) * m));
+    HIP_CHECK(hipMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
+    HIP_CHECK(hipMalloc((void**)&perm, sizeof(local_int_t) * m));
 
     hipLaunchKernelGGL((kernel_identity),
                        dim3((m - 1) / 1024 + 1),
@@ -226,8 +226,8 @@ void MultiColoring(SparseMatrix& A)
                        m,
                        perm);
 
-    hipcub::DoubleBuffer<int> keys(colors, tmp_color);
-    hipcub::DoubleBuffer<int> vals(perm, tmp_perm);
+    hipcub::DoubleBuffer<local_int_t> keys(colors, tmp_color);
+    hipcub::DoubleBuffer<local_int_t> vals(perm, tmp_perm);
 
     size_t size;
     void* buf = NULL;

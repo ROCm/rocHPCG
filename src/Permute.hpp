@@ -18,6 +18,6 @@
 #include "SparseMatrix.hpp"
 
 void PermuteMatrix(SparseMatrix& A);
-void PermuteVector(local_int_t size, Vector& v, const int* perm);
+void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm);
 
 #endif // PERMUTE_HPP

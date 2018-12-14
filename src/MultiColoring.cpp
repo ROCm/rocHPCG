@@ -320,7 +320,7 @@ __global__ void kernel_jpl(local_int_t m,
             int color_nb = colors[col];
 
             // Compare only with uncolored neighbors
-            if(color_nb != -1)
+            if(color_nb != -1 && color_nb != color)
             {
                 continue;
             }

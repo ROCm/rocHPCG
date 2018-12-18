@@ -48,9 +48,9 @@ int ComputeMG(const SparseMatrix& A, const Vector& r, Vector& x)
             RETURN_IF_HPCG_ERROR(ComputeSYMGS(A, r, x));
         }
 
-//        RETURN_IF_HPCG_ERROR(ComputeFusedSpMVRestriction(A, r, x)); TODO
-        RETURN_IF_HPCG_ERROR(ComputeSPMV(A, x, *A.mgData->Axf));
-        RETURN_IF_HPCG_ERROR(ComputeRestriction(A, r));
+        RETURN_IF_HPCG_ERROR(ComputeFusedSpMVRestriction(A, r, x));
+//        RETURN_IF_HPCG_ERROR(ComputeSPMV(A, x, *A.mgData->Axf));
+//        RETURN_IF_HPCG_ERROR(ComputeRestriction(A, r));
 
         RETURN_IF_HPCG_ERROR(ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc));
         RETURN_IF_HPCG_ERROR(ComputeProlongation(A, x));

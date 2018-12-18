@@ -82,7 +82,7 @@ __global__ void kernel_sort_ell_rows(local_int_t m,
     local_int_t key = n;
     double val = 0.0;
 
-    if(hipThreadIdx_y < ell_width && row < m)
+    if(hipThreadIdx_y < ell_width)
     {
         key = ell_col_ind[idx];
         val = ell_val[idx];
@@ -127,9 +127,9 @@ __global__ void kernel_sort_ell_rows(local_int_t m,
     key = skey[tidx][tidy];
     val = sval[tidx][tidy];
 
-    if(hipThreadIdx_y < ell_width && row < m)
+    if(hipThreadIdx_y < ell_width)
     {
-        ell_col_ind[idx] = key;
+        ell_col_ind[idx] = (key == n) ? -1 : key;
         ell_val[idx] = val;
     }
 }

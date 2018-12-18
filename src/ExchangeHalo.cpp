@@ -133,7 +133,7 @@ void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
                        dim3((A.totalToBeSent - 1) / 128 + 1),
                        dim3(128),
                        0,
-                       stream_halo,
+                       0,
                        A.totalToBeSent,
                        x.d_values,
                        A.d_elementsToSend,

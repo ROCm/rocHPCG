@@ -126,8 +126,8 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.totalToBeSent));
 
     std::vector<local_int_t> halo_row_ind(A.totalToBeSent);
-    std::vector<local_int_t> halo_col_ind(A.ell_width * A.totalToBeSent);
-    std::vector<double> halo_val(A.ell_width * A.totalToBeSent);
+    std::vector<local_int_t> halo_col_ind(A.ell_width * A.totalToBeSent, -1);
+    std::vector<double> halo_val(A.ell_width * A.totalToBeSent, 0.0);
 #endif
 
     local_int_t h = 0;
@@ -174,17 +174,68 @@ void ConvertToELL(SparseMatrix& A)
 #ifndef HPCG_NO_MPI
         if(flag == true)
         {
-            for(; q < A.ell_width; ++q)
-            {
-                local_int_t idx = q * A.totalToBeSent + h;
-                halo_col_ind[idx] = -1;
-                halo_val[idx] = 0.0;
-            }
-
             ++h;
         }
 #endif
     }
+
+/*
+    // Sort ELL
+    for(int i = 0; i < A.totalToBeSent; ++i)
+    {
+        for(int p = 0; p < A.ell_width; ++p)
+        {
+            for(int q = 0; q < A.ell_width - 1; ++q)
+            {
+                int idx1 = q * A.totalToBeSent + i;
+                int idx2 = (q + 1) * A.totalToBeSent + i;
+
+                int col1 = halo_col_ind[idx1];
+                int col2 = halo_col_ind[idx2];
+
+                assert(col1 == -1 || col1 >= A.localNumberOfRows);
+                assert(col2 == -1 || col2 >= A.localNumberOfRows);
+
+                if(col2 != -1 && col2 < col1)
+                {
+                    double val1 = halo_val[idx1];
+                    double val2 = halo_val[idx2];
+
+                    halo_col_ind[idx1] = col2;
+                    halo_col_ind[idx2] = col1;
+
+                    halo_val[idx1] = val2;
+                    halo_val[idx2] = val1;
+                }
+            }
+        }
+    }
+
+
+
+    // Check if halo is sorted
+    for(int i = 0; i < A.totalToBeSent; ++i)
+    {
+        for(int p = 0; p < A.ell_width - 1; ++p)
+        {
+            int idx = p * A.totalToBeSent + i;
+            int idx2 = (p + 1) * A.totalToBeSent + i;
+
+            int col = halo_col_ind[idx];
+            int col2 = halo_col_ind[idx2];
+
+            if(col2 == -1) continue;
+
+            if(col == -1)
+            {
+                assert(col2 == -1);
+                continue;
+            }
+
+            assert(col < col2);
+        }
+    }
+*/
 
     HIP_CHECK(hipMemcpy(A.ell_col_ind, ell_col_ind.data(), sizeof(local_int_t) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(A.ell_val, ell_val.data(), sizeof(double) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));

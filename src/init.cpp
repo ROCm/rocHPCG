@@ -173,10 +173,10 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   // Initialize random number generator
 #ifdef __HIP_PLATFORM_HCC__
   hiprandCreateGenerator(&rng, HIPRAND_RNG_PSEUDO_DEFAULT);
-  hiprandSetPseudoRandomGeneratorSeed(rng, 12345ULL);
+  hiprandSetPseudoRandomGeneratorSeed(rng, RNG_SEED);
 #else
   curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(rng, 12345ULL);
+  curandSetPseudoRandomGeneratorSeed(rng, RNG_SEED);
 #endif
 
 #ifdef HPCG_NO_OPENMP

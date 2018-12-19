@@ -108,8 +108,6 @@ __global__ void kernel_dot_part2(local_int_t n, double* workspace)
         sdata[tid] += workspace[idx];
     }
 
-    __syncthreads();
-
     reduce_sum<BLOCKSIZE>(tid, sdata);
 
     if(tid == 0)

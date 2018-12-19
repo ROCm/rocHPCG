@@ -81,6 +81,9 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_HCC__")
 endif()
 
+# Support only for contiguous arrays
+target_compile_definitions(rocHPCG PRIVATE HPCG_CONTIGUOUS_ARRAYS)
+
 if(NOT HPCG_OPENMP)
   target_compile_definitions(rocHPCG PRIVATE HPCG_NO_OPENMP)
 endif()

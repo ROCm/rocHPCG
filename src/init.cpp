@@ -167,7 +167,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   HIP_CHECK(hipStreamCreate(&stream_interior));
   HIP_CHECK(hipStreamCreate(&stream_halo));
 
-  // Allocate 8MB of device workspace
+  // Allocate device workspace
   HIP_CHECK(hipMalloc((void**)&workspace, 1 << 23));
 
   // Initialize random number generator

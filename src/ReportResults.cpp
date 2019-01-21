@@ -444,29 +444,44 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
 #endif
 
     // Print some numbers to screen
+    printf("\nLocal domain: %d x %d x %d\n", A.geom->nx, A.geom->ny, A.geom->nz);
+    printf("Global domain: %lld x %lld x %lld\n", A.geom->gnx, A.geom->gny, A.geom->gnz);
+    printf("Process domain: %d x %d x %d\n", A.geom->npx, A.geom->npy, A.geom->npz);
     printf("\nTotal Time: %0.2lf sec\n", times[0]);
     printf("Setup Time: %0.2lf sec\n", times[9]);
     printf("Optimization Time: %0.2lf sec\n", times[7]);
 
     printf("\n");
-    printf("Dot    = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+    printf("DDOT   = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            fnops_ddot / times[1] / 1e9,
-           (fnreads_ddot + fnwrites_ddot) / times[1] / 1e9);
-    printf("waxpby = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           (fnreads_ddot + fnwrites_ddot) / times[1] / 1e9,
+           fnops_ddot / times[1] / 1e9 / A.geom->size,
+           (fnreads_ddot + fnwrites_ddot) / times[1] / 1e9 / A.geom->size);
+    printf("WAXPBY = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            fnops_waxpby / times[2] / 1e9,
-           (fnreads_waxpby + fnwrites_waxpby) / times[2] / 1e9);
-    printf("SpMV   = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           (fnreads_waxpby + fnwrites_waxpby) / times[2] / 1e9,
+           fnops_waxpby / times[2] / 1e9 / A.geom->size,
+           (fnreads_waxpby + fnwrites_waxpby) / times[2] / 1e9 / A.geom->size);
+    printf("SpMV   = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            fnops_sparsemv / (times[3]) / 1e9,
-           (fnreads_sparsemv + fnwrites_sparsemv) / times[3] / 1e9);
-    printf("MG     = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           (fnreads_sparsemv + fnwrites_sparsemv) / times[3] / 1e9,
+           fnops_sparsemv / (times[3]) / 1e9 / A.geom->size,
+           (fnreads_sparsemv + fnwrites_sparsemv) / times[3] / 1e9 / A.geom->size);
+    printf("MG     = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            fnops_precond / (times[5]) / 1e9,
-           (fnreads_precond + fnwrites_precond) / times[5] / 1e9);
-    printf("total  = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           (fnreads_precond + fnwrites_precond) / times[5] / 1e9,
+           fnops_precond / (times[5]) / 1e9 / A.geom->size,
+           (fnreads_precond + fnwrites_precond) / times[5] / 1e9 / A.geom->size);
+    printf("Total  = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            fnops / times[0] / 1e9,
-           (fnreads + fnwrites) / times[0] / 1e9);
-    printf("final  = %0.1lf GF ( %0.1lf GB/s Effective )\n",
+           (fnreads + fnwrites) / times[0] / 1e9,
+           fnops / times[0] / 1e9 / A.geom->size,
+           (fnreads + fnwrites) / times[0] / 1e9 / A.geom->size);
+    printf("Final  = %0.1lf GFLOP/s ( %0.1lf GB/s )   \t%0.1lf GFLOP/s per process ( %0.1lf GB/s per process )\n",
            totalGflops,
-           (frefnreads + frefnwrites) / (times[0] + fNumberOfCgSets * (times[7] / 10.0 + times[9] / 10.0)) / 1e9);
+           (frefnreads + frefnwrites) / (times[0] + fNumberOfCgSets * (times[7] / 10.0 + times[9] / 10.0)) / 1e9,
+           totalGflops / A.geom->size,
+           (frefnreads + frefnwrites) / (times[0] + fNumberOfCgSets * (times[7] / 10.0 + times[9] / 10.0)) / 1e9 / A.geom->size);
   }
 
   return;

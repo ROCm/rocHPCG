@@ -95,11 +95,12 @@ struct SparseMatrix_STRUCT {
 
   // ELL matrix storage format arrays for halo part
   local_int_t halo_rows;
-  local_int_t* halo_row_ind;
   local_int_t* halo_col_ind;
   double* halo_val;
-  local_int_t* halo_offset; // TODO probably going to be removed
 #endif
+
+  local_int_t* halo_row_ind;
+  local_int_t* halo_offset; // TODO probably going to be removed
 
   // HPCG matrix storage format arrays
   char* d_nonzerosInRow;

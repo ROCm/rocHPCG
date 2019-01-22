@@ -48,7 +48,9 @@ __global__ void kernel_extract_diag_index(local_int_t m,
         }
         else if(col >= m)
         {
+#ifndef HPCG_NO_MPI
             halo_offset[row] = p;
+#endif
             break;
         }
     }
@@ -257,7 +259,10 @@ if(A.localNumberOfRows == 8 && A.geom->rank == 0)
 */
     // Extract diagonal index
     HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+
+#ifndef HPCG_NO_MPI
     HIP_CHECK(hipMalloc((void**)&A.halo_offset, sizeof(local_int_t) * A.localNumberOfRows));
+#endif
 
     hipLaunchKernelGGL((kernel_extract_diag_index),
                        dim3((m - 1) / 1024 + 1),

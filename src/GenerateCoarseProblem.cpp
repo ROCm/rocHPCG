@@ -45,9 +45,9 @@ __global__ void kernel_f2c_operator(local_int_t nxc,
         return;
     }
 
-    local_int_t ixf = 2 * ixc;
-    local_int_t iyf = 2 * iyc;
-    local_int_t izf = 2 * izc;
+    local_int_t ixf = ixc << 1;
+    local_int_t iyf = iyc << 1;
+    local_int_t izf = izc << 1;
 
     local_int_t currentCoarseRow = izc * nxc * nyc + iyc * nxc + ixc;
     local_int_t currentFineRow = izf * nxf * nyf + iyf * nxf + ixf;

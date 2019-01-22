@@ -29,19 +29,27 @@
 #include "SetupHalo.hpp"
 
 __global__ void kernel_copy_indices(local_int_t size,
+                                    const char* nonzerosInRow,
                                     const global_int_t* mtxIndG,
                                     local_int_t* mtxIndL)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
 
-    if(gid >= size)
+    if(row >= size)
     {
         return;
     }
 
-    // No MPI means no global indices, thus just simple copying of the values
-    // from global_int_t to local_int_t
-    mtxIndL[gid] = mtxIndG[gid]; // TODO mtxIndG will never be -1, need to add check for nonzero entries
+    local_int_t idx = row * 27 + hipThreadIdx_x;
+
+    if(hipThreadIdx_x < nonzerosInRow[row])
+    {
+        mtxIndL[idx] = mtxIndG[idx];
+    }
+    else
+    {
+        mtxIndL[idx] = -1;
+    }
 }
 
 __global__ void kernel_setup_halo(local_int_t m,
@@ -210,11 +218,12 @@ void SetupHalo(SparseMatrix& A)
     HIP_CHECK(hipMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
 
     hipLaunchKernelGGL((kernel_copy_indices),
-                       dim3((A.localNumberOfRows * A.numberOfNonzerosPerRow - 1) / 1024 + 1),
-                       dim3(1024),
+                       dim3((A.localNumberOfRows - 1) / 32 + 1),
+                       dim3(27, 32),
                        0,
                        0,
-                       A.localNumberOfRows * A.numberOfNonzerosPerRow,
+                       A.localNumberOfRows,
+                       A.d_nonzerosInRow,
                        A.d_mtxIndG,
                        A.d_mtxIndL);
 #else
@@ -634,11 +643,13 @@ hipMemset(hipcub_buffer, 0, hipcub_size);
 
 void CopyHaloToHost(SparseMatrix& A)
 {
+#ifndef HPCG_NO_MPI
     // Allocate host structures
     A.elementsToSend = new local_int_t[A.totalToBeSent];
     A.sendBuffer = new double[A.totalToBeSent];
 
     // Copy GPU data to host
     HIP_CHECK(hipMemcpy(A.elementsToSend, A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent, hipMemcpyDeviceToHost));
+#endif
     HIP_CHECK(hipMemcpy(A.mtxIndL[0], A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow, hipMemcpyDeviceToHost));
 }

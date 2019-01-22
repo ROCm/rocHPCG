@@ -116,10 +116,12 @@ __global__ void kernel_to_ell_col(local_int_t m,
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
 
+#ifndef HPCG_NO_MPI
     extern __shared__ bool sdata[];
     sdata[threadIdx.y] = false;
 
     __syncthreads();
+#endif
 
     if(row >= m)
     {
@@ -129,13 +131,16 @@ __global__ void kernel_to_ell_col(local_int_t m,
     local_int_t idx = hipThreadIdx_x * m + row;
     local_int_t col = mtxIndL[row * nonzerosPerRow + hipThreadIdx_x];
 
+#ifndef HPCG_NO_MPI
     if(col >= m)
     {
         sdata[threadIdx.y] = true;
     }
+#endif
 
     ell_col_ind[idx] = col;
 
+#ifndef HPCG_NO_MPI
     __syncthreads();
 
     if(threadIdx.x == 0)
@@ -145,6 +150,7 @@ __global__ void kernel_to_ell_col(local_int_t m,
             halo_row_ind[atomicAdd(halo_rows, 1)] = row;
         }
     }
+#endif
 }
 
 __global__ void kernel_to_ell_val(local_int_t m,
@@ -222,10 +228,14 @@ void ConvertToELL(SparseMatrix& A)
     // Convert mtxIndL into ELL column indices
     HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
     HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
 
     local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
+
+#ifndef HPCG_NO_MPI
+    HIP_CHECK(hipMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
+
     HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
+#endif
 
     hipLaunchKernelGGL((kernel_to_ell_col),
                        dim3((A.localNumberOfRows - 1) / 32 + 1),
@@ -241,6 +251,7 @@ void ConvertToELL(SparseMatrix& A)
 
     HIP_CHECK(hipFree(A.d_mtxIndL));
 
+#ifndef HPCG_NO_MPI
     HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
     assert(A.halo_rows <= A.totalToBeSent);
 
@@ -271,6 +282,7 @@ hipMemset(hipcub_buffer, 0, hipcub_size);
                                                     A.halo_row_ind, // TODO inplace!
                                                     A.halo_rows));
 //        HIP_CHECK(hipFree(hipcub_buffer));
+#endif
 
     HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
 
@@ -286,8 +298,7 @@ hipMemset(hipcub_buffer, 0, hipcub_size);
                        A.ell_val,
                        A.inv_diag);
 
-
-
+#ifndef HPCG_NO_MPI
     hipLaunchKernelGGL((kernel_to_halo),
                        dim3((A.halo_rows - 1) / 128 + 1),
                        dim3(128),
@@ -302,6 +313,7 @@ hipMemset(hipcub_buffer, 0, hipcub_size);
                        A.halo_row_ind,
                        A.halo_col_ind,
                        A.halo_val);
+#endif
 
     HIP_CHECK(hipFree(A.d_matrixValues));
 }

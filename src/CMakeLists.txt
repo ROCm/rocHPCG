@@ -22,6 +22,7 @@ set(HIP_SOURCE
   ComputeRestriction.cpp
   ComputeWAXPBY.cpp
   ExchangeHalo.cpp
+  GenerateCoarseProblem.cpp
   GenerateProblem.cpp
   MultiColoring.cpp
   Permute.cpp
@@ -45,7 +46,6 @@ set(SOURCE
   ComputeSPMV_ref.cpp
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
-  GenerateCoarseProblem.cpp
   GenerateGeometry.cpp
   GenerateProblem_ref.cpp
   MixedBaseCounter.cpp

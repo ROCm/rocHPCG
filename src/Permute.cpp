@@ -72,69 +72,66 @@ __device__ int get_bit(int x, int i)
     return (x >> i) & 1;
 }
 
-template <unsigned int BLOCKSIZE, unsigned int SIZE>
 __global__ void kernel_sort_ell_rows(local_int_t m,
                                      local_int_t n,
                                      local_int_t ell_width,
                                      local_int_t* ell_col_ind,
                                      double* ell_val)
 {
-    local_int_t tid = hipThreadIdx_x + hipBlockDim_x * hipThreadIdx_y;
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
-    __shared__ local_int_t skey[SIZE][SIZE];
-    __shared__ double sval[SIZE][SIZE];
+    extern __shared__ char sdata[];
+
+    local_int_t* skey = reinterpret_cast<local_int_t*>(sdata);
+    double* sval = reinterpret_cast<double*>(sdata + sizeof(local_int_t) * hipBlockDim_x * hipBlockDim_x);
 
     local_int_t idx = hipThreadIdx_y * m + row;
     local_int_t key = n;
     double val = 0.0;
 
-    if(hipThreadIdx_y < ell_width)
+    if(hipThreadIdx_y < ell_width && row < m)
     {
         key = ell_col_ind[idx];
         val = ell_val[idx];
     }
 
-    local_int_t tidx = hipThreadIdx_x;
-    local_int_t tidy = hipThreadIdx_y;
-
-    skey[tidx][tidy] = key;
-    sval[tidx][tidy] = val;
+    skey[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y] = key;
+    sval[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y] = val;
 
     __syncthreads();
 
-    key = skey[tidy][tidx];
-    val = sval[tidy][tidx];
+    key = skey[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x];
+    val = sval[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x];
 
-    swap(key, val, 1, get_bit(tidx, 1) ^ get_bit(tidx, 0));
+    swap(key, val, 1, get_bit(hipThreadIdx_x, 1) ^ get_bit(hipThreadIdx_x, 0));
 
-    swap(key, val, 2, get_bit(tidx, 2) ^ get_bit(tidx, 1));
-    swap(key, val, 1, get_bit(tidx, 2) ^ get_bit(tidx, 0));
+    swap(key, val, 2, get_bit(hipThreadIdx_x, 2) ^ get_bit(hipThreadIdx_x, 1));
+    swap(key, val, 1, get_bit(hipThreadIdx_x, 2) ^ get_bit(hipThreadIdx_x, 0));
 
-    swap(key, val, 4, get_bit(tidx, 3) ^ get_bit(tidx, 2));
-    swap(key, val, 2, get_bit(tidx, 3) ^ get_bit(tidx, 1));
-    swap(key, val, 1, get_bit(tidx, 3) ^ get_bit(tidx, 0));
+    swap(key, val, 4, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 2));
+    swap(key, val, 2, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 1));
+    swap(key, val, 1, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 0));
 
-    swap(key, val, 8, get_bit(tidx, 4) ^ get_bit(tidx, 3));
-    swap(key, val, 4, get_bit(tidx, 4) ^ get_bit(tidx, 2));
-    swap(key, val, 2, get_bit(tidx, 4) ^ get_bit(tidx, 1));
-    swap(key, val, 1, get_bit(tidx, 4) ^ get_bit(tidx, 0));
+    swap(key, val, 8, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 3));
+    swap(key, val, 4, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 2));
+    swap(key, val, 2, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 1));
+    swap(key, val, 1, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 0));
 
-    swap(key, val, 16, get_bit(tidx, 4));
-    swap(key, val,  8, get_bit(tidx, 3));
-    swap(key, val,  4, get_bit(tidx, 2));
-    swap(key, val,  2, get_bit(tidx, 1));
-    swap(key, val,  1, get_bit(tidx, 0));
+    swap(key, val, 16, get_bit(hipThreadIdx_x, 4));
+    swap(key, val,  8, get_bit(hipThreadIdx_x, 3));
+    swap(key, val,  4, get_bit(hipThreadIdx_x, 2));
+    swap(key, val,  2, get_bit(hipThreadIdx_x, 1));
+    swap(key, val,  1, get_bit(hipThreadIdx_x, 0));
 
-    skey[tidy][tidx] = key;
-    sval[tidy][tidx] = val;
+    skey[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x] = key;
+    sval[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x] = val;
 
     __syncthreads();
 
-    key = skey[tidx][tidy];
-    val = sval[tidx][tidy];
+    key = skey[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y];
+    val = sval[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y];
 
-    if(hipThreadIdx_y < ell_width)
+    if(hipThreadIdx_y < ell_width && row < m)
     {
         ell_col_ind[idx] = (key == n) ? -1 : key;
         ell_val[idx] = val;
@@ -216,13 +213,13 @@ void PermuteMatrix(SparseMatrix& A)
     HIP_CHECK(hipFree(tmp_cols));
     HIP_CHECK(hipFree(tmp_vals));
 
-    // Sort each row by column index // TODO this breaks for small matrices!!
+    // Sort each row by column index
 #define SORT_DIM_X 32
 #define SORT_DIM_Y 32
-    hipLaunchKernelGGL((kernel_sort_ell_rows<SORT_DIM_X * SORT_DIM_Y, SORT_DIM_Y>),
-                       dim3((m * SORT_DIM_Y - 1) / (SORT_DIM_X * SORT_DIM_Y) + 1),
+    hipLaunchKernelGGL((kernel_sort_ell_rows),
+                       dim3((m - 1) / SORT_DIM_X + 1),
                        dim3(SORT_DIM_X, SORT_DIM_Y),
-                       0,
+                       (sizeof(local_int_t) + sizeof(double)) * SORT_DIM_X * SORT_DIM_Y,
                        0,
                        m,
                        n,
@@ -232,31 +229,6 @@ void PermuteMatrix(SparseMatrix& A)
 #undef SORT_DIM_X
 #undef SORT_DIM_Y
 
-/*
-// some verbose to see if small matrices break
-int mm = A.localNumberOfRows;
-if(A.localNumberOfRows == 8 && A.geom->rank == 0)
-{
-    std::vector<local_int_t> ell_col_ind(27*mm);
-    hipMemcpy(ell_col_ind.data(), A.ell_col_ind, sizeof(local_int_t) * 27 * mm, hipMemcpyDeviceToHost);
-
-    for(int i=0; i<mm; ++i)
-    {
-        printf("Row %d: ", i);
-        for(int p=0; p<27; ++p)
-        {
-            int idx = p * mm + i;
-            int col = ell_col_ind[idx];
-
-            if(col >= 0 && col < mm)
-            {
-                printf(" %d", col);
-            }
-        }
-        printf("\n");
-    }
-}
-*/
     // Extract diagonal index
     HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
 

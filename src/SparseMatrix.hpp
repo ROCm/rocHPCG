@@ -120,6 +120,7 @@ struct SparseMatrix_STRUCT {
 
   // SymGS structures
   int nblocks; //!< Number of independent sets
+  int ublocks; //!< Number of upper triangular sets
   local_int_t* sizes; //!< Number of rows of independent sets
   local_int_t* offsets; //!< Pointer to the first row of each independent set
   local_int_t* perm; //!< Permutation obtained by independent set
@@ -183,6 +184,7 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.inv_diag = NULL;
 
   A.nblocks = 0;
+  A.ublocks = 0;
   A.sizes = NULL;
   A.offsets = NULL;
   A.perm = NULL;

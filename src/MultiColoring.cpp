@@ -451,6 +451,8 @@ void JPLColoring(SparseMatrix& A)
         ++A.nblocks;
     }
 
+    A.ublocks = A.nblocks - 1;
+
     local_int_t* tmp_color;
     local_int_t* tmp_perm;
     local_int_t* perm;
@@ -494,4 +496,8 @@ hipMemset(buf, 0, size); // TODO
     HIP_CHECK(hipFree(tmp_color));
     HIP_CHECK(hipFree(tmp_perm));
     HIP_CHECK(hipFree(perm));
+
+#ifndef HPCG_REFERENCE
+    --A.ublocks;
+#endif
 }

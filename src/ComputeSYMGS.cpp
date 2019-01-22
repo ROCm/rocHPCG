@@ -398,7 +398,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     }
 
     // Solve U
-    for(local_int_t i = A.nblocks - 1; i >= 0; --i)
+    for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
                            dim3((A.sizes[i] - 1) / 128 + 1),
@@ -455,17 +455,25 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 
     // Solve D
     hipLaunchKernelGGL((kernel_pointwise_mult),
+#ifndef HPCG_REFERENCE
+                       dim3((A.localNumberOfRows / A.nblocks * (A.nblocks - 1) - 1) / 1024 + 1),
+#else
                        dim3((A.localNumberOfRows - 1) / 1024 + 1),
+#endif
                        dim3(1024),
                        0,
                        0,
+#ifndef HPCG_REFERENCE
+                       A.localNumberOfRows / A.nblocks * (A.nblocks - 1),
+#else
                        A.localNumberOfRows,
+#endif
                        A.diag_idx,
                        A.ell_val,
                        x.d_values);
 
     // Solve U
-    for(local_int_t i = A.nblocks - 1; i >= 0; --i)
+    for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_backward_sweep_0),
                            dim3((A.sizes[i] - 1) / 128 + 1),

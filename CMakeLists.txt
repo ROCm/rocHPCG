@@ -37,6 +37,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(HPCG_DEBUG "Compile with modest debugging turned on" OFF)
 option(HPCG_DETAILED_DEBUG "Compile with voluminous debugging information turned on" OFF)
 option(HPCG_DETAILED_TIMING "Enable detail timers" OFF)
+option(HPCG_REFERENCE "Build reference mode" OFF)
 
 # Dependencies
 include(cmake/Dependencies.cmake)

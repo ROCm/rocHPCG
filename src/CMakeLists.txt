@@ -104,6 +104,10 @@ if(HPCG_DETAILED_TIMING)
   target_compile_definitions(rocHPCG PRIVATE HPCG_DETAILED_TIMING)
 endif()
 
+if(HPCG_REFERENCE)
+  target_compile_definitions(rocHPCG PRIVATE HPCG_REFERENCE)
+endif()
+
 
 
 # Target include directories

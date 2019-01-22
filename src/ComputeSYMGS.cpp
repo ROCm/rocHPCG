@@ -237,7 +237,8 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
         local_int_t idx = p * m + row;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < m)
+        // Every entry above offset is zero
+        if(col >= 0 && col < offset)
         {
             sum = fma(-ell_val[idx], y[col], sum);
         }
@@ -272,7 +273,8 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
         local_int_t idx = p * m + row;
         local_int_t col = ell_col_ind[idx];
 
-        if(col >= 0 && col < m)
+        // Every entry below offset should not be taken into account TODO really???
+        if(col >= offset && col < m)
         {
             sum = fma(-ell_val[idx], x[col], sum);
         }

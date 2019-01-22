@@ -24,13 +24,16 @@
 #include <hip/hip_runtime.h>
 
 __global__ void kernel_spmv_ell(local_int_t m,
+                                int nblocks,
+                                local_int_t blocksize,
                                 local_int_t ell_width,
                                 const local_int_t* ell_col_ind,
                                 const double* ell_val,
                                 const double* x,
                                 double* y)
 {
-    local_int_t row = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t row = blockIdx.x / nblocks * blockDim.x + threadIdx.x + (gid & (nblocks * blockDim.x - 1)) / blockDim.x * blocksize;
 
     if(row >= m)
     {
@@ -163,6 +166,8 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
                        0,
                        stream_interior,
                        A.localNumberOfRows,
+                       A.nblocks,
+                       A.localNumberOfRows / A.nblocks,
                        A.ell_width,
                        A.ell_col_ind,
                        A.ell_val,

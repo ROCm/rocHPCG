@@ -235,6 +235,7 @@ void MultiColoring(SparseMatrix& A)
 
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairsDescending(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipMalloc(&buf, size));
+hipMemset(buf, 0, size); // TODO
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairsDescending(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipFree(buf));
 
@@ -276,7 +277,8 @@ __device__ unsigned int get_hash(unsigned int h)
 }
 
 __global__ void kernel_jpl(local_int_t m,
-                           int color,
+                           int color1,
+                           int color2,
                            local_int_t ell_width,
                            const local_int_t* ell_col_ind,
                            local_int_t* colors)
@@ -318,7 +320,7 @@ __global__ void kernel_jpl(local_int_t m,
             int color_nb = colors[col];
 
             // Compare only with uncolored neighbors
-            if(color_nb != -1 && color_nb != color)
+            if(color_nb != -1 && color_nb != color1 && color_nb != color2)
             {
                 continue;
             }
@@ -343,11 +345,11 @@ __global__ void kernel_jpl(local_int_t m,
     // If vertex is a maximum, color it
     if(max == true)
     {
-        colors[row] = color;
+        colors[row] = color1;
     }
     else if(min == true)
     {
-        colors[row] = color + 1;
+        colors[row] = color2;
     }
 }
 
@@ -359,6 +361,9 @@ void JPLColoring(SparseMatrix& A)
     HIP_CHECK(hipMemset(A.perm, -1, sizeof(local_int_t) * m));
 
     A.nblocks = 0;
+
+    // Color seed
+    srand(RNG_SEED);
 
     // Temporary workspace
     local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
@@ -376,13 +381,18 @@ void JPLColoring(SparseMatrix& A)
     // Run Jones-Plassmann Luby algorithm until all vertices have been colored
     while(colored != m)
     {
+        // The first 8 colors are selected by RNG, afterwards we just count upwards
+        int color1 = (A.nblocks < 8) ? rand() % 8 : A.nblocks;
+        int color2 = (A.nblocks < 8) ? rand() % 8 : A.nblocks + 1;
+
         hipLaunchKernelGGL((kernel_jpl),
-                           dim3((m - 1) / 1024 + 1),
-                           dim3(1024),
+                           dim3((m - 1) / 128 + 1),
+                           dim3(128),
                            0,
                            0,
                            m,
-                           A.nblocks,
+                           color1,
+                           color2,
                            A.ell_width,
                            A.ell_col_ind,
                            A.perm);
@@ -394,7 +404,7 @@ void JPLColoring(SparseMatrix& A)
                            0,
                            0,
                            m,
-                           A.nblocks,
+                           color1,
                            A.perm,
                            tmp);
 
@@ -415,7 +425,7 @@ void JPLColoring(SparseMatrix& A)
                            0,
                            0,
                            m,
-                           A.nblocks + 1,
+                           color2,
                            A.perm,
                            tmp);
 
@@ -468,6 +478,7 @@ void JPLColoring(SparseMatrix& A)
 
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipMalloc(&buf, size));
+hipMemset(buf, 0, size); // TODO
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipFree(buf));
 

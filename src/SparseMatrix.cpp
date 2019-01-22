@@ -1,6 +1,7 @@
 #include "SparseMatrix.hpp"
 
 #include <hip/hip_runtime.h>
+#include <hipcub/hipcub.hpp>
 
 __global__ void kernel_copy_diagonal(local_int_t m,
                                      local_int_t n,
@@ -106,144 +107,201 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
                        A.inv_diag);
 }
 
+__global__ void kernel_to_ell_col(local_int_t m,
+                                  local_int_t nonzerosPerRow,
+                                  const local_int_t* mtxIndL,
+                                  local_int_t* ell_col_ind,
+                                  local_int_t* halo_rows,
+                                  local_int_t* halo_row_ind)
+{
+    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+
+    extern __shared__ bool sdata[];
+    sdata[threadIdx.y] = false;
+
+    __syncthreads();
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    local_int_t idx = hipThreadIdx_x * m + row;
+    local_int_t col = mtxIndL[row * nonzerosPerRow + hipThreadIdx_x];
+
+    if(col >= m)
+    {
+        sdata[threadIdx.y] = true;
+    }
+
+    ell_col_ind[idx] = col;
+
+    __syncthreads();
+
+    if(threadIdx.x == 0)
+    {
+        if(sdata[threadIdx.y] == true)
+        {
+            halo_row_ind[atomicAdd(halo_rows, 1)] = row;
+        }
+    }
+}
+
+__global__ void kernel_to_ell_val(local_int_t m,
+                                  local_int_t nnz_per_row,
+                                  const local_int_t* ell_col_ind,
+                                  const double* matrixValues,
+                                  double* ell_val,
+                                  double* inv_diag)
+{
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    for(int p = 0; p < nnz_per_row; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+        double val = matrixValues[row * nnz_per_row + p];
+
+        ell_val[idx] = val;
+
+        if(row == col)
+        {
+            inv_diag[row] = 1. / val;
+        }
+    }
+}
+
+__global__ void kernel_to_halo(local_int_t halo_rows,
+                               local_int_t m,
+                               local_int_t n,
+                               local_int_t ell_width,
+                               const local_int_t* ell_col_ind,
+                               const double* ell_val,
+                               const local_int_t* halo_row_ind,
+                               local_int_t* halo_col_ind,
+                               double* halo_val)
+{
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(gid >= halo_rows)
+    {
+        return;
+    }
+
+    local_int_t row = halo_row_ind[gid];
+
+    int q = 0;
+    for(int p = 0; p < ell_width; ++p)
+    {
+        local_int_t ell_idx = p * m + row;
+        local_int_t col = ell_col_ind[ell_idx];
+
+        if(col >= m && col < n)
+        {
+            local_int_t halo_idx = q++ * halo_rows + gid;
+
+            halo_col_ind[halo_idx] = col;
+            halo_val[halo_idx] = ell_val[ell_idx];
+        }
+    }
+
+    for(; q < ell_width; ++q)
+    {
+        local_int_t idx = q * halo_rows + gid;
+        halo_col_ind[idx] = -1;
+    }
+}
+
 void ConvertToELL(SparseMatrix& A)
 {
-    // TODO on device
-
-    // Allocate arrays
-    HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+    // Convert mtxIndL into ELL column indices
     HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
-
-    std::vector<local_int_t> ell_col_ind(A.ell_width * A.localNumberOfRows);
-    std::vector<double> ell_val(A.ell_width * A.localNumberOfRows);
-    std::vector<double> inv_diag(A.localNumberOfRows);
-
-#ifndef HPCG_NO_MPI
+    HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
     HIP_CHECK(hipMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
-    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.totalToBeSent));
-    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.totalToBeSent));
 
-    std::vector<local_int_t> halo_row_ind(A.totalToBeSent);
-    std::vector<local_int_t> halo_col_ind(A.ell_width * A.totalToBeSent, -1);
-    std::vector<double> halo_val(A.ell_width * A.totalToBeSent, 0.0);
-#endif
+    local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
+    HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
 
-    local_int_t h = 0;
-    for(local_int_t i = 0; i < A.localNumberOfRows; ++i)
+    hipLaunchKernelGGL((kernel_to_ell_col),
+                       dim3((A.localNumberOfRows - 1) / 32 + 1),
+                       dim3(A.ell_width, 32),
+                       sizeof(bool) * 32,
+                       0,
+                       A.localNumberOfRows,
+                       A.ell_width,
+                       A.d_mtxIndL,
+                       A.ell_col_ind,
+                       d_halo_rows,
+                       A.halo_row_ind);
+
+    HIP_CHECK(hipFree(A.d_mtxIndL));
+
+    HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
+    assert(A.halo_rows <= A.totalToBeSent);
+
+    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
+    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
+
+    size_t hipcub_size;
+    void* hipcub_buffer = NULL;
+    HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
+                                                hipcub_size,
+                                                A.halo_row_ind,
+                                                A.halo_row_ind,
+                                                A.halo_rows));
+    if(hipcub_size <= (1 << 23))
     {
-        local_int_t j = 0;
-        local_int_t p = 0;
-        local_int_t q = 0;
-        bool flag = false;
-
-        for(; j < A.nonzerosInRow[i]; ++j)
-        {
-            local_int_t col = A.mtxIndL[i][j];
-            double val = A.matrixValues[i][j];
-
-            local_int_t idx = p++ * A.localNumberOfRows + i;
-            ell_col_ind[idx] = col;
-            ell_val[idx] = val;
-
-#ifndef HPCG_NO_MPI
-            if(col >= A.localNumberOfRows)
-            {
-                idx = q++ * A.totalToBeSent + h;
-                halo_row_ind[h] = i;
-                halo_col_ind[idx] = col;
-                halo_val[idx] = val;
-                flag = true;
-            }
-#endif
-
-            if(col == i)
-            {
-                inv_diag[i] = 1.0 / val;
-            }
-        }
-
-        for(; p < A.ell_width; ++p)
-        {
-            local_int_t idx = p * A.localNumberOfRows + i;
-            ell_col_ind[idx] = -1;
-            ell_val[idx] = 0.0;
-        }
-
-#ifndef HPCG_NO_MPI
-        if(flag == true)
-        {
-            ++h;
-        }
-#endif
+        hipcub_buffer = workspace;
     }
-
-/*
-    // Sort ELL
-    for(int i = 0; i < A.totalToBeSent; ++i)
+    else
     {
-        for(int p = 0; p < A.ell_width; ++p)
-        {
-            for(int q = 0; q < A.ell_width - 1; ++q)
-            {
-                int idx1 = q * A.totalToBeSent + i;
-                int idx2 = (q + 1) * A.totalToBeSent + i;
-
-                int col1 = halo_col_ind[idx1];
-                int col2 = halo_col_ind[idx2];
-
-                assert(col1 == -1 || col1 >= A.localNumberOfRows);
-                assert(col2 == -1 || col2 >= A.localNumberOfRows);
-
-                if(col2 != -1 && col2 < col1)
-                {
-                    double val1 = halo_val[idx1];
-                    double val2 = halo_val[idx2];
-
-                    halo_col_ind[idx1] = col2;
-                    halo_col_ind[idx2] = col1;
-
-                    halo_val[idx1] = val2;
-                    halo_val[idx2] = val1;
-                }
-            }
+        fprintf(stderr, "FATAL error, buffer exceeding\n");
+        exit(1);
+//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
         }
-    }
+hipMemset(hipcub_buffer, 0, hipcub_size);
+        HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
+                                                    hipcub_size,
+                                                    A.halo_row_ind,
+                                                    A.halo_row_ind, // TODO inplace!
+                                                    A.halo_rows));
+//        HIP_CHECK(hipFree(hipcub_buffer));
+
+    HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
+
+    hipLaunchKernelGGL((kernel_to_ell_val),
+                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       A.localNumberOfRows,
+                       A.numberOfNonzerosPerRow,
+                       A.ell_col_ind,
+                       A.d_matrixValues,
+                       A.ell_val,
+                       A.inv_diag);
 
 
 
-    // Check if halo is sorted
-    for(int i = 0; i < A.totalToBeSent; ++i)
-    {
-        for(int p = 0; p < A.ell_width - 1; ++p)
-        {
-            int idx = p * A.totalToBeSent + i;
-            int idx2 = (p + 1) * A.totalToBeSent + i;
+    hipLaunchKernelGGL((kernel_to_halo),
+                       dim3((A.halo_rows - 1) / 128 + 1),
+                       dim3(128),
+                       0,
+                       0,
+                       A.halo_rows,
+                       A.localNumberOfRows,
+                       A.localNumberOfColumns,
+                       A.ell_width,
+                       A.ell_col_ind,
+                       A.ell_val,
+                       A.halo_row_ind,
+                       A.halo_col_ind,
+                       A.halo_val);
 
-            int col = halo_col_ind[idx];
-            int col2 = halo_col_ind[idx2];
-
-            if(col2 == -1) continue;
-
-            if(col == -1)
-            {
-                assert(col2 == -1);
-                continue;
-            }
-
-            assert(col < col2);
-        }
-    }
-*/
-
-    HIP_CHECK(hipMemcpy(A.ell_col_ind, ell_col_ind.data(), sizeof(local_int_t) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));
-    HIP_CHECK(hipMemcpy(A.ell_val, ell_val.data(), sizeof(double) * A.ell_width * A.localNumberOfRows, hipMemcpyHostToDevice));
-    HIP_CHECK(hipMemcpy(A.inv_diag, inv_diag.data(), sizeof(double) * A.localNumberOfRows, hipMemcpyHostToDevice));
-
-#ifndef HPCG_NO_MPI
-    HIP_CHECK(hipMemcpy(A.halo_row_ind, halo_row_ind.data(), sizeof(local_int_t) * A.totalToBeSent, hipMemcpyHostToDevice));
-    HIP_CHECK(hipMemcpy(A.halo_col_ind, halo_col_ind.data(), sizeof(local_int_t) * A.ell_width * A.totalToBeSent, hipMemcpyHostToDevice));
-    HIP_CHECK(hipMemcpy(A.halo_val, halo_val.data(), sizeof(double) * A.ell_width * A.totalToBeSent, hipMemcpyHostToDevice));
-#endif
+    HIP_CHECK(hipFree(A.d_matrixValues));
 }

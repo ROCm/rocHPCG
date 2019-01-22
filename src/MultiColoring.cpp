@@ -25,8 +25,6 @@
 #include <hip/hip_runtime.h>
 #include <hipcub/hipcub.hpp>
 
-#define MAX_COLORS 128
-
 __global__ void kernel_identity(local_int_t size, local_int_t* data)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;

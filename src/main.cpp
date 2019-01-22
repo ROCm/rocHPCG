@@ -157,6 +157,7 @@ int main(int argc, char * argv[]) {
   Vector b, x, xexact;
   GenerateProblem(A, &b, &x, &xexact);
   SetupHalo(A);
+
   int numberOfMgLevels = 4; // Number of levels including first
   SparseMatrix * curLevelMatrix = &A;
   for (int level = 1; level< numberOfMgLevels; ++level) {
@@ -167,7 +168,22 @@ int main(int argc, char * argv[]) {
   setup_time = mytimer() - setup_time; // Capture total time of setup
   times[9] = setup_time; // Save it for reporting
 
-  if(rank == 0) printf("\nSetup Phase took %0.1lf sec\n\n", times[9]);
+  if(rank == 0) printf("\nSetup Phase took %0.2lf sec\n", times[9]);
+
+  // Copy assembled GPU data to host for reference computations
+  if(rank == 0) printf("\nCopying GPU assembled data to host for reference computations\n");
+
+  CopyProblemToHost(A, &b, &x, &xexact);
+  CopyHaloToHost(A);
+
+  curLevelMatrix = &A;
+  for(int level = 1; level < numberOfMgLevels; ++level)
+  {
+    CopyCoarseProblemToHost(*curLevelMatrix);
+    curLevelMatrix = curLevelMatrix->Ac;
+  }
+
+  if(rank == 0) printf("\nChecking assembled data ...\n");
 
   curLevelMatrix = &A;
   Vector * curb = &b;
@@ -223,6 +239,8 @@ int main(int argc, char * argv[]) {
   // Reference CG Timing Phase //
   ///////////////////////////////
 
+  if(rank == 0) printf("\nStarting Reference CG Phase ...\n\n");
+
 #ifdef HPCG_DEBUG
   t1 = mytimer();
 #endif
@@ -257,7 +275,7 @@ int main(int argc, char * argv[]) {
   if (rank==0) HPCG_fout << "Total problem setup time in main (sec) = " << mytimer() - t1 << endl;
 #endif
 
-  if(rank == 0) printf("\nOptimization Phase took %0.1lf sec\n", times[7]);
+  if(rank == 0) printf("\nOptimization Phase took %0.2lf sec\n", times[7]);
 
 #ifdef HPCG_DETAILED_DEBUG
   if (geom->size == 1) WriteProblem(*geom, A, b, x, xexact);
@@ -268,7 +286,7 @@ int main(int argc, char * argv[]) {
   // Validation Testing Phase //
   //////////////////////////////
 
-  if(rank == 0) printf("\nValidation Testing Phase...\n");
+  if(rank == 0) printf("\nValidation Testing Phase ...\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -292,7 +310,7 @@ int main(int argc, char * argv[]) {
   // Optimized CG Setup Phase //
   //////////////////////////////
 
-  if(rank == 0) printf("\nOptimized CG Setup...\n\n");
+  if(rank == 0) printf("\nOptimized CG Setup ...\n\n");
 
   niters = 0;
   normr = 0.0;
@@ -348,7 +366,7 @@ int main(int argc, char * argv[]) {
                        used_mem >> 20,
                        total_mem >> 20);
 
-  if(rank == 0) printf("\nStarting Benchmarking Phase...\n");
+  if(rank == 0) printf("\nStarting Benchmarking Phase ...\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds

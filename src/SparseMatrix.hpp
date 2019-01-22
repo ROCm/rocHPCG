@@ -51,6 +51,7 @@ struct SparseMatrix_STRUCT {
   local_int_t localNumberOfRows; //!< number of rows local to this process
   local_int_t localNumberOfColumns;  //!< number of columns local to this process
   local_int_t localNumberOfNonzeros;  //!< number of nonzeros local to this process
+  local_int_t numberOfNonzerosPerRow; //!< maximum number of nonzeros per row
   char  * nonzerosInRow;  //!< The number of nonzeros in a row will always be 27 or fewer
   global_int_t ** mtxIndG; //!< matrix indices as global values
   local_int_t ** mtxIndL; //!< matrix indices as local values
@@ -93,10 +94,20 @@ struct SparseMatrix_STRUCT {
   double* d_send_buffer;
 
   // ELL matrix storage format arrays for halo part
+  local_int_t halo_rows;
   local_int_t* halo_row_ind;
   local_int_t* halo_col_ind;
   double* halo_val;
+  local_int_t* halo_offset; // TODO probably going to be removed
 #endif
+
+  // HPCG matrix storage format arrays
+  char* d_nonzerosInRow;
+  global_int_t* d_mtxIndG;
+  local_int_t* d_mtxIndL;
+  double* d_matrixValues;
+  local_int_t* d_matrixDiagonal;
+  global_int_t* d_localToGlobalMap;
 
   // ELL matrix storage format arrays
   local_int_t ell_width; //!< Maximum nnz per row
@@ -251,6 +262,7 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if(A.send_buffer) HIP_CHECK(hipHostFree(A.send_buffer));
   if(A.d_send_buffer) HIP_CHECK(hipFree(A.d_send_buffer));
 
+  if(A.halo_offset) HIP_CHECK(hipFree(A.halo_offset));
   if(A.halo_row_ind) HIP_CHECK(hipFree(A.halo_row_ind));
   if(A.halo_col_ind) HIP_CHECK(hipFree(A.halo_col_ind));
   if(A.halo_val) HIP_CHECK(hipFree(A.halo_val));

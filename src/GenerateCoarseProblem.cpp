@@ -18,17 +18,42 @@
  HPCG routine
  */
 
-#include <hip/hip_runtime_api.h>
-
-#ifndef HPCG_NO_OPENMP
-#include <omp.h>
-#endif
-
+#include <hip/hip_runtime.h>
 #include <cassert>
+
 #include "GenerateCoarseProblem.hpp"
 #include "GenerateGeometry.hpp"
 #include "GenerateProblem.hpp"
 #include "SetupHalo.hpp"
+
+__global__ void kernel_f2c_operator(local_int_t nxc,
+                                    local_int_t nyc,
+                                    local_int_t nzc,
+                                    global_int_t nxf,
+                                    global_int_t nyf,
+                                    global_int_t nzf,
+                                    local_int_t* f2cOperator)
+{
+    // Local index in x, y and z direction
+    local_int_t ixc = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t iyc = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t izc = hipBlockIdx_z * hipBlockDim_z + hipThreadIdx_z;
+
+    // Do not run out of bounds
+    if(izc >= nzc || iyc >= nyc || ixc >= nxc)
+    {
+        return;
+    }
+
+    local_int_t ixf = 2 * ixc;
+    local_int_t iyf = 2 * iyc;
+    local_int_t izf = 2 * izc;
+
+    local_int_t currentCoarseRow = izc * nxc * nyc + iyc * nxc + ixc;
+    local_int_t currentFineRow = izf * nxf * nyf + iyf * nxf + ixf;
+
+    f2cOperator[currentCoarseRow] = currentFineRow;
+}
 
 /*!
   Routine to construct a prolongation/restriction operator for a given fine grid matrix
@@ -42,77 +67,98 @@
 
 void GenerateCoarseProblem(const SparseMatrix & Af) {
 
-  // Make local copies of geometry information.  Use global_int_t since the RHS products in the calculations
-  // below may result in global range values.
-  global_int_t nxf = Af.geom->nx;
-  global_int_t nyf = Af.geom->ny;
-  global_int_t nzf = Af.geom->nz;
+    // Make local copies of geometry information.  Use global_int_t since the RHS products in the calculations
+    // below may result in global range values.
+    global_int_t nxf = Af.geom->nx;
+    global_int_t nyf = Af.geom->ny;
+    global_int_t nzf = Af.geom->nz;
 
-  local_int_t nxc, nyc, nzc; //Coarse nx, ny, nz
-  assert(nxf%2==0); assert(nyf%2==0); assert(nzf%2==0); // Need fine grid dimensions to be divisible by 2
-  nxc = nxf/2; nyc = nyf/2; nzc = nzf/2;
-  local_int_t * f2cOperator = new local_int_t[Af.localNumberOfRows];
-  local_int_t localNumberOfRows = nxc*nyc*nzc; // This is the size of our subblock
-  // If this assert fails, it most likely means that the local_int_t is set to int and should be set to long long
-  assert(localNumberOfRows>0); // Throw an exception of the number of rows is less than zero (can happen if "int" overflows)
+    // Need fine grid dimensions to be divisible by 2
+    assert(nxf % 2 == 0);
+    assert(nyf % 2 == 0);
+    assert(nzf % 2 == 0);
 
-  // Use a parallel loop to do initial assignment:
-  // distributes the physical placement of arrays of pointers across the memory system
-#ifndef HPCG_NO_OPENMP
-  #pragma omp parallel for
-#endif
-  for (local_int_t i=0; i< localNumberOfRows; ++i) {
-    f2cOperator[i] = 0;
-  }
+    //Coarse nx, ny, nz
+    local_int_t nxc = nxf / 2;
+    local_int_t nyc = nyf / 2;
+    local_int_t nzc = nzf / 2;
 
+    // This is the size of our subblock
+    local_int_t localNumberOfRows = nxc * nyc * nzc;
 
-  // TODO:  This triply nested loop could be flattened or use nested parallelism
-#ifndef HPCG_NO_OPENMP
-  #pragma omp parallel for
-#endif
-  for (local_int_t izc=0; izc<nzc; ++izc) {
-    local_int_t izf = 2*izc;
-    for (local_int_t iyc=0; iyc<nyc; ++iyc) {
-      local_int_t iyf = 2*iyc;
-      for (local_int_t ixc=0; ixc<nxc; ++ixc) {
-        local_int_t ixf = 2*ixc;
-        local_int_t currentCoarseRow = izc*nxc*nyc+iyc*nxc+ixc;
-        local_int_t currentFineRow = izf*nxf*nyf+iyf*nxf+ixf;
-        f2cOperator[currentCoarseRow] = currentFineRow;
-      } // end iy loop
-    } // end even iz if statement
-  } // end iz loop
+    // If this assert fails, it most likely means that the local_int_t is set to int and should be set to long long
+    // Throw an exception of the number of rows is less than zero (can happen if "int" overflows)
+    assert(localNumberOfRows > 0);
 
-  // Construct the geometry and linear system
-  Geometry * geomc = new Geometry;
-  local_int_t zlc = 0; // Coarsen nz for the lower block in the z processor dimension
-  local_int_t zuc = 0; // Coarsen nz for the upper block in the z processor dimension
-  int pz = Af.geom->pz;
-  if (pz>0) {
-    zlc = Af.geom->partz_nz[0]/2; // Coarsen nz for the lower block in the z processor dimension
-    zuc = Af.geom->partz_nz[1]/2; // Coarsen nz for the upper block in the z processor dimension
-  }
-  GenerateGeometry(Af.geom->size, Af.geom->rank, Af.geom->numThreads, Af.geom->pz, zlc, zuc, nxc, nyc, nzc, Af.geom->npx, Af.geom->npy, Af.geom->npz, geomc);
+    // f2c Operator
+    local_int_t* d_f2cOperator;
+    HIP_CHECK(hipMalloc((void**)&d_f2cOperator, sizeof(local_int_t) * localNumberOfRows));
 
-  SparseMatrix * Ac = new SparseMatrix;
-  InitializeSparseMatrix(*Ac, geomc);
-  GenerateProblem(*Ac, 0, 0, 0);
-  SetupHalo(*Ac);
-  Vector *rc = new Vector;
-  Vector *xc = new Vector;
-  Vector * Axf = new Vector;
-  InitializeVector(*rc, Ac->localNumberOfRows);
-  InitializeVector(*xc, Ac->localNumberOfColumns);
-  InitializeVector(*Axf, Af.localNumberOfColumns);
+    dim3 f2c_blocks((nxc - 1) / 2 + 1,
+                    (nyc - 1) / 2 + 1,
+                    (nzc - 1) / 2 + 1);
+    dim3 f2c_threads(2, 2, 2);
 
-  local_int_t* d_f2cOperator;
-  HIP_CHECK(hipMalloc((void**)&d_f2cOperator, sizeof(local_int_t) * localNumberOfRows));
-  HIP_CHECK(hipMemcpy(d_f2cOperator, f2cOperator, sizeof(local_int_t) * localNumberOfRows, hipMemcpyHostToDevice));
+    hipLaunchKernelGGL((kernel_f2c_operator),
+                       f2c_blocks,
+                       f2c_threads,
+                       0,
+                       0,
+                       nxc,
+                       nyc,
+                       nzc,
+                       nxf,
+                       nyf,
+                       nzf,
+                       d_f2cOperator);
 
-  Af.Ac = Ac;
-  MGData * mgData = new MGData;
-  InitializeMGData(f2cOperator, d_f2cOperator, rc, xc, Axf, *mgData);
-  Af.mgData = mgData;
+    // Construct the geometry and linear system
+    Geometry * geomc = new Geometry;
 
-  return;
+    // Coarsen nz for the lower block in the z processor dimension
+    local_int_t zlc = 0;
+
+    // Coarsen nz for the upper block in the z processor dimension
+    local_int_t zuc = 0;
+
+    if(Af.geom->pz > 0)
+    {
+        // Coarsen nz for the lower block in the z processor dimension
+        zlc = Af.geom->partz_nz[0] / 2;
+        // Coarsen nz for the upper block in the z processor dimension
+        zuc = Af.geom->partz_nz[1] / 2;
+    }
+
+    GenerateGeometry(Af.geom->size, Af.geom->rank, Af.geom->numThreads, Af.geom->pz, zlc, zuc, nxc, nyc, nzc, Af.geom->npx, Af.geom->npy, Af.geom->npz, geomc);
+
+    SparseMatrix* Ac = new SparseMatrix;
+    InitializeSparseMatrix(*Ac, geomc);
+    GenerateProblem(*Ac, 0, 0, 0);
+    SetupHalo(*Ac);
+    Vector* rc = new Vector;
+    Vector* xc = new Vector;
+    Vector* Axf = new Vector;
+    InitializeVector(*rc, Ac->localNumberOfRows);
+    InitializeVector(*xc, Ac->localNumberOfColumns);
+    InitializeVector(*Axf, Af.localNumberOfColumns);
+
+    Af.Ac = Ac;
+    MGData* mgData = new MGData;
+    InitializeMGData(d_f2cOperator, rc, xc, Axf, *mgData);
+    Af.mgData = mgData;
+
+    return;
+}
+
+void CopyCoarseProblemToHost(SparseMatrix& A)
+{
+    // Copy problem to host
+    CopyProblemToHost(*A.Ac, NULL, NULL, NULL);
+
+    // Copy halo to host
+    CopyHaloToHost(*A.Ac);
+
+    // Copy f2c operator to host
+    A.mgData->f2cOperator = new local_int_t[A.Ac->localNumberOfRows];
+    HIP_CHECK(hipMemcpy(A.mgData->f2cOperator, A.mgData->d_f2cOperator, sizeof(local_int_t) * A.Ac->localNumberOfRows, hipMemcpyDeviceToHost));
 }

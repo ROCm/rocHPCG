@@ -27,7 +27,8 @@ __global__ void kernel_extract_diag_index(local_int_t m,
                                           local_int_t n,
                                           local_int_t ell_width,
                                           const local_int_t* ell_col_ind,
-                                          local_int_t* diag_idx)
+                                          local_int_t* diag_idx,
+                                          local_int_t* halo_offset)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -44,6 +45,10 @@ __global__ void kernel_extract_diag_index(local_int_t m,
         if(col == row)
         {
             diag_idx[row] = p;
+        }
+        else if(col >= m)
+        {
+            halo_offset[row] = p;
             break;
         }
     }
@@ -209,7 +214,7 @@ void PermuteMatrix(SparseMatrix& A)
     HIP_CHECK(hipFree(tmp_cols));
     HIP_CHECK(hipFree(tmp_vals));
 
-    // Sort each row by column index
+    // Sort each row by column index // TODO this breaks for small matrices!!
 #define SORT_DIM_X 32
 #define SORT_DIM_Y 32
     hipLaunchKernelGGL((kernel_sort_ell_rows<SORT_DIM_X * SORT_DIM_Y, SORT_DIM_Y>),
@@ -225,7 +230,35 @@ void PermuteMatrix(SparseMatrix& A)
 #undef SORT_DIM_X
 #undef SORT_DIM_Y
 
+/*
+// some verbose to see if small matrices break
+int mm = A.localNumberOfRows;
+if(A.localNumberOfRows == 8 && A.geom->rank == 0)
+{
+    std::vector<local_int_t> ell_col_ind(27*mm);
+    hipMemcpy(ell_col_ind.data(), A.ell_col_ind, sizeof(local_int_t) * 27 * mm, hipMemcpyDeviceToHost);
+
+    for(int i=0; i<mm; ++i)
+    {
+        printf("Row %d: ", i);
+        for(int p=0; p<27; ++p)
+        {
+            int idx = p * mm + i;
+            int col = ell_col_ind[idx];
+
+            if(col >= 0 && col < mm)
+            {
+                printf(" %d", col);
+            }
+        }
+        printf("\n");
+    }
+}
+*/
     // Extract diagonal index
+    HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+    HIP_CHECK(hipMalloc((void**)&A.halo_offset, sizeof(local_int_t) * A.localNumberOfRows));
+
     hipLaunchKernelGGL((kernel_extract_diag_index),
                        dim3((m - 1) / 1024 + 1),
                        dim3(1024),
@@ -235,7 +268,8 @@ void PermuteMatrix(SparseMatrix& A)
                        n,
                        A.ell_width,
                        A.ell_col_ind,
-                       A.diag_idx);
+                       A.diag_idx,
+                       A.halo_offset);
 }
 
 __global__ void kernel_permute(local_int_t size,

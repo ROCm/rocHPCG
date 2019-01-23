@@ -120,7 +120,6 @@ __global__ void kernel_spmv_ell(local_int_t m,
     y[row] = sum;
 }
 
-#if 1
 __global__ void kernel_spmv_halo(local_int_t m,
                                  local_int_t n,
                                  local_int_t halo_width,
@@ -153,44 +152,6 @@ __global__ void kernel_spmv_halo(local_int_t m,
 
     y[perm[halo_row_ind[row]]] += sum;
 }
-#else
-__global__ void kernel_spmv_halo(local_int_t halo_rows,
-                                 local_int_t m,
-                                 local_int_t n,
-                                 local_int_t ell_width,
-                                 const local_int_t* halo_row_ind,
-                                 const local_int_t* halo_offset,
-                                 const local_int_t* ell_col_ind,
-                                 const double* ell_val,
-                                 const local_int_t* perm,
-                                 const double* x,
-                                 double* y)
-{
-    local_int_t halo_row = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if(halo_row >= halo_rows)
-    {
-        return;
-    }
-
-    local_int_t row = perm[halo_row_ind[halo_row]];
-
-    double sum = 0.0;
-
-    for(local_int_t p = halo_offset[row]; p < ell_width; ++p)
-    {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
-
-        if(col >= m && col < n)
-        {
-            sum = fma(ell_val[idx], x[col], sum);
-        }
-    }
-
-    y[row] += sum;
-}
-#endif
 
 /*!
   Routine to compute sparse matrix vector product y = Ax where:
@@ -247,7 +208,6 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
         if(&y != A.mgData->Axf)
         {
-#if 1
             hipLaunchKernelGGL((kernel_spmv_halo),
                                dim3((A.halo_rows - 1) / 128 + 1),
                                dim3(128),
@@ -262,24 +222,6 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
                                A.perm,
                                x.d_values,
                                y.d_values);
-#else
-            hipLaunchKernelGGL((kernel_spmv_halo),
-                               dim3((A.halo_rows - 1) / 128 + 1),
-                               dim3(128),
-                               0,
-                               0,
-                               A.halo_rows,
-                               A.localNumberOfRows,
-                               A.localNumberOfColumns,
-                               A.ell_width,
-                               A.halo_row_ind,
-                               A.halo_offset,
-                               A.ell_col_ind,
-                               A.ell_val,
-                               A.perm,
-                               x.d_values,
-                               y.d_values);
-#endif
         }
     }
 #endif

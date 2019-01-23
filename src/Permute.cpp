@@ -27,8 +27,7 @@ __global__ void kernel_extract_diag_index(local_int_t m,
                                           local_int_t n,
                                           local_int_t ell_width,
                                           const local_int_t* ell_col_ind,
-                                          local_int_t* diag_idx,
-                                          local_int_t* halo_offset)
+                                          local_int_t* diag_idx)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -45,12 +44,6 @@ __global__ void kernel_extract_diag_index(local_int_t m,
         if(col == row)
         {
             diag_idx[row] = p;
-        }
-        else if(col >= m)
-        {
-#ifndef HPCG_NO_MPI
-            halo_offset[row] = p;
-#endif
             break;
         }
     }
@@ -63,7 +56,7 @@ __device__ void swap(local_int_t& key, double& val, int mask, int dir)
     if(key < key1 == dir)
     {
         key = key1;
-        val = __shfl_xor(val, mask); // TODO swizzle and/or dpp is faster
+        val = __shfl_xor(val, mask);
     }
 }
 
@@ -232,10 +225,6 @@ void PermuteMatrix(SparseMatrix& A)
     // Extract diagonal index
     HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
 
-#ifndef HPCG_NO_MPI
-    HIP_CHECK(hipMalloc((void**)&A.halo_offset, sizeof(local_int_t) * A.localNumberOfRows));
-#endif
-
     hipLaunchKernelGGL((kernel_extract_diag_index),
                        dim3((m - 1) / 1024 + 1),
                        dim3(1024),
@@ -245,8 +234,7 @@ void PermuteMatrix(SparseMatrix& A)
                        n,
                        A.ell_width,
                        A.ell_col_ind,
-                       A.diag_idx,
-                       A.halo_offset);
+                       A.diag_idx);
 }
 
 __global__ void kernel_permute(local_int_t size,

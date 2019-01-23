@@ -100,7 +100,6 @@ struct SparseMatrix_STRUCT {
 #endif
 
   local_int_t* halo_row_ind;
-  local_int_t* halo_offset; // TODO probably going to be removed
 
   // HPCG matrix storage format arrays
   char* d_nonzerosInRow;
@@ -265,7 +264,6 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if(A.send_buffer) HIP_CHECK(hipHostFree(A.send_buffer));
   if(A.d_send_buffer) HIP_CHECK(hipFree(A.d_send_buffer));
 
-  if(A.halo_offset) HIP_CHECK(hipFree(A.halo_offset));
   if(A.halo_row_ind) HIP_CHECK(hipFree(A.halo_row_ind));
   if(A.halo_col_ind) HIP_CHECK(hipFree(A.halo_col_ind));
   if(A.halo_val) HIP_CHECK(hipFree(A.halo_val));

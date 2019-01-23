@@ -106,7 +106,6 @@ __global__ void kernel_symgs_interior(local_int_t m,
     y[row] = sum * inv_diag[row];
 }
 
-#if 1
 __global__ void kernel_symgs_halo(local_int_t m,
                                   local_int_t n,
                                   local_int_t block_nrow,
@@ -149,52 +148,7 @@ __global__ void kernel_symgs_halo(local_int_t m,
 
     y[perm_idx] += sum * inv_diag[halo_idx];
 }
-#else
-__global__ void kernel_symgs_halo(local_int_t halo_rows,
-                                  local_int_t m,
-                                  local_int_t n,
-                                  local_int_t block_nrow,
-                                  local_int_t ell_width,
-                                  const local_int_t* halo_row_ind,
-                                  const local_int_t* halo_offset,
-                                  const local_int_t* ell_col_ind,
-                                  const double* ell_val,
-                                  const double* inv_diag,
-                                  const local_int_t* perm,
-                                  const double* x,
-                                  double* y)
-{
-    local_int_t halo_row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
-    if(halo_row >= halo_rows)
-    {
-        return;
-    }
-
-    local_int_t row = halo_row_ind[halo_row];
-    local_int_t perm_row = perm[row];
-
-    if(perm_row >= block_nrow)
-    {
-        return;
-    }
-
-    double sum = 0.0;
-
-    for(local_int_t p = halo_offset[perm_row]; p < ell_width; ++p)
-    {
-        local_int_t idx = p * m + perm_row;
-        local_int_t col = ell_col_ind[idx];
-
-        if(col >= 0 && col < n)
-        {
-            sum = fma(-ell_val[idx], y[col], sum);
-        }
-    }
-
-    y[perm_row] += sum * inv_diag[row];
-}
-#endif
 __global__ void kernel_pointwise_mult2(local_int_t size,
                                        const double* x,
                                        const double* y,
@@ -339,7 +293,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     {
         ExchangeHaloAsync(A);
         ObtainRecvBuffer(A, x);
-#if 1
+
         hipLaunchKernelGGL((kernel_symgs_halo),
                            dim3((A.halo_rows - 1) / 128 + 1),
                            dim3(128),
@@ -356,26 +310,6 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.perm,
                            r.d_values,
                            x.d_values);
-#else
-        hipLaunchKernelGGL((kernel_symgs_halo),
-                           dim3((A.halo_rows - 1) / 128 + 1),
-                           dim3(128),
-                           0,
-                           0,
-                           A.halo_rows,
-                           A.localNumberOfRows,
-                           A.localNumberOfColumns,
-                           A.sizes[0],
-                           A.ell_width,
-                           A.halo_row_ind,
-                           A.halo_offset,
-                           A.ell_col_ind,
-                           A.ell_val,
-                           A.inv_diag,
-                           A.perm,
-                           r.d_values,
-                           x.d_values);
-#endif
     }
 #endif
 

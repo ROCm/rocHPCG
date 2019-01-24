@@ -22,6 +22,7 @@
 #include "ExchangeHalo.hpp"
 
 #include <hip/hip_runtime.h>
+#include <algorithm>
 
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        local_int_t m,
@@ -65,35 +66,21 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
 
 __global__ void kernel_spmv_ell(local_int_t m,
                                 int nblocks,
-                                local_int_t blocksize,
+                                local_int_t rows_per_block,
                                 local_int_t ell_width,
                                 const local_int_t* ell_col_ind,
                                 const double* ell_val,
                                 const double* x,
                                 double* y)
 {
-    // Each block processes "nblocks" chunks of "blocksize" such that x vector loads are
-    // identical over several wavefronts. Furthermore, "blocksize" has to be sufficiently
-    // large, such that there is no penalty from loading the matrix.
+    // Applies for chunks of hipBlockDim_x * nblocks
+    local_int_t color_block_offset = hipBlockDim_x * (hipBlockIdx_x / nblocks);
 
-    // ID of the current block
-    local_int_t block_id = hipThreadIdx_x / blocksize;
+    // Applies for chunks of hipBlockDim_x and restarts for each color_block_offset
+    local_int_t thread_block_offset = (hipBlockIdx_x & (nblocks - 1)) * rows_per_block;
 
-    // Thread ID within the current block
-    local_int_t block_tid = hipThreadIdx_x & (blocksize - 1);
-
-    // Offset into x vector between different thread blocks
-    local_int_t offset = hipBlockIdx_x * blocksize;
-
-    // Thread ID local to the current block
-    local_int_t block_lid = block_tid + offset;
-
-    // Rows per block
-    local_int_t rows_per_block = m / nblocks;
-
-    // Current row can be computed by global offset into the block plus
-    // the local ID within the current block
-    local_int_t row = block_id * rows_per_block + block_lid;
+    // Row entry point
+    local_int_t row = color_block_offset + thread_block_offset + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -183,21 +170,30 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
     if(&y != A.mgData->Axf)
     {
-#define ELLMV_DIM 1024
+        // Number of rows per block
+        local_int_t rows_per_block = A.localNumberOfRows / A.nblocks;
+
+        // Determine blocksize
+        unsigned int blocksize = 1024;
+
+        while(rows_per_block & (blocksize - 1))
+        {
+            blocksize >>= 1;
+        }
+
         hipLaunchKernelGGL((kernel_spmv_ell),
-                           dim3((A.localNumberOfRows - 1) / ELLMV_DIM + 1),
-                           dim3(ELLMV_DIM),
+                           dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                           dim3(blocksize),
                            0,
                            stream_interior,
                            A.localNumberOfRows,
                            A.nblocks,
-                           ELLMV_DIM / A.nblocks,
+                           A.localNumberOfRows / A.nblocks,
                            A.ell_width,
                            A.ell_col_ind,
                            A.ell_val,
                            x.d_values,
                            y.d_values);
-#undef ELLMV_DIM
     }
 
 #ifndef HPCG_NO_MPI

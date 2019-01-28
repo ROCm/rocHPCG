@@ -22,7 +22,6 @@
 #include "ExchangeHalo.hpp"
 
 #include <hip/hip_runtime.h>
-#include <algorithm>
 
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        local_int_t m,

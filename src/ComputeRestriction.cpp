@@ -114,9 +114,12 @@ int ComputeRestriction(const SparseMatrix& A, const Vector& rf)
 int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector& xf)
 {
 #ifndef HPCG_NO_MPI
-    PrepareSendBuffer(A, xf);
-    ExchangeHaloAsync(A);
-    ObtainRecvBuffer(A, xf);
+    if(A.geom->size > 1)
+    {
+        PrepareSendBuffer(A, xf);
+        ExchangeHaloAsync(A);
+        ObtainRecvBuffer(A, xf);
+    }
 #endif
 
     hipLaunchKernelGGL((kernel_fused_restrict_spmv),

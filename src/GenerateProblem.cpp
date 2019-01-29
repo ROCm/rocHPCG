@@ -31,8 +31,6 @@
 
 #include "mytimer.hpp"
 
-//#define GENPROB_ATOMIC
-
 __global__ void kernel_set_one(local_int_t size,
                                double* array)
 {
@@ -55,9 +53,9 @@ __global__ void kernel_generate_problem(local_int_t m,
                                         global_int_t gny,
                                         global_int_t gnz,
                                         global_int_t gnx_gny,
-                                        global_int_t gix0_nx,
-                                        global_int_t giy0_ny,
-                                        global_int_t giz0_nz,
+                                        global_int_t gix0,
+                                        global_int_t giy0,
+                                        global_int_t giz0,
                                         local_int_t numberOfNonzerosPerRow,
                                         char* nonzerosInRow,
                                         global_int_t* mtxIndG,
@@ -75,25 +73,17 @@ __global__ void kernel_generate_problem(local_int_t m,
     // interior vertex marker, to determine if the current vertex is an interior
     // or boundary vertex
     bool* interior_vertex = reinterpret_cast<bool*>(sdata);
-#ifdef GENPROB_ATOMIC
-    // and non-zero entries of the current local row
-    int* row_nnz = reinterpret_cast<int*>(sdata + sizeof(bool) * hipBlockDim_y);
-#else
     // and column offset, that stores the column index array offset of the
     // current thread index in x direction
     int* column_offset = reinterpret_cast<int*>(sdata + sizeof(bool) * hipBlockDim_y);
 
     // Offset into current local row
     column_offset += hipThreadIdx_y * hipBlockDim_x;
-#endif
 
     // Initialize interior vertex marker
     if(hipThreadIdx_x == 0)
     {
         interior_vertex[hipThreadIdx_y] = true;
-#ifdef GENPROB_ATOMIC
-        row_nnz[hipThreadIdx_y] = 0;
-#endif
     }
 
     // Sync interior vertex initialization
@@ -111,18 +101,12 @@ __global__ void kernel_generate_problem(local_int_t m,
     local_int_t ix = currentLocalRow - iz * nx_ny - iy * nx;
 
     // Compute global vertex coordinates
-    global_int_t giz = giz0_nz + iz;
-    global_int_t giy = giy0_ny + iy;
-    global_int_t gix = gix0_nx + ix;
+    global_int_t giz = giz0 + iz;
+    global_int_t giy = giy0 + iy;
+    global_int_t gix = gix0 + ix;
 
     // Current global row
     global_int_t currentGlobalRow = giz * gnx_gny + giy * gnx + gix;
-
-    // Store local to global mapping
-    if(hipThreadIdx_x == 0)
-    {
-        localToGlobalMap[currentLocalRow] = currentGlobalRow;
-    }
 
     // Obtain neighboring offsets in x, y and z direction relative to the
     // current vertex and compute the resulting neighboring coordinates
@@ -185,7 +169,6 @@ __global__ void kernel_generate_problem(local_int_t m,
     }
     else
     {
-#ifndef GENPROB_ATOMIC
         // Re-compute index into matrix, by marking if current offset is
         // a neighbor or not
         column_offset[hipThreadIdx_x] = interior ? 1 : 0;
@@ -195,32 +178,25 @@ __global__ void kernel_generate_problem(local_int_t m,
 
         // Compute inclusive sum to obtain new matrix index offsets
         int tmp;
-        tmp = column_offset[hipThreadIdx_x -  1]; __syncthreads();
-        if(hipThreadIdx_x >=  1) column_offset[hipThreadIdx_x] += tmp; __syncthreads();
-        tmp = column_offset[hipThreadIdx_x -  2]; __syncthreads();
-        if(hipThreadIdx_x >=  2) column_offset[hipThreadIdx_x] += tmp; __syncthreads();
-        tmp = column_offset[hipThreadIdx_x -  4]; __syncthreads();
-        if(hipThreadIdx_x >=  4) column_offset[hipThreadIdx_x] += tmp; __syncthreads();
-        tmp = column_offset[hipThreadIdx_x -  8]; __syncthreads();
-        if(hipThreadIdx_x >=  8) column_offset[hipThreadIdx_x] += tmp; __syncthreads();
-        tmp = column_offset[hipThreadIdx_x - 16]; __syncthreads();
-        if(hipThreadIdx_x >= 16) column_offset[hipThreadIdx_x] += tmp; __syncthreads();
-#endif
+        if(hipThreadIdx_x >=  1) tmp = column_offset[hipThreadIdx_x -  1]; __syncthreads();
+        if(hipThreadIdx_x >=  1) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+        if(hipThreadIdx_x >=  2) tmp = column_offset[hipThreadIdx_x -  2]; __syncthreads();
+        if(hipThreadIdx_x >=  2) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+        if(hipThreadIdx_x >=  4) tmp = column_offset[hipThreadIdx_x -  4]; __syncthreads();
+        if(hipThreadIdx_x >=  4) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+        if(hipThreadIdx_x >=  8) tmp = column_offset[hipThreadIdx_x -  8]; __syncthreads();
+        if(hipThreadIdx_x >=  8) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+        if(hipThreadIdx_x >= 16) tmp = column_offset[hipThreadIdx_x - 16]; __syncthreads();
+        if(hipThreadIdx_x >= 16) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
 
         // Boundary vertex, e.g. at least one neighboring offset is not a neighbor (this
         // happens e.g. on the global domains boundary)
         // We do only process "real" neighbors
         if(interior == true)
         {
-#ifdef GENPROB_ATOMIC
-            // Obtain current threads index into matrix using atomics
-            // This is not a bottleneck, because boundary vertices happen very rarely
-            int offset = atomicAdd(&row_nnz[hipThreadIdx_y], 1);
-#else
             // Obtain current threads index into matrix from above inclusive scan
             // (convert from 1-based to 0-based indexing)
             int offset = column_offset[hipThreadIdx_x] - 1;
-#endif
 
             // Index into matrix
             local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + offset;
@@ -244,20 +220,11 @@ __global__ void kernel_generate_problem(local_int_t m,
             mtxIndG[idx] = curcol;
         }
 
-#ifdef GENPROB_ATOMIC
-        // Wait for all threads
-        __syncthreads();
-#endif
-
         // First thread writes number of neighboring vertices, including the
         // identity vertex
         if(hipThreadIdx_x == 0)
         {
-#ifdef GENPROB_ATOMIC
-            numberOfNonzerosInRow = row_nnz[hipThreadIdx_y];
-#else
             numberOfNonzerosInRow = column_offset[hipBlockDim_x - 1];
-#endif
         }
     }
 
@@ -265,6 +232,9 @@ __global__ void kernel_generate_problem(local_int_t m,
     if(hipThreadIdx_x == 0)
     {
         nonzerosInRow[currentLocalRow] = numberOfNonzerosInRow;
+
+        // Store local to global mapping
+        localToGlobalMap[currentLocalRow] = currentGlobalRow;
 
         if(b != NULL)
         {
@@ -399,16 +369,12 @@ double tick = mytimer();
     hipLaunchKernelGGL((kernel_generate_problem),
                        dim3((localNumberOfRows - 1) / 32 + 1),
                        dim3(numberOfNonzerosPerRow, 32),
-#ifdef GENPROB_ATOMIC
-                       sizeof(bool) * 32 + sizeof(int) * 32,
-#else
                        sizeof(bool) * 32 + sizeof(int) * numberOfNonzerosPerRow * 32,
-#endif
                        0,
                        localNumberOfRows,
                        nx, ny, nz, nx * ny,
                        gnx, gny, gnz, gnx * gny,
-                       gix0 * nx, giy0 * ny, giz0 * nz,
+                       gix0, giy0, giz0,
                        numberOfNonzerosPerRow,
                        A.d_nonzerosInRow,
                        A.d_mtxIndG,
@@ -416,6 +382,10 @@ double tick = mytimer();
                        A.d_matrixDiagonal,
                        A.d_localToGlobalMap,
                        (b != NULL) ? b->d_values : NULL);
+
+
+
+
 
     // Initialize x vector, if not NULL
     if(x != NULL)

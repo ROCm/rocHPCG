@@ -33,7 +33,7 @@ const char* NULLDEVICE="/dev/null";
 
 #include <fstream>
 #include <iostream>
-#include <hip/hip_runtime_api.h>
+#include <hip/hip_runtime.h>
 #ifdef __HIP_PLATFORM_HCC__
 #include <hiprand.h>
 #else
@@ -62,6 +62,10 @@ startswith(const char * s, const char * prefix) {
   if (strncmp( s, prefix, n ))
     return 0;
   return 1;
+}
+
+__global__ void kernel_warmup()
+{
 }
 
 /*!
@@ -162,6 +166,13 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 
   // Set device
   HIP_CHECK(hipSetDevice(params.device));
+
+  // Warm up
+  hipLaunchKernelGGL((kernel_warmup),
+                     dim3(1024),
+                     dim3(1024),
+                     0,
+                     0);
 
   // Create streams
   HIP_CHECK(hipStreamCreate(&stream_interior));

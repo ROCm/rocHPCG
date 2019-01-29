@@ -24,6 +24,7 @@ set(HIP_SOURCE
   ExchangeHalo.cpp
   GenerateCoarseProblem.cpp
   GenerateProblem.cpp
+  init.cpp
   MultiColoring.cpp
   Permute.cpp
   SetupHalo.cpp
@@ -61,7 +62,6 @@ set(SOURCE
   YAML_Doc.cpp
   YAML_Element.cpp
   finalize.cpp
-  init.cpp
   main.cpp
   mytimer.cpp
 )

@@ -59,10 +59,9 @@ __global__ void kernel_setup_halo(local_int_t m,
                                   local_int_t nx,
                                   local_int_t ny,
                                   local_int_t nz,
-//                                  bool gxp2,
-//                                  bool xp2,
-//                                  bool yp2,
-//                                  bool zp2,
+                                  bool xp2,
+                                  bool yp2,
+                                  bool zp2,
                                   local_int_t npx,
                                   local_int_t npy,
                                   local_int_t npz,
@@ -108,7 +107,6 @@ __global__ void kernel_setup_halo(local_int_t m,
         // Determine neighboring process of current global column
         global_int_t iz = currentGlobalColumn / gnxgny;
         global_int_t iy = (currentGlobalColumn - iz * gnxgny) / gnx;
-//        global_int_t ix = (gxp2) ? currentGlobalColumn % gnx : currentGlobalColumn & (gnx - 1);
         global_int_t ix = currentGlobalColumn % gnx;
 
         local_int_t ipz = iz / nz;
@@ -148,12 +146,12 @@ __global__ void kernel_setup_halo(local_int_t m,
         else
         {
             // Determine local column index
-            local_int_t lz = iz % nz;
-            local_int_t ly = currentGlobalColumn / gnx % ny;
-            local_int_t lx = currentGlobalColumn % nx;
-//            local_int_t lz = (zp2) ? iz % nz : iz & (nz - 1);
-//            local_int_t ly = (yp2) ? currentGlobalColumn / gnx % ny : currentGlobalColumn / gnx & (ny - 1);
-//            local_int_t lx = (xp2) ? currentGlobalColumn % nx : currentGlobalColumn & (nx - 1);
+//            local_int_t lz = iz % nz;
+//            local_int_t ly = currentGlobalColumn / gnx % ny;
+//            local_int_t lx = currentGlobalColumn % nx;
+            local_int_t lz = (zp2) ? iz % nz : iz & (nz - 1);
+            local_int_t ly = (yp2) ? currentGlobalColumn / gnx % ny : currentGlobalColumn / gnx & (ny - 1);
+            local_int_t lx = (xp2) ? currentGlobalColumn % nx : currentGlobalColumn & (nx - 1);
 
             // Store the local column index in the local matrix column array
             mtxIndL[gid] = lz * ny * nx + ly * nx + lx;
@@ -296,7 +294,7 @@ hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
     HIP_CHECK(hipMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
 
     // Determine blocksize
-    unsigned int blocksize = 1024 / A.numberOfNonzerosPerRow;
+    unsigned int blocksize = 512 / A.numberOfNonzerosPerRow;
 
     // Compute next power of two
     blocksize |= blocksize >> 1;
@@ -307,7 +305,7 @@ hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
     ++blocksize;
 
     // Shift right until we obtain a valid blocksize
-    while(blocksize * A.numberOfNonzerosPerRow > 1024)
+    while(blocksize * A.numberOfNonzerosPerRow > 512)
     {
         blocksize >>= 1;
     }
@@ -325,10 +323,9 @@ hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
                        nx,
                        ny,
                        nz,
-//                       (A.geom->gnx & (A.geom->gnx - 1)),
-//                       (nx & (nx - 1)),
-//                       (ny & (ny - 1)),
-//                       (nz & (nz - 1)),
+                       (nx & (nx - 1)),
+                       (ny & (ny - 1)),
+                       (nz & (nz - 1)),
                        A.geom->npx,
                        A.geom->npy,
                        A.geom->npz,

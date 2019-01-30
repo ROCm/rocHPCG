@@ -150,19 +150,19 @@ __global__ void kernel_generate_problem(local_int_t m,
         if(curcol == currentGlobalRow)
         {
             // Store diagonal entry index
-            matrixDiagonal[currentLocalRow] = hipThreadIdx_x;
+            __builtin_nontemporal_store(hipThreadIdx_x, matrixDiagonal + currentLocalRow);
 
             // Diagonal matrix values are 26
-            matrixValues[idx] = 26.0;
+            __builtin_nontemporal_store(26.0, matrixValues + idx);
         }
         else
         {
             // Off-diagonal matrix values are -1
-            matrixValues[idx] = -1.0;
+            __builtin_nontemporal_store(-1.0, matrixValues + idx);
         }
 
         // Store current global column
-        mtxIndG[idx] = curcol;
+        __builtin_nontemporal_store(curcol, mtxIndG + idx);
 
         // Interior vertices have 27 neighboring vertices
         numberOfNonzerosInRow = numberOfNonzerosPerRow;
@@ -205,19 +205,19 @@ __global__ void kernel_generate_problem(local_int_t m,
             if(curcol == currentGlobalRow)
             {
                 // Store diagonal entry index
-                matrixDiagonal[currentLocalRow] = offset;
+                __builtin_nontemporal_store(offset, matrixDiagonal + currentLocalRow);
 
                 // Diagonal matrix values are 26
-                matrixValues[idx] = 26.0;
+                __builtin_nontemporal_store(26.0, matrixValues + idx);
             }
             else
             {
                 // Off-diagonal matrix values are -1
-                matrixValues[idx] = -1.0;
+                __builtin_nontemporal_store(-1.0, matrixValues + idx);
             }
 
             // Store current global column
-            mtxIndG[idx] = curcol;
+            __builtin_nontemporal_store(curcol, mtxIndG + idx);
         }
 
         // First thread writes number of neighboring vertices, including the
@@ -231,14 +231,14 @@ __global__ void kernel_generate_problem(local_int_t m,
     // For each row, initialize vector arrays and number of vertices
     if(hipThreadIdx_x == 0)
     {
-        nonzerosInRow[currentLocalRow] = numberOfNonzerosInRow;
+        __builtin_nontemporal_store(numberOfNonzerosInRow, nonzerosInRow + currentLocalRow);
 
         // Store local to global mapping
-        localToGlobalMap[currentLocalRow] = currentGlobalRow;
+        __builtin_nontemporal_store(currentGlobalRow, localToGlobalMap + currentLocalRow);
 
         if(b != NULL)
         {
-            b[currentLocalRow] = 26.0 - (numberOfNonzerosInRow - 1.0);
+            __builtin_nontemporal_store(26.0 - (numberOfNonzerosInRow - 1.0), b + currentLocalRow);
         }
     }
 }
@@ -405,12 +405,35 @@ double tick = mytimer();
                            xexact->d_values);
     }
 
+    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
+
+    // Compute number of local non-zero entries using two step reduction
+    hipLaunchKernelGGL((kernel_local_nnz_part1<256>),
+                       dim3(256),
+                       dim3(256),
+                       0,
+                       0,
+                       localNumberOfRows,
+                       A.d_nonzerosInRow,
+                       tmp);
+
+    hipLaunchKernelGGL((kernel_local_nnz_part2<256>),
+                       dim3(1),
+                       dim3(256),
+                       0,
+                       0,
+                       256,
+                       tmp);
+
+    // Copy number of local non-zero entries to host
+    local_int_t localNumberOfNonzeros;
+    HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
 
 hipDeviceSynchronize();
 tick = mytimer() - tick;
 
 int m = localNumberOfRows;
-size_t data = sizeof(char) * m + sizeof(global_int_t) * m * 27 + sizeof(double) * m * 27 + sizeof(local_int_t) * m + sizeof(local_int_t) * m + 3 * sizeof(double) * m;
+size_t data = sizeof(char) * m + sizeof(global_int_t) * m * 27 + sizeof(double) * m * 27 + sizeof(local_int_t) * m + sizeof(local_int_t) * m + 3 * sizeof(double) * m + sizeof(char) * m;
 printf("GenProb took %0.3lf msec ; %0.2lf GByte/s\n", tick * 1e3, double(data) / 1e9 / tick);
 
 
@@ -422,29 +445,6 @@ printf("GenProb took %0.3lf msec ; %0.2lf GByte/s\n", tick * 1e3, double(data) /
 
 
 
-    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
-
-    // Compute number of local non-zero entries using two step reduction
-    hipLaunchKernelGGL((kernel_local_nnz_part1<128>),
-                       dim3(128),
-                       dim3(128),
-                       0,
-                       0,
-                       localNumberOfRows,
-                       A.d_nonzerosInRow,
-                       tmp);
-
-    hipLaunchKernelGGL((kernel_local_nnz_part2<128>),
-                       dim3(1),
-                       dim3(128),
-                       0,
-                       0,
-                       128,
-                       tmp);
-
-    // Copy number of local non-zero entries to host
-    local_int_t localNumberOfNonzeros;
-    HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
 
     global_int_t totalNumberOfNonzeros = 0;
 #ifndef HPCG_NO_MPI

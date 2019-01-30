@@ -109,10 +109,10 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
 
 __global__ void kernel_to_ell_col(local_int_t m,
                                   local_int_t nonzerosPerRow,
-                                  const local_int_t* mtxIndL,
-                                  local_int_t* ell_col_ind,
-                                  local_int_t* halo_rows,
-                                  local_int_t* halo_row_ind)
+                                  const local_int_t* __restrict__ mtxIndL,
+                                  local_int_t* __restrict__ ell_col_ind,
+                                  local_int_t* __restrict__ halo_rows,
+                                  local_int_t* __restrict__ halo_row_ind)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
 
@@ -128,22 +128,18 @@ __global__ void kernel_to_ell_col(local_int_t m,
         return;
     }
 
-    local_int_t idx = hipThreadIdx_x * m + row;
-    local_int_t col = mtxIndL[row * nonzerosPerRow + hipThreadIdx_x];
+    local_int_t col = __ldg(mtxIndL + row * nonzerosPerRow + hipThreadIdx_x);
+    ell_col_ind[hipThreadIdx_x * m + row] = col;
 
 #ifndef HPCG_NO_MPI
     if(col >= m)
     {
         sdata[threadIdx.y] = true;
     }
-#endif
 
-    ell_col_ind[idx] = col;
-
-#ifndef HPCG_NO_MPI
     __syncthreads();
 
-    if(threadIdx.x == 0)
+    if(hipThreadIdx_x == 0)
     {
         if(sdata[threadIdx.y] == true)
         {
@@ -155,10 +151,10 @@ __global__ void kernel_to_ell_col(local_int_t m,
 
 __global__ void kernel_to_ell_val(local_int_t m,
                                   local_int_t nnz_per_row,
-                                  const local_int_t* ell_col_ind,
-//                                  const double* matrixValues,
-                                  double* ell_val,
-                                  double* inv_diag)
+                                  const local_int_t* __restrict__ ell_col_ind,
+//                                  const double* __restrict__ matrixValues,
+                                  double* __restrict__ ell_val,
+                                  double* __restrict__ inv_diag)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -239,9 +235,9 @@ void ConvertToELL(SparseMatrix& A)
 #endif
 
     hipLaunchKernelGGL((kernel_to_ell_col),
-                       dim3((A.localNumberOfRows - 1) / 32 + 1),
-                       dim3(A.ell_width, 32),
-                       sizeof(bool) * 32,
+                       dim3((A.localNumberOfRows - 1) / 16 + 1),
+                       dim3(A.ell_width, 16),
+                       sizeof(bool) * 16,
                        0,
                        A.localNumberOfRows,
                        A.ell_width,

@@ -35,7 +35,7 @@ extern hiprandGenerator_t rng;
 extern curandGenerator_t rng;
 #endif
 
-#define RNG_SEED 25871479ULL
+#define RNG_SEED 0x586744
 #define MAX_COLORS 128
 
 #define HIP_CHECK(err)                                              \

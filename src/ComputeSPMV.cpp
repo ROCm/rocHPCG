@@ -23,6 +23,7 @@
 
 #include <hip/hip_runtime.h>
 
+__launch_bounds__(1024)
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        local_int_t m,
                                        local_int_t n,
@@ -34,25 +35,26 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        const double* x,
                                        double* y)
 {
-    local_int_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
     if(gid >= size)
     {
         return;
     }
 
-    local_int_t row = perm[f2cOperator[gid]];
+    local_int_t idx = __builtin_nontemporal_load(f2cOperator + gid);
+    local_int_t row = __builtin_nontemporal_load(perm + idx);
 
     double sum = 0.0;
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < n)
         {
-            sum = fma(ell_val[idx], x[col], sum);
+            sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
         }
         else
         {
@@ -60,9 +62,10 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
         }
     }
 
-    y[row] = sum;
+    __builtin_nontemporal_store(sum, y + row);
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_spmv_ell(local_int_t m,
                                 int nblocks,
                                 local_int_t rows_per_block,
@@ -91,11 +94,11 @@ __global__ void kernel_spmv_ell(local_int_t m,
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < m)
         {
-            sum = fma(ell_val[idx], x[col], sum);
+            sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
         }
         else
         {
@@ -103,7 +106,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
         }
     }
 
-    y[row] = sum;
+    __builtin_nontemporal_store(sum, y + row);
 }
 
 __global__ void kernel_spmv_halo(local_int_t m,
@@ -116,7 +119,7 @@ __global__ void kernel_spmv_halo(local_int_t m,
                                  const double* x,
                                  double* y)
 {
-    local_int_t row = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -224,8 +227,8 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
     if(&y == A.mgData->Axf)
     {
         hipLaunchKernelGGL((kernel_spmv_ell_coarse),
-                           dim3((A.mgData->rc->localLength - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
+                           dim3(1024),
                            0,
                            0,
                            A.mgData->rc->localLength,

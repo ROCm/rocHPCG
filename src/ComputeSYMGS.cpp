@@ -23,10 +23,11 @@
 
 #include <hip/hip_runtime.h>
 
+__launch_bounds__(1024)
 __global__ void kernel_pointwise_mult(local_int_t size,
-                                      const local_int_t* diag_idx,
-                                      const double* ell_val,
-                                      double* val)
+                                      const local_int_t* __restrict__ diag_idx,
+                                      const double* __restrict__ ell_val,
+                                      double* __restrict__ val)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -35,19 +36,20 @@ __global__ void kernel_pointwise_mult(local_int_t size,
         return;
     }
 
-    val[gid] *= ell_val[diag_idx[gid]];
+    val[gid] *= __ldg(ell_val + diag_idx[gid]);
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_symgs_sweep(local_int_t m,
                                    local_int_t n,
                                    local_int_t block_nrow,
                                    local_int_t offset,
                                    local_int_t ell_width,
-                                   const local_int_t* ell_col_ind,
-                                   const double* ell_val,
-                                   const double* inv_diag,
-                                   const double* x,
-                                   double* y)
+                                   const local_int_t* __restrict__ ell_col_ind,
+                                   const double* __restrict__ ell_val,
+                                   const double* __restrict__ inv_diag,
+                                   const double* __restrict__ x,
+                                   double* __restrict__ y)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -58,30 +60,31 @@ __global__ void kernel_symgs_sweep(local_int_t m,
 
     local_int_t row = gid + offset;
 
-    double sum = x[row];
+    double sum = __builtin_nontemporal_load(x + row);
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < n && col != row)
         {
-            sum = fma(-ell_val[idx], y[col], sum);
+            sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
         }
     }
 
-    y[row] = sum * inv_diag[row];
+    __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_symgs_interior(local_int_t m,
                                       local_int_t block_nrow,
                                       local_int_t ell_width,
-                                      const local_int_t* ell_col_ind,
-                                      const double* ell_val,
-                                      const double* inv_diag,
-                                      const double* x,
-                                      double* y)
+                                      const local_int_t* __restrict__ ell_col_ind,
+                                      const double* __restrict__ ell_val,
+                                      const double* __restrict__ inv_diag,
+                                      const double* __restrict__ x,
+                                      double* __restrict__ y)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -90,20 +93,20 @@ __global__ void kernel_symgs_interior(local_int_t m,
         return;
     }
 
-    double sum = x[row];
+    double sum = __builtin_nontemporal_load(x + row);
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < m && col != row)
         {
-            sum = fma(-ell_val[idx], y[col], sum);
+            sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
         }
     }
 
-    y[row] = sum * inv_diag[row];
+    __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
 __global__ void kernel_symgs_halo(local_int_t m,
@@ -146,13 +149,14 @@ __global__ void kernel_symgs_halo(local_int_t m,
         }
     }
 
-    y[perm_idx] += sum * inv_diag[halo_idx];
+    y[perm_idx] += sum * inv_diag[halo_idx]; // TODO FMA
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_pointwise_mult2(local_int_t size,
-                                       const double* x,
-                                       const double* y,
-                                       double* out)
+                                       const double* __restrict__ x,
+                                       const double* __restrict__ y,
+                                       double* __restrict__ out)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -164,15 +168,16 @@ __global__ void kernel_pointwise_mult2(local_int_t size,
     out[gid] = x[gid] * y[gid];
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_forward_sweep_0(local_int_t m,
                                        local_int_t block_nrow,
                                        local_int_t offset,
                                        local_int_t ell_width,
-                                       const local_int_t* ell_col_ind,
-                                       const double* ell_val,
-                                       const local_int_t* diag_idx,
-                                       const double* x,
-                                       double* y)
+                                       const local_int_t* __restrict__ ell_col_ind,
+                                       const double* __restrict__ ell_val,
+                                       const local_int_t* __restrict__ diag_idx,
+                                       const double* __restrict__ x,
+                                       double* __restrict__ y)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -183,32 +188,34 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
 
     local_int_t row = gid + offset;
 
-    double sum = x[row];
-    local_int_t diag = diag_idx[row];
+    double sum = __builtin_nontemporal_load(x + row);
+    local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
 
     for(local_int_t p = 0; p < diag; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         // Every entry above offset is zero
         if(col >= 0 && col < offset)
         {
-            sum = fma(-ell_val[idx], y[col], sum);
+            sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
         }
     }
 
-    y[row] = sum / ell_val[diag * m + row];
+    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
+    __builtin_nontemporal_store(sum / diag_val, y + row);
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_backward_sweep_0(local_int_t m,
                                         local_int_t block_nrow,
                                         local_int_t offset,
                                         local_int_t ell_width,
-                                        const local_int_t* ell_col_ind,
-                                        const double* ell_val,
-                                        const local_int_t* diag_idx,
-                                        double* x)
+                                        const local_int_t* __restrict__ ell_col_ind,
+                                        const double* __restrict__ ell_val,
+                                        const local_int_t* __restrict__ diag_idx,
+                                        double* __restrict__ x)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -218,23 +225,24 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
     }
 
     local_int_t row = gid + offset;
-    local_int_t diag = diag_idx[row];
+    local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
 
-    double sum = x[row];
+    double sum = __builtin_nontemporal_load(x + row);
 
     for(local_int_t p = diag + 1; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         // Every entry below offset should not be taken into account TODO really???
         if(col >= offset && col < m)
         {
-            sum = fma(-ell_val[idx], x[col], sum);
+            sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
         }
     }
 
-    x[row] = sum / ell_val[diag * m + row];
+    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
+    __builtin_nontemporal_store(sum / diag_val, x + row);
 }
 
 /*!
@@ -275,8 +283,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
 #endif
 
     hipLaunchKernelGGL((kernel_symgs_interior),
-                       dim3((A.sizes[0] - 1) / 128 + 1),
-                       dim3(128),
+                       dim3((A.sizes[0] - 1) / 1024 + 1),
+                       dim3(1024),
                        0,
                        stream_interior,
                        A.localNumberOfRows,
@@ -317,8 +325,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
-                           dim3((A.sizes[i] - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((A.sizes[i] - 1) / 1024 + 1),
+                           dim3(1024),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -337,8 +345,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
-                           dim3((A.sizes[i] - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((A.sizes[i] - 1) / 1024 + 1),
+                           dim3(1024),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -374,8 +382,8 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_forward_sweep_0),
-                           dim3((A.sizes[i] - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((A.sizes[i] - 1) / 1024 + 1),
+                           dim3(1024),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -412,8 +420,8 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_backward_sweep_0),
-                           dim3((A.sizes[i] - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((A.sizes[i] - 1) / 1024 + 1),
+                           dim3(1024),
                            0,
                            0,
                            A.localNumberOfRows,

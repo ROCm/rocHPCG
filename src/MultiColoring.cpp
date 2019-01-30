@@ -280,8 +280,8 @@ __global__ void kernel_jpl(local_int_t m,
                            int color1,
                            int color2,
                            local_int_t ell_width,
-                           const local_int_t* ell_col_ind,
-                           local_int_t* colors)
+                           const local_int_t* __restrict__ ell_col_ind,
+                           local_int_t* __restrict__ colors)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -306,7 +306,7 @@ __global__ void kernel_jpl(local_int_t m,
     for(int p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < m)
         {
@@ -317,7 +317,7 @@ __global__ void kernel_jpl(local_int_t m,
             }
 
             // Get neighbors color
-            int color_nb = colors[col];
+            int color_nb = __ldg(colors + col);
 
             // Compare only with uncolored neighbors
             if(color_nb != -1 && color_nb != color1 && color_nb != color2)
@@ -386,8 +386,8 @@ void JPLColoring(SparseMatrix& A)
         int color2 = (A.nblocks < 8) ? rand() % 8 : A.nblocks + 1;
 
         hipLaunchKernelGGL((kernel_jpl),
-                           dim3((m - 1) / 128 + 1),
-                           dim3(128),
+                           dim3((m - 1) / 256 + 1),
+                           dim3(256),
                            0,
                            0,
                            m,
@@ -398,9 +398,9 @@ void JPLColoring(SparseMatrix& A)
                            A.perm);
 
         // Count colored vertices
-        hipLaunchKernelGGL((kernel_count_color_part1<128>),
-                           dim3(128),
-                           dim3(128),
+        hipLaunchKernelGGL((kernel_count_color_part1<256>),
+                           dim3(256),
+                           dim3(256),
                            0,
                            0,
                            m,
@@ -408,20 +408,20 @@ void JPLColoring(SparseMatrix& A)
                            A.perm,
                            tmp);
 
-        hipLaunchKernelGGL((kernel_count_color_part2<128>),
+        hipLaunchKernelGGL((kernel_count_color_part2<256>),
                            dim3(1),
-                           dim3(128),
+                           dim3(256),
                            0,
                            0,
-                           128,
+                           256,
                            tmp);
 
         // Copy colored max vertices for current iteration to host
         HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
 
-        hipLaunchKernelGGL((kernel_count_color_part1<128>),
-                           dim3(128),
-                           dim3(128),
+        hipLaunchKernelGGL((kernel_count_color_part1<256>),
+                           dim3(256),
+                           dim3(256),
                            0,
                            0,
                            m,
@@ -429,12 +429,12 @@ void JPLColoring(SparseMatrix& A)
                            A.perm,
                            tmp);
 
-        hipLaunchKernelGGL((kernel_count_color_part2<128>),
+        hipLaunchKernelGGL((kernel_count_color_part2<256>),
                            dim3(1),
-                           dim3(128),
+                           dim3(256),
                            0,
                            0,
-                           128,
+                           256,
                            tmp);
 
         // Copy colored min vertices for current iteration to host

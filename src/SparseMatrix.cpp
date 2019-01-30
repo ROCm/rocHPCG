@@ -252,6 +252,9 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
     assert(A.halo_rows <= A.totalToBeSent);
 
+    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
+    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
+
     size_t hipcub_size;
     void* hipcub_buffer = NULL;
     HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
@@ -279,8 +282,6 @@ hipMemset(hipcub_buffer, 0, hipcub_size);
 #endif
 
     HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
-    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
 
     hipLaunchKernelGGL((kernel_to_ell_val),
                        dim3((A.localNumberOfRows - 1) / 1024 + 1),

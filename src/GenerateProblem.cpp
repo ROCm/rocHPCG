@@ -27,12 +27,7 @@
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
 
-
-
-#include "mytimer.hpp"
-
-__global__ void kernel_set_one(local_int_t size,
-                               double* array)
+__global__ void kernel_set_one(local_int_t size, double* array)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -355,21 +350,28 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     if(x != NULL) InitializeVector(*x, localNumberOfRows);
     if(xexact != NULL) InitializeVector(*xexact, localNumberOfRows);
 
+    // Determine blocksize
+    unsigned int blocksize = 512 / numberOfNonzerosPerRow;
 
+    // Compute next power of two
+    blocksize |= blocksize >> 1;
+    blocksize |= blocksize >> 2;
+    blocksize |= blocksize >> 4;
+    blocksize |= blocksize >> 8;
+    blocksize |= blocksize >> 16;
+    ++blocksize;
 
-
-
-
-
-hipDeviceSynchronize();
-double tick = mytimer();
-
+    // Shift right until we obtain a valid blocksize
+    while(blocksize * numberOfNonzerosPerRow > 512)
+    {
+        blocksize >>= 1;
+    }
 
     // Generate problem
     hipLaunchKernelGGL((kernel_generate_problem),
-                       dim3((localNumberOfRows - 1) / 32 + 1),
-                       dim3(numberOfNonzerosPerRow, 32),
-                       sizeof(bool) * 32 + sizeof(int) * numberOfNonzerosPerRow * 32,
+                       dim3((localNumberOfRows - 1) / blocksize + 1),
+                       dim3(numberOfNonzerosPerRow, blocksize),
+                       sizeof(bool) * blocksize + sizeof(int) * numberOfNonzerosPerRow * blocksize,
                        0,
                        localNumberOfRows,
                        nx, ny, nz, nx * ny,
@@ -382,10 +384,6 @@ double tick = mytimer();
                        A.d_matrixDiagonal,
                        A.d_localToGlobalMap,
                        (b != NULL) ? b->d_values : NULL);
-
-
-
-
 
     // Initialize x vector, if not NULL
     if(x != NULL)
@@ -428,23 +426,6 @@ double tick = mytimer();
     // Copy number of local non-zero entries to host
     local_int_t localNumberOfNonzeros;
     HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
-
-hipDeviceSynchronize();
-tick = mytimer() - tick;
-
-int m = localNumberOfRows;
-size_t data = sizeof(char) * m + sizeof(global_int_t) * m * 27 + sizeof(double) * m * 27 + sizeof(local_int_t) * m + sizeof(local_int_t) * m + 3 * sizeof(double) * m + sizeof(char) * m;
-printf("GenProb took %0.3lf msec ; %0.2lf GByte/s\n", tick * 1e3, double(data) / 1e9 / tick);
-
-
-
-
-
-
-
-
-
-
 
     global_int_t totalNumberOfNonzeros = 0;
 #ifndef HPCG_NO_MPI

@@ -40,7 +40,7 @@ __global__ void kernel_copy_indices(local_int_t size,
         return;
     }
 
-    local_int_t idx = row * 27 + hipThreadIdx_x;
+    local_int_t idx = row * hipBlockDim_x + hipThreadIdx_x;
 
     if(hipThreadIdx_x < nonzerosInRow[row])
     {
@@ -211,13 +211,30 @@ __global__ void kernel_halo_columns(local_int_t size,
 */
 void SetupHalo(SparseMatrix& A)
 {
-#ifdef HPCG_NO_MPI
-    // TODO
+    // Determine blocksize for 2D kernel launch
+    unsigned int blocksize = 512 / A.numberOfNonzerosPerRow;
+
+    // Compute next power of two
+    blocksize |= blocksize >> 1;
+    blocksize |= blocksize >> 2;
+    blocksize |= blocksize >> 4;
+    blocksize |= blocksize >> 8;
+    blocksize |= blocksize >> 16;
+    ++blocksize;
+
+    // Shift right until we obtain a valid blocksize
+    while(blocksize * A.numberOfNonzerosPerRow > 512)
+    {
+        blocksize >>= 1;
+    }
+
+    // Allocate local matrix column index array
     HIP_CHECK(hipMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
 
+#ifdef HPCG_NO_MPI
     hipLaunchKernelGGL((kernel_copy_indices),
-                       dim3((A.localNumberOfRows - 1) / 32 + 1),
-                       dim3(27, 32),
+                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                       dim3(A.numberOfNonzerosPerRow, blocksize),
                        0,
                        0,
                        A.localNumberOfRows,
@@ -289,26 +306,6 @@ hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
     // Both arrays hold max_boundary elements per neighboring rank, at max
     HIP_CHECK(hipMalloc((void**)&d_recv_indices, sizeof(global_int_t) * max_boundary * max_neighbors));
     HIP_CHECK(hipMalloc((void**)&d_halo_indices, sizeof(local_int_t) * max_boundary * max_neighbors));
-
-    // Allocate local matrix column index array
-    HIP_CHECK(hipMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
-
-    // Determine blocksize
-    unsigned int blocksize = 512 / A.numberOfNonzerosPerRow;
-
-    // Compute next power of two
-    blocksize |= blocksize >> 1;
-    blocksize |= blocksize >> 2;
-    blocksize |= blocksize >> 4;
-    blocksize |= blocksize >> 8;
-    blocksize |= blocksize >> 16;
-    ++blocksize;
-
-    // Shift right until we obtain a valid blocksize
-    while(blocksize * A.numberOfNonzerosPerRow > 512)
-    {
-        blocksize >>= 1;
-    }
 
     // SetupHalo kernel
     hipLaunchKernelGGL((kernel_setup_halo),

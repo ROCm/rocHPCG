@@ -42,19 +42,16 @@ set(SOURCE
   ComputeMG_ref.cpp
   ComputeOptimalShapeXYZ.cpp
   ComputeProlongation_ref.cpp
-  ComputeResidual_ref.cpp
   ComputeRestriction_ref.cpp
   ComputeSPMV_ref.cpp
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
   GenerateGeometry.cpp
-  GenerateProblem_ref.cpp
   MixedBaseCounter.cpp
   OptimizeProblem.cpp
   OutputFile.cpp
   ReadHpcgDat.cpp
   ReportResults.cpp
-  SetupHalo_ref.cpp
   TestCG.cpp
   TestNorms.cpp
   TestSymmetry.cpp

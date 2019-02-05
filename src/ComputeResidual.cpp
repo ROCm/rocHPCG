@@ -13,7 +13,7 @@
 //@HEADER
 
 /*!
- @file ComputeResidual_ref.cpp
+ @file ComputeResidual.cpp
 
  HPCG routine
  */

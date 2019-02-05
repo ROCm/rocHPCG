@@ -91,11 +91,10 @@ int main(int argc, char * argv[]) {
   // Print rocHPCG version and device
   if(rank == 0)
   {
-    printf("rocHPCG version: %d.%d.%d.%d-%s\n",
+    printf("rocHPCG version: %d.%d.%d-%s\n",
            __ROCHPCG_VER_MAJOR,
            __ROCHPCG_VER_MINOR,
            __ROCHPCG_VER_PATCH,
-           __ROCHPCG_VER_TWEAK,
            __ROCHPCG_GIT_REV);
   }
 

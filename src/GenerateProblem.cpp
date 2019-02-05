@@ -135,12 +135,32 @@ __global__ void kernel_generate_problem(local_int_t m,
         interior_vertex[hipThreadIdx_y] = false;
     }
 
-    // Wait for all threads to finish
+    // Re-compute index into matrix, by marking if current offset is
+    // a neighbor or not
+    column_offset[hipThreadIdx_x] = interior ? 1 : 0;
+
+    // Wait for threads to finish
     __syncthreads();
+
+    // Do we have an interior vertex?
+    bool full_interior = interior_vertex[hipThreadIdx_y];
+
+    // Compute inclusive sum to obtain new matrix index offsets
+    int tmp;
+    if(hipThreadIdx_x >=  1 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  1]; __syncthreads();
+    if(hipThreadIdx_x >=  1 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+    if(hipThreadIdx_x >=  2 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  2]; __syncthreads();
+    if(hipThreadIdx_x >=  2 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+    if(hipThreadIdx_x >=  4 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  4]; __syncthreads();
+    if(hipThreadIdx_x >=  4 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+    if(hipThreadIdx_x >=  8 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  8]; __syncthreads();
+    if(hipThreadIdx_x >=  8 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+    if(hipThreadIdx_x >= 16 && full_interior == false) tmp = column_offset[hipThreadIdx_x - 16]; __syncthreads();
+    if(hipThreadIdx_x >= 16 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
 
     // Do we have interior or boundary vertex, e.g. do we have a neighbor for each
     // direction?
-    if(interior_vertex[hipThreadIdx_y] == true)
+    if(full_interior == true)
     {
         // Interior vertex
 
@@ -186,26 +206,6 @@ __global__ void kernel_generate_problem(local_int_t m,
     }
     else
     {
-        // Re-compute index into matrix, by marking if current offset is
-        // a neighbor or not
-        column_offset[hipThreadIdx_x] = interior ? 1 : 0;
-
-        // Wait for threads to finish
-        __syncthreads();
-
-        // Compute inclusive sum to obtain new matrix index offsets
-        int tmp;
-        if(hipThreadIdx_x >=  1) tmp = column_offset[hipThreadIdx_x -  1]; __syncthreads();
-        if(hipThreadIdx_x >=  1) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-        if(hipThreadIdx_x >=  2) tmp = column_offset[hipThreadIdx_x -  2]; __syncthreads();
-        if(hipThreadIdx_x >=  2) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-        if(hipThreadIdx_x >=  4) tmp = column_offset[hipThreadIdx_x -  4]; __syncthreads();
-        if(hipThreadIdx_x >=  4) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-        if(hipThreadIdx_x >=  8) tmp = column_offset[hipThreadIdx_x -  8]; __syncthreads();
-        if(hipThreadIdx_x >=  8) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-        if(hipThreadIdx_x >= 16) tmp = column_offset[hipThreadIdx_x - 16]; __syncthreads();
-        if(hipThreadIdx_x >= 16) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-
         // Boundary vertex, e.g. at least one neighboring offset is not a neighbor (this
         // happens e.g. on the global domains boundary)
         // We do only process "real" neighbors

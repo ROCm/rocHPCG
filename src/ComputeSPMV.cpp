@@ -42,19 +42,32 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
         return;
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     local_int_t idx = __builtin_nontemporal_load(f2cOperator + gid);
     local_int_t row = __builtin_nontemporal_load(perm + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    local_int_t idx = f2cOperator[gid];
+    local_int_t row = perm[idx];
+#endif
 
     double sum = 0.0;
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < n)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(ell_val[idx], __ldg(x + col), sum);
+#endif
         }
         else
         {
@@ -62,7 +75,11 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     __builtin_nontemporal_store(sum, y + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    y[row] = sum;
+#endif
 }
 
 __launch_bounds__(1024)
@@ -94,11 +111,19 @@ __global__ void kernel_spmv_ell(local_int_t m,
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < m)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(ell_val[idx], __ldg(x + col), sum);
+#endif
         }
         else
         {
@@ -106,7 +131,11 @@ __global__ void kernel_spmv_ell(local_int_t m,
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     __builtin_nontemporal_store(sum, y + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    y[row] = sum;
+#endif
 }
 
 __global__ void kernel_spmv_halo(local_int_t m,

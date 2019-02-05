@@ -60,20 +60,36 @@ __global__ void kernel_symgs_sweep(local_int_t m,
 
     local_int_t row = gid + offset;
 
+#if defined(__HIP_PLATFORM_HCC__)
     double sum = __builtin_nontemporal_load(x + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    double sum = x[row];
+#endif
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < n && col != row)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(-ell_val[idx], __ldg(y + col), sum);
+#endif
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    y[row] = sum * inv_diag[row];
+#endif
 }
 
 __launch_bounds__(1024)
@@ -93,20 +109,36 @@ __global__ void kernel_symgs_interior(local_int_t m,
         return;
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     double sum = __builtin_nontemporal_load(x + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    double sum = x[row];
+#endif
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < m && col != row)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(-ell_val[idx], __ldg(y + col), sum);
+#endif
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    y[row] = sum * inv_diag[row];
+#endif
 }
 
 __global__ void kernel_symgs_halo(local_int_t m,
@@ -188,23 +220,40 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
 
     local_int_t row = gid + offset;
 
+#if defined(__HIP_PLATFORM_HCC__)
     double sum = __builtin_nontemporal_load(x + row);
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    double sum = x[row];
+    local_int_t diag = diag_idx[row];
+#endif
 
     for(local_int_t p = 0; p < diag; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         // Every entry above offset is zero
         if(col >= 0 && col < offset)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(y + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(-ell_val[idx], __ldg(y + col), sum);
+#endif
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
     __builtin_nontemporal_store(sum / diag_val, y + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    y[row] = sum / ell_val[diag * m + row];
+#endif
 }
 
 __launch_bounds__(1024)
@@ -225,24 +274,40 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
     }
 
     local_int_t row = gid + offset;
+#if defined(__HIP_PLATFORM_HCC__)
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
-
     double sum = __builtin_nontemporal_load(x + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    local_int_t diag = diag_idx[row];
+    double sum = x[row];
+#endif
 
     for(local_int_t p = diag + 1; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         // Every entry below offset should not be taken into account TODO really???
         if(col >= offset && col < m)
         {
+#if defined(__HIP_PLATFORM_HCC__)
             sum = fma(-__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(-ell_val[idx], __ldg(x + col), sum);
+#endif
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
     double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
     __builtin_nontemporal_store(sum / diag_val, x + row);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    x[row] = sum / ell_val[diag * m + row];
+#endif
 }
 
 /*!

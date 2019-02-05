@@ -21,7 +21,6 @@
 #include "utils.hpp"
 #include "MultiColoring.hpp"
 
-#include <vector>
 #include <hip/hip_runtime.h>
 #include <hipcub/hipcub.hpp>
 
@@ -122,161 +121,8 @@ __global__ void kernel_count_color_part2(local_int_t size,
     }
 }
 
-void MultiColoring(SparseMatrix& A)
-{
-    // TODO hip version ; this is extraced host code from rocALUTION
-    int m = A.localNumberOfRows;
-
-    std::vector<int> ell_col_ind(A.ell_width * m);
-    HIP_CHECK(hipMemcpy(ell_col_ind.data(), A.ell_col_ind, sizeof(int) * A.ell_width * m, hipMemcpyDeviceToHost));
-
-    // node colors (init value = 0 i.e. no color)
-    std::vector<int> color(m, -1);
-
-    A.nblocks = 0;
-    std::vector<bool> row_col;
-
-    for(int ai = 0; ai < m; ++ai)
-    {
-        color[ai] = 0;
-        row_col.clear();
-        row_col.reserve(A.nblocks + 2);
-        row_col.assign(A.nblocks + 2, false);
-
-        for(int p = 0; p < A.ell_width; ++p)
-        {
-            int idx = p * m + ai;
-            int col = ell_col_ind[idx];
-
-            if(col >= 0 && col < m && ai != col)
-            {
-                assert(color[col] + 1 >= 0);
-                assert(color[col] < A.nblocks + 1);
-                row_col[color[col] + 1] = true;
-            }
-        }
-
-        for(int p = 0; p < A.ell_width; ++p)
-        {
-            int idx = p * m + ai;
-            int col = ell_col_ind[idx];
-
-            if(col >= 0 && col < m)
-            {
-                if(row_col[color[ai] + 1] == true)
-                {
-                    ++color[ai];
-                }
-            }
-        }
-
-        if(color[ai] + 1 > A.nblocks)
-        {
-            A.nblocks = color[ai] + 1;
-        }
-    }
-
-    // Determine number of rows per color
-    A.sizes = new local_int_t[A.nblocks];
-
-    local_int_t* colors;
-    HIP_CHECK(hipMalloc((void**)&colors, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMemcpy(colors, color.data(), sizeof(local_int_t) * m, hipMemcpyHostToDevice));
-
-    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
-
-    for(int i = 0; i < A.nblocks; ++i)
-    {
-        hipLaunchKernelGGL((kernel_count_color_part1<512>),
-                           dim3(512),
-                           dim3(512),
-                           0,
-                           0,
-                           m,
-                           i,
-                           colors,
-                           tmp);
-
-        hipLaunchKernelGGL((kernel_count_color_part2<512>),
-                           dim3(1),
-                           dim3(512),
-                           0,
-                           0,
-                           512,
-                           tmp);
-
-        HIP_CHECK(hipMemcpy(&A.sizes[i], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
-    }
-
-    local_int_t* tmp_color;
-    local_int_t* tmp_perm;
-    local_int_t* perm;
-
-    HIP_CHECK(hipMalloc((void**)&tmp_color, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&perm, sizeof(local_int_t) * m));
-
-    hipLaunchKernelGGL((kernel_identity),
-                       dim3((m - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       m,
-                       perm);
-
-    hipcub::DoubleBuffer<local_int_t> keys(colors, tmp_color);
-    hipcub::DoubleBuffer<local_int_t> vals(perm, tmp_perm);
-
-    size_t size;
-    void* buf = NULL;
-
-    int startbit = 0;
-    int endbit = 32 - __builtin_clz(A.nblocks);
-
-    HIP_CHECK(hipcub::DeviceRadixSort::SortPairsDescending(buf, size, keys, vals, m, startbit, endbit));
-    HIP_CHECK(hipMalloc(&buf, size));
-hipMemset(buf, 0, size); // TODO
-    HIP_CHECK(hipcub::DeviceRadixSort::SortPairsDescending(buf, size, keys, vals, m, startbit, endbit));
-    HIP_CHECK(hipFree(buf));
-
-    hipLaunchKernelGGL((kernel_create_perm),
-                       dim3((m - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       m,
-                       vals.Current(),
-                       colors);
-
-    A.perm = colors;
-
-    HIP_CHECK(hipFree(tmp_color));
-    HIP_CHECK(hipFree(tmp_perm));
-    HIP_CHECK(hipFree(perm));
-
-    // Compute color offsets
-    A.offsets = new local_int_t[A.nblocks];
-    A.offsets[0] = 0;
-
-    for(int i = 0; i < A.nblocks - 1; ++i)
-    {
-        A.offsets[i + 1] = A.offsets[i] + A.sizes[i];
-    }
-}
-
-// Murmur hash 32 bit mixing function
-__device__ unsigned int get_hash(unsigned int h)
-{
-    h ^= h >> 16;
-    h *= 0x85ebca6b;
-    h ^= h >> 13;
-    h *= 0xc2b2ae35;
-    h ^= h >> 16;
-
-    return h;
-}
-
 __global__ void kernel_jpl(local_int_t m,
+                           const local_int_t* hash,
                            int color1,
                            int color2,
                            local_int_t ell_width,
@@ -300,13 +146,17 @@ __global__ void kernel_jpl(local_int_t m,
     bool max = true;
     bool min = true;
 
-    // Compute row hash value
-    unsigned int row_hash = get_hash(row);
+    // Get row hash value
+    local_int_t row_hash = hash[row];
 
     for(int p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + row;
+#if defined(__HIP_PLATFORM_HCC__)
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
+        local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < m)
         {
@@ -325,8 +175,8 @@ __global__ void kernel_jpl(local_int_t m,
                 continue;
             }
 
-            // Compute column hash value
-            unsigned int col_hash = get_hash(col);
+            // Get column hash value
+            local_int_t col_hash = hash[col];
 
             // If neighbor has larger weight, vertex is not a maximum
             if(col_hash >= row_hash)
@@ -391,6 +241,7 @@ void JPLColoring(SparseMatrix& A)
                            0,
                            0,
                            m,
+                           A.d_rowHash,
                            color1,
                            color2,
                            A.ell_width,
@@ -452,6 +303,8 @@ void JPLColoring(SparseMatrix& A)
     }
 
     A.ublocks = A.nblocks - 1;
+
+    HIP_CHECK(hipFree(A.d_rowHash));
 
     local_int_t* tmp_color;
     local_int_t* tmp_perm;

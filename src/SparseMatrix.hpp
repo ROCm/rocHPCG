@@ -108,6 +108,7 @@ struct SparseMatrix_STRUCT {
   double* d_matrixValues;
   local_int_t* d_matrixDiagonal;
   global_int_t* d_localToGlobalMap;
+  local_int_t* d_rowHash;
 
   // ELL matrix storage format arrays
   local_int_t ell_width; //!< Maximum nnz per row

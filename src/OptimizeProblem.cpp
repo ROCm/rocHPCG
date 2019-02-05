@@ -40,19 +40,25 @@
 */
 int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vector & xexact)
 {
+    // Convert matrix to ELL format
     ConvertToELL(A);
-//    MultiColoring(A);
+
+    // Perform matrix coloring
     JPLColoring(A);
+
+    // Permute matrix accordingly
     PermuteMatrix(A);
+
+    // Permute vectors
     PermuteVector(A.localNumberOfRows, b, A.perm);
     PermuteVector(A.localNumberOfRows, xexact, A.perm);
 
     SparseMatrix* M = A.Ac;
 
+    // Process all coarse level matrices
     while(M != NULL)
     {
         ConvertToELL(*M);
-//        MultiColoring(*M);
         JPLColoring(*M);
         PermuteMatrix(*M);
 

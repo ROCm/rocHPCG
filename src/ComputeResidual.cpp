@@ -115,7 +115,7 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
 #undef RES_DIM
 
     double local_residual;
-    hipMemcpy(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost);
+    HIP_CHECK(hipMemcpy(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost));
 
 #ifndef HPCG_NO_MPI
     double global_residual = 0.0;

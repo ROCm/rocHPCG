@@ -272,7 +272,6 @@ void ConvertToELL(SparseMatrix& A)
         exit(1);
 //            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
     }
-hipMemset(hipcub_buffer, 0, hipcub_size);
         HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
                                                     hipcub_size,
                                                     A.halo_row_ind,

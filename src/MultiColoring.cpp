@@ -333,7 +333,6 @@ void JPLColoring(SparseMatrix& A)
 
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipMalloc(&buf, size));
-hipMemset(buf, 0, size); // TODO
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(hipFree(buf));
 

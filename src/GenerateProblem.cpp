@@ -448,7 +448,7 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     // Initialize x vector, if not NULL
     if(x != NULL)
     {
-        hipMemset(x->d_values, 0, sizeof(double) * localNumberOfRows);
+        HIP_CHECK(hipMemset(x->d_values, 0, sizeof(double) * localNumberOfRows));
     }
 
     // Initialize exact solution, if not NULL

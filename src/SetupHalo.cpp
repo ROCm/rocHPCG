@@ -291,7 +291,6 @@ void SetupHalo(SparseMatrix& A)
     // Array to store the neighboring process ids
     int* d_neighbors;
     HIP_CHECK(hipMalloc((void**)&d_neighbors, sizeof(int) * max_neighbors));
-hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
 
     // Array to hold send indices
     local_int_t* d_send_indices;
@@ -407,7 +406,6 @@ hipMemset(d_neighbors, 0, sizeof(int) * max_neighbors); // TODO
             exit(1);
 //            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
         }
-hipMemset(hipcub_buffer, 0, hipcub_size); // TODO
 
         // Sort send indices to obtain increasing order
         HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
@@ -511,7 +509,6 @@ hipMemset(hipcub_buffer, 0, hipcub_size); // TODO
             exit(1);
 //            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
         }
-hipMemset(hipcub_buffer, 0, hipcub_size);
 
         // Sort receive index array and halo index array
         HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(hipcub_buffer,

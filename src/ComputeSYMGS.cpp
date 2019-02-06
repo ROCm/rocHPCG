@@ -24,22 +24,6 @@
 #include <hip/hip_runtime.h>
 
 __launch_bounds__(1024)
-__global__ void kernel_pointwise_mult(local_int_t m,
-                                      const local_int_t* __restrict__ diag_idx,
-                                      const double* __restrict__ ell_val,
-                                      double* __restrict__ val)
-{
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-
-    if(row >= m)
-    {
-        return;
-    }
-
-    val[row] *= __ldg(ell_val + diag_idx[row] * m + row);
-}
-
-__launch_bounds__(1024)
 __global__ void kernel_symgs_sweep(local_int_t m,
                                    local_int_t n,
                                    local_int_t block_nrow,
@@ -185,10 +169,10 @@ __global__ void kernel_symgs_halo(local_int_t m,
 }
 
 __launch_bounds__(1024)
-__global__ void kernel_pointwise_mult2(local_int_t size,
-                                       const double* __restrict__ x,
-                                       const double* __restrict__ y,
-                                       double* __restrict__ out)
+__global__ void kernel_pointwise_mult(local_int_t size,
+                                      const double* __restrict__ x,
+                                      const double* __restrict__ y,
+                                      double* __restrict__ out)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -223,9 +207,11 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
 #if defined(__HIP_PLATFORM_HCC__)
     double sum = __builtin_nontemporal_load(x + row);
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
+    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
     double sum = x[row];
     local_int_t diag = diag_idx[row];
+    double diag_val = ell_val[diag * m + row];
 #endif
 
     for(local_int_t p = 0; p < diag; ++p)
@@ -249,10 +235,9 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
     }
 
 #if defined(__HIP_PLATFORM_HCC__)
-    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
     __builtin_nontemporal_store(sum / diag_val, y + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
-    y[row] = sum / ell_val[diag * m + row];
+    y[row] = sum / diag_val;
 #endif
 }
 
@@ -277,10 +262,15 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
 #if defined(__HIP_PLATFORM_HCC__)
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
     double sum = __builtin_nontemporal_load(x + row);
+    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
     local_int_t diag = diag_idx[row];
     double sum = x[row];
+    double diag_val = ell_val[diag * m + row];
 #endif
+
+    // Scale result with diagonal entry
+    sum *= diag_val;
 
     for(local_int_t p = diag + 1; p < ell_width; ++p)
     {
@@ -291,7 +281,7 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
         local_int_t col = ell_col_ind[idx];
 #endif
 
-        // Every entry below offset should not be taken into account TODO really???
+        // Every entry below offset should not be taken into account
         if(col >= offset && col < m)
         {
 #if defined(__HIP_PLATFORM_HCC__)
@@ -303,10 +293,9 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
     }
 
 #if defined(__HIP_PLATFORM_HCC__)
-    double diag_val = __builtin_nontemporal_load(ell_val + diag * m + row);
     __builtin_nontemporal_store(sum / diag_val, x + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
-    x[row] = sum / ell_val[diag * m + row];
+    x[row] = sum / diag_val;
 #endif
 }
 
@@ -434,7 +423,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
     // Solve L
-    hipLaunchKernelGGL((kernel_pointwise_mult2),
+    hipLaunchKernelGGL((kernel_pointwise_mult),
                        dim3((A.sizes[0] - 1) / 1024 + 1),
                        dim3(1024),
                        0,
@@ -461,25 +450,6 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
                            r.d_values,
                            x.d_values);
     }
-
-    // Solve D
-    hipLaunchKernelGGL((kernel_pointwise_mult),
-#ifndef HPCG_REFERENCE
-                       dim3((A.localNumberOfRows / A.nblocks * (A.nblocks - 1) - 1) / 1024 + 1),
-#else
-                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
-#endif
-                       dim3(1024),
-                       0,
-                       0,
-#ifndef HPCG_REFERENCE
-                       A.localNumberOfRows / A.nblocks * (A.nblocks - 1),
-#else
-                       A.localNumberOfRows,
-#endif
-                       A.diag_idx,
-                       A.ell_val,
-                       x.d_values);
 
     // Solve U
     for(local_int_t i = A.ublocks; i >= 0; --i)

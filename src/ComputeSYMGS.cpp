@@ -24,19 +24,19 @@
 #include <hip/hip_runtime.h>
 
 __launch_bounds__(1024)
-__global__ void kernel_pointwise_mult(local_int_t size,
+__global__ void kernel_pointwise_mult(local_int_t m,
                                       const local_int_t* __restrict__ diag_idx,
                                       const double* __restrict__ ell_val,
                                       double* __restrict__ val)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
-    if(gid >= size)
+    if(row >= m)
     {
         return;
     }
 
-    val[gid] *= __ldg(ell_val + diag_idx[gid]);
+    val[row] *= __ldg(ell_val + diag_idx[row] * m + row);
 }
 
 __launch_bounds__(1024)

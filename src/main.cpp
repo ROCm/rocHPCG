@@ -365,7 +365,7 @@ int main(int argc, char * argv[]) {
                        used_mem >> 20,
                        total_mem >> 20);
 
-  if(rank == 0) printf("\nStarting Benchmarking Phase ...\n");
+  if(rank == 0) printf("\nStarting Benchmarking Phase ...\n\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
@@ -393,10 +393,9 @@ int main(int argc, char * argv[]) {
     opt_times[7] = times[7];
     opt_times[9] = times[9];
 
-    printf("Performing %d CG sets        expected time: %0.1lf sec        expected Perf: %0.3lf GF\n\n",
+    printf("Performing %d CG sets in %0.1lf seconds ...\n",
            numberOfCgSets,
-           total_runtime,
-           ComputeTotalGFlops(A, numberOfMgLevels, 1, refMaxIters, optMaxIters, &opt_times[0]));
+           total_runtime);
   }
 
   for (int i=0; i< numberOfCgSets; ++i) {
@@ -407,11 +406,17 @@ int main(int argc, char * argv[]) {
 
     if(rank == 0 && i < numberOfCgSets)
     {
-      printf("progress = %5.1lf%%        CG run %3d        elapsed time = %6.1lf sec     %7.3lf GF\n",
-             (i + 1) / (double)numberOfCgSets * 100.0,
-             i + 1,
-             times[0],
-             ComputeTotalGFlops(A, numberOfMgLevels, i + 1, refMaxIters, optMaxIters, &times[0]));
+        double gflops = ComputeTotalGFlops(A, numberOfMgLevels, i + 1, refMaxIters, optMaxIters, &times[0]);
+        char c = '%';
+
+        printf("CG set %0d / %0d    %7.4lf GFlop/s     (%7.4lf GFlop/s per process)    %d%c    %0.1lf sec left\n",
+               i + 1,
+               numberOfCgSets,
+               gflops,
+               gflops / A.geom->size,
+               (int)((double)(i + 1) / numberOfCgSets * 100.0),
+               c,
+               total_runtime - times[0] > 0.0 ? total_runtime - times[0] : 0.0);
     }
 
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run

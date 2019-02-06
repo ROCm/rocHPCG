@@ -181,7 +181,7 @@ __global__ void kernel_symgs_halo(local_int_t m,
         }
     }
 
-    y[perm_idx] += sum * inv_diag[halo_idx]; // TODO FMA
+    y[perm_idx] = fma(sum, inv_diag[halo_idx], y[perm_idx]);
 }
 
 __launch_bounds__(1024)

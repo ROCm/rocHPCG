@@ -354,11 +354,24 @@ int main(int argc, char * argv[]) {
   // Optimized CG Timing Phase //
   ///////////////////////////////
 
-  if(rank == 0) printf("\nTotal device memory usage: %lu MByte (%lu MByte)\n",
-                       allocator.GetUsedMemory() >> 20,
-                       allocator.GetTotalMemory() >> 20);
+  if(rank == 0)
+  {
+#ifdef HPCG_MEMMGMT
+    size_t used_mem = allocator.GetUsedMemory();
+    size_t total_mem = allocator.GetTotalMemory();
+#else
+    size_t free_mem;
+    size_t total_mem;
+    hipMemGetInfo(&free_mem, &total_mem);
 
-  if(rank == 0) printf("\nStarting Benchmarking Phase ...\n\n");
+    size_t used_mem = total_mem - free_mem;
+#endif
+
+    printf("\nTotal device memory usage: %lu MByte (%lu MByte)\n",
+           used_mem >> 20,
+           total_mem >> 20);
+    printf("\nStarting Benchmarking Phase ...\n\n");
+  }
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds

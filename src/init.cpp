@@ -189,10 +189,12 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 #endif
 
   // Initialize memory allocator
+#ifdef HPCG_MEMMGMT
   size_t free_mem;
   size_t total_mem;
   hipMemGetInfo(&free_mem, &total_mem);
   HIP_CHECK(allocator.Initialize(free_mem * 0.9));
+#endif
 
   // Allocate device workspace
   HIP_CHECK(deviceMalloc((void**)&workspace, sizeof(local_int_t) * 1024));

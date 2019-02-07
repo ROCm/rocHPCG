@@ -218,6 +218,7 @@ hipError_t hipAllocator_t::Free(void* ptr)
 
 hipError_t deviceMalloc(void** ptr, size_t size)
 {
+#ifdef HPCG_MEMMGMT
     if(size < 0)
     {
         return hipErrorInvalidValue;
@@ -233,10 +234,14 @@ hipError_t deviceMalloc(void** ptr, size_t size)
     }
 
     return allocator.Alloc(ptr, size);
+#else
+    return hipMalloc(ptr, size);
+#endif
 }
 
 hipError_t deviceRealloc(void* ptr, size_t size)
 {
+#ifdef HPCG_MEMMGMT
     if(size <= 0)
     {
         return hipErrorInvalidValue;
@@ -247,10 +252,14 @@ hipError_t deviceRealloc(void* ptr, size_t size)
     }
 
     return allocator.Realloc(ptr, size);
+#else
+    return hipSuccess;
+#endif
 }
 
 hipError_t deviceDefrag(void** ptr, size_t size)
 {
+#if defined(DEFRAG_OPT) && defined(HPCG_MEMMGMT)
     void* defrag;
 
     RETURN_IF_HIP_ERROR(deviceMalloc(&defrag, size));
@@ -258,16 +267,20 @@ hipError_t deviceDefrag(void** ptr, size_t size)
     RETURN_IF_HIP_ERROR(deviceFree(*ptr));
 
     *ptr = defrag;
-
+#endif
     return hipSuccess;
 }
 
 hipError_t deviceFree(void* ptr)
 {
+#ifdef HPCG_MEMMGMT
     if(ptr == NULL)
     {
         return hipErrorInvalidValue;
     }
 
     return allocator.Free(ptr);
+#else
+    return hipFree(ptr);
+#endif
 }

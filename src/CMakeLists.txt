@@ -106,6 +106,14 @@ if(HPCG_REFERENCE)
   target_compile_definitions(rocHPCG PRIVATE HPCG_REFERENCE)
 endif()
 
+# Optimization definitions
+if(OPT_MEMMGMT)
+  target_compile_definitions(rocHPCG PRIVATE HPCG_MEMMGMT)
+endif()
+if(OPT_DEFRAG)
+  target_compile_definitions(rocHPCG PRIVATE DEFRAG_OPT)
+endif()
+
 
 
 # Target include directories

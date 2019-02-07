@@ -39,6 +39,10 @@ option(HPCG_DETAILED_DEBUG "Compile with voluminous debugging information turned
 option(HPCG_DETAILED_TIMING "Enable detail timers" OFF)
 option(HPCG_REFERENCE "Build reference mode" OFF)
 
+# Optimization options
+option(OPT_MEMMGMT "Build with memory management module" ON)
+option(OPT_DEFRAG "Build with memory management defragmentation" ON)
+
 # Dependencies
 include(cmake/Dependencies.cmake)
 

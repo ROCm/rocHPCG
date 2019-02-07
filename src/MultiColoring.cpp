@@ -207,7 +207,7 @@ void JPLColoring(SparseMatrix& A)
 {
     local_int_t m = A.localNumberOfRows;
 
-    HIP_CHECK(hipMalloc((void**)&A.perm, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&A.perm, sizeof(local_int_t) * m));
     HIP_CHECK(hipMemset(A.perm, -1, sizeof(local_int_t) * m));
 
     A.nblocks = 0;
@@ -304,15 +304,15 @@ void JPLColoring(SparseMatrix& A)
 
     A.ublocks = A.nblocks - 1;
 
-    HIP_CHECK(hipFree(A.d_rowHash));
+    HIP_CHECK(deviceFree(A.d_rowHash));
 
     local_int_t* tmp_color;
     local_int_t* tmp_perm;
     local_int_t* perm;
 
-    HIP_CHECK(hipMalloc((void**)&tmp_color, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&perm, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_color, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&perm, sizeof(local_int_t) * m));
 
     hipLaunchKernelGGL((kernel_identity),
                        dim3((m - 1) / 1024 + 1),
@@ -332,9 +332,9 @@ void JPLColoring(SparseMatrix& A)
     int endbit = 32 - __builtin_clz(A.nblocks);
 
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
-    HIP_CHECK(hipMalloc(&buf, size));
+    HIP_CHECK(deviceMalloc(&buf, size));
     HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
-    HIP_CHECK(hipFree(buf));
+    HIP_CHECK(deviceFree(buf));
 
     hipLaunchKernelGGL((kernel_create_perm),
                        dim3((m - 1) / 1024 + 1),
@@ -345,9 +345,9 @@ void JPLColoring(SparseMatrix& A)
                        vals.Current(),
                        A.perm);
 
-    HIP_CHECK(hipFree(tmp_color));
-    HIP_CHECK(hipFree(tmp_perm));
-    HIP_CHECK(hipFree(perm));
+    HIP_CHECK(deviceFree(tmp_color));
+    HIP_CHECK(deviceFree(tmp_perm));
+    HIP_CHECK(deviceFree(perm));
 
 #ifndef HPCG_REFERENCE
     --A.ublocks;

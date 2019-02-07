@@ -196,7 +196,6 @@ int main(int argc, char * argv[]) {
      curxexact = 0;
   }
 
-
   CGData data;
   InitializeSparseCGData(A, data);
 
@@ -280,6 +279,7 @@ int main(int argc, char * argv[]) {
   if (geom->size == 1) WriteProblem(*geom, A, b, x, xexact);
 #endif
 
+  HIPInitializeSparseCGData(A, data);
 
   //////////////////////////////
   // Validation Testing Phase //
@@ -325,7 +325,7 @@ int main(int argc, char * argv[]) {
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
-    ZeroVector(x); // start x at all zeros
+    HIPZeroVector(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
     ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true, true);
     if (ierr) ++err_count; // count the number of errors in CG
@@ -356,14 +356,9 @@ int main(int argc, char * argv[]) {
   // Optimized CG Timing Phase //
   ///////////////////////////////
 
-  size_t used_mem;
-  size_t total_mem;
-  hipMemGetInfo(&used_mem, &total_mem);
-  used_mem = total_mem - used_mem;
-
   if(rank == 0) printf("\nTotal device memory usage: %lu MByte (%lu MByte)\n",
-                       used_mem >> 20,
-                       total_mem >> 20);
+                       allocator.GetUsedMemory() >> 20,
+                       allocator.GetTotalMemory() >> 20);
 
   if(rank == 0) printf("\nStarting Benchmarking Phase ...\n\n");
 
@@ -399,7 +394,7 @@ int main(int argc, char * argv[]) {
   }
 
   for (int i=0; i< numberOfCgSets; ++i) {
-    ZeroVector(x); // Zero out x
+    HIPZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
@@ -444,9 +439,13 @@ int main(int argc, char * argv[]) {
   // Clean up
   DeleteMatrix(A); // This delete will recursively delete all coarse grid data
   DeleteCGData(data);
+  HIPDeleteCGData(data);
   DeleteVector(x);
   DeleteVector(b);
   DeleteVector(xexact);
+  HIPDeleteVector(x);
+  HIPDeleteVector(b);
+  HIPDeleteVector(xexact);
   DeleteVector(x_overlap);
   DeleteVector(b_computed);
   delete [] testnorms_data.values;

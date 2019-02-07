@@ -92,7 +92,7 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
 
     // f2c Operator
     local_int_t* d_f2cOperator;
-    HIP_CHECK(hipMalloc((void**)&d_f2cOperator, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&d_f2cOperator, sizeof(local_int_t) * localNumberOfRows));
 
     dim3 f2c_blocks((nxc - 1) / 2 + 1,
                     (nyc - 1) / 2 + 1,
@@ -138,9 +138,9 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
     Vector* rc = new Vector;
     Vector* xc = new Vector;
     Vector* Axf = new Vector;
-    InitializeVector(*rc, Ac->localNumberOfRows);
-    InitializeVector(*xc, Ac->localNumberOfColumns);
-    InitializeVector(*Axf, Af.localNumberOfColumns);
+    HIPInitializeVector(*rc, Ac->localNumberOfRows);
+    HIPInitializeVector(*xc, Ac->localNumberOfColumns);
+    HIPInitializeVector(*Axf, Af.localNumberOfColumns);
 
     Af.Ac = Ac;
     MGData* mgData = new MGData;
@@ -157,6 +157,11 @@ void CopyCoarseProblemToHost(SparseMatrix& A)
 
     // Copy halo to host
     CopyHaloToHost(*A.Ac);
+
+    // Allocate additional host vectors
+    InitializeVector(*A.mgData->rc, A.Ac->localNumberOfRows);
+    InitializeVector(*A.mgData->xc, A.Ac->localNumberOfColumns);
+    InitializeVector(*A.mgData->Axf, A.localNumberOfColumns);
 
     // Copy f2c operator to host
     A.mgData->f2cOperator = new local_int_t[A.Ac->localNumberOfRows];

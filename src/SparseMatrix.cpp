@@ -223,13 +223,13 @@ __global__ void kernel_to_halo(local_int_t halo_rows,
 void ConvertToELL(SparseMatrix& A)
 {
     // Convert mtxIndL into ELL column indices
-    HIP_CHECK(hipMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
 
     local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
 
 #ifndef HPCG_NO_MPI
-    HIP_CHECK(hipMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(deviceMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
 
     HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
 #endif
@@ -246,14 +246,14 @@ void ConvertToELL(SparseMatrix& A)
                        d_halo_rows,
                        A.halo_row_ind);
 
-    HIP_CHECK(hipFree(A.d_mtxIndL));
+    HIP_CHECK(deviceFree(A.d_mtxIndL));
 
 #ifndef HPCG_NO_MPI
     HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
     assert(A.halo_rows <= A.totalToBeSent);
 
-    HIP_CHECK(hipMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
-    HIP_CHECK(hipMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
+    HIP_CHECK(deviceMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
+    HIP_CHECK(deviceMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
 
     size_t hipcub_size;
     void* hipcub_buffer = NULL;
@@ -262,25 +262,16 @@ void ConvertToELL(SparseMatrix& A)
                                                 A.halo_row_ind,
                                                 A.halo_row_ind,
                                                 A.halo_rows));
-    if(hipcub_size <= (1 << 23))
-    {
-        hipcub_buffer = workspace;
-    }
-    else
-    {
-        fprintf(stderr, "FATAL error, buffer exceeding\n");
-        exit(1);
-//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
-    }
-        HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
-                                                    hipcub_size,
-                                                    A.halo_row_ind,
-                                                    A.halo_row_ind, // TODO inplace!
-                                                    A.halo_rows));
-//        HIP_CHECK(hipFree(hipcub_buffer));
+    HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
+    HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
+                                                hipcub_size,
+                                                A.halo_row_ind,
+                                                A.halo_row_ind, // TODO inplace!
+                                                A.halo_rows));
+    HIP_CHECK(deviceFree(hipcub_buffer));
 #endif
 
-    HIP_CHECK(hipMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
 
     hipLaunchKernelGGL((kernel_to_ell_val),
                        dim3((A.localNumberOfRows - 1) / 1024 + 1),

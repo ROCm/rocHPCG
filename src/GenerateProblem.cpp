@@ -397,17 +397,17 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     assert(totalNumberOfRows > 0);
 
     // Allocate structures
-    HIP_CHECK(hipMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.d_mtxIndG, sizeof(global_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(hipMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(hipMalloc((void**)&A.d_localToGlobalMap, sizeof(global_int_t) * localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));
-    HIP_CHECK(hipMalloc((void**)&A.d_rowHash, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, sizeof(global_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_localToGlobalMap, sizeof(global_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_rowHash, sizeof(local_int_t) * localNumberOfRows));
 
-    // TODO allocate only gpu vectors
-    if(b != NULL) InitializeVector(*b, localNumberOfRows);
-    if(x != NULL) InitializeVector(*x, localNumberOfRows);
-    if(xexact != NULL) InitializeVector(*xexact, localNumberOfRows);
+    // Allocate vectors
+    if(b != NULL) HIPInitializeVector(*b, localNumberOfRows);
+    if(x != NULL) HIPInitializeVector(*x, localNumberOfRows);
+    if(xexact != NULL) HIPInitializeVector(*xexact, localNumberOfRows);
 
     // Determine blocksize
     unsigned int blocksize = 512 / numberOfNonzerosPerRow;
@@ -538,11 +538,11 @@ void CopyProblemToHost(SparseMatrix& A, Vector* b, Vector* x, Vector* xexact)
     HIP_CHECK(hipMemcpy(A.localToGlobalMap.data(), A.d_localToGlobalMap, sizeof(global_int_t) * A.localNumberOfRows, hipMemcpyDeviceToHost));
 
     // TODO put this in a std::thread
-    HIP_CHECK(hipFree(A.d_nonzerosInRow));
-    HIP_CHECK(hipFree(A.d_mtxIndG));
-    HIP_CHECK(hipFree(A.d_matrixValues));
-    HIP_CHECK(hipFree(A.d_matrixDiagonal));
-    HIP_CHECK(hipFree(A.d_localToGlobalMap));
+    HIP_CHECK(deviceFree(A.d_nonzerosInRow));
+    HIP_CHECK(deviceFree(A.d_mtxIndG));
+    HIP_CHECK(deviceFree(A.d_matrixValues));
+    HIP_CHECK(deviceFree(A.d_matrixDiagonal));
+    HIP_CHECK(deviceFree(A.d_localToGlobalMap));
 
     // Initialize pointers
     A.matrixDiagonal[0] = A.matrixValues[0] + mtxDiag[0];
@@ -562,19 +562,22 @@ void CopyProblemToHost(SparseMatrix& A, Vector* b, Vector* x, Vector* xexact)
         A.globalToLocalMap[A.localToGlobalMap[i]] = i;
     }
 
-    // Copy vectors, if available
+    // Allocate and copy vectors, if available
     if(b != NULL)
     {
+        InitializeVector(*b, A.localNumberOfRows);
         HIP_CHECK(hipMemcpy(b->values, b->d_values, sizeof(double) * b->localLength, hipMemcpyDeviceToHost));
     }
 
     if(x != NULL)
     {
+        InitializeVector(*x, A.localNumberOfRows);
         HIP_CHECK(hipMemcpy(x->values, x->d_values, sizeof(double) * x->localLength, hipMemcpyDeviceToHost));
     }
 
     if(xexact != NULL)
     {
+        InitializeVector(*xexact, A.localNumberOfRows);
         HIP_CHECK(hipMemcpy(xexact->values, xexact->d_values, sizeof(double) * xexact->localLength, hipMemcpyDeviceToHost));
     }
 }

@@ -55,8 +55,14 @@ inline void InitializeVector(Vector & v, local_int_t localLength) {
   v.localLength = localLength;
   v.values = new double[localLength];
   v.optimizationData = 0;
-  HIP_CHECK(hipMalloc((void**)&v.d_values, sizeof(double) * localLength));
   return;
+}
+
+inline void HIPInitializeVector(Vector& v, local_int_t localLength)
+{
+    v.localLength = localLength;
+    v.optimizationData = 0;
+    HIP_CHECK(deviceMalloc((void**)&v.d_values, sizeof(double) * localLength));
 }
 
 /*!
@@ -68,8 +74,12 @@ inline void ZeroVector(Vector & v) {
   local_int_t localLength = v.localLength;
   double * vv = v.values;
   for (int i=0; i<localLength; ++i) vv[i] = 0.0;
-  HIP_CHECK(hipMemset(v.d_values, 0, sizeof(double) * v.localLength));
   return;
+}
+
+inline void HIPZeroVector(Vector& v)
+{
+    HIP_CHECK(hipMemset(v.d_values, 0, sizeof(double) * v.localLength));
 }
 
 /*!
@@ -94,12 +104,16 @@ inline void FillRandomVector(Vector & v) {
   local_int_t localLength = v.localLength;
   double * vv = v.values;
   for (int i=0; i<localLength; ++i) vv[i] = rand() / (double)(RAND_MAX) + 1.0;
+  return;
+}
+
+inline void HIPFillRandomVector(Vector& v)
+{
 #ifdef __HIP_PLATFORM_HCC__
   hiprandGenerateUniformDouble(rng, v.d_values, v.localLength);
 #else
   curandGenerateUniformDouble(rng, v.d_values, v.localLength);
 #endif
-  return;
 }
 
 /*!
@@ -114,8 +128,15 @@ inline void CopyVector(const Vector & v, Vector & w) {
   double * vv = v.values;
   double * wv = w.values;
   for (int i=0; i<localLength; ++i) wv[i] = vv[i];
-  HIP_CHECK(hipMemcpy(w.d_values, v.d_values, sizeof(double) * v.localLength, hipMemcpyDeviceToDevice));
   return;
+}
+
+inline void HIPCopyVector(const Vector& v, Vector& w)
+{
+    HIP_CHECK(hipMemcpy(w.d_values,
+                        v.d_values,
+                        sizeof(double) * v.localLength,
+                        hipMemcpyDeviceToDevice));
 }
 
 /*!
@@ -126,9 +147,14 @@ inline void CopyVector(const Vector & v, Vector & w) {
 inline void DeleteVector(Vector & v) {
 
   delete [] v.values;
-  HIP_CHECK(hipFree(v.d_values));
   v.localLength = 0;
   return;
+}
+
+inline void HIPDeleteVector(Vector& v)
+{
+    HIP_CHECK(deviceFree(v.d_values));
+    v.localLength = 0;
 }
 
 #endif // VECTOR_HPP

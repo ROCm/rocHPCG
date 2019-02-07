@@ -48,6 +48,14 @@ inline void InitializeSparseCGData(SparseMatrix & A, CGData & data) {
   return;
 }
 
+inline void HIPInitializeSparseCGData(SparseMatrix& A, CGData& data)
+{
+    HIPInitializeVector(data.r, A.localNumberOfRows);
+    HIPInitializeVector(data.z, A.localNumberOfColumns);
+    HIPInitializeVector(data.p, A.localNumberOfColumns);
+    HIPInitializeVector(data.Ap, A.localNumberOfRows);
+}
+
 /*!
  Destructor for the CG vectors data.
 
@@ -60,6 +68,14 @@ inline void DeleteCGData(CGData & data) {
   DeleteVector (data.p);
   DeleteVector (data.Ap);
   return;
+}
+
+inline void HIPDeleteCGData(CGData& data)
+{
+    HIPDeleteVector (data.r);
+    HIPDeleteVector (data.z);
+    HIPDeleteVector (data.p);
+    HIPDeleteVector (data.Ap);
 }
 
 #endif // CGDATA_HPP

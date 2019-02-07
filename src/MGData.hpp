@@ -73,11 +73,14 @@ inline void DeleteMGData(MGData & data) {
   DeleteVector(*data.Axf);
   DeleteVector(*data.rc);
   DeleteVector(*data.xc);
+  HIPDeleteVector(*data.Axf);
+  HIPDeleteVector(*data.rc);
+  HIPDeleteVector(*data.xc);
   delete data.Axf;
   delete data.rc;
   delete data.xc;
 
-  HIP_CHECK(hipFree(data.d_f2cOperator));
+  HIP_CHECK(deviceFree(data.d_f2cOperator));
 
   return;
 }

@@ -40,7 +40,10 @@ HPCG_Finalize(void) {
   HIP_CHECK(hipStreamDestroy(stream_halo));
 
   // Free workspace
-  HIP_CHECK(hipFree(workspace));
+  HIP_CHECK(deviceFree(workspace));
+
+  // Clear allocator
+  HIP_CHECK(allocator.Clear());
 
   // Free RNG
 #ifdef __HIP_PLATFORM_HCC__

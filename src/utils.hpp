@@ -23,11 +23,15 @@
 #include <curand.h>
 #endif
 
+#include "Memory.hpp"
+
 // Streams
 extern hipStream_t stream_interior;
 extern hipStream_t stream_halo;
 // Workspace
 extern void* workspace;
+// Memory allocator
+extern hipAllocator_t allocator;
 // RNG generator
 #ifdef __HIP_PLATFORM_HCC__
 extern hiprandGenerator_t rng;
@@ -58,6 +62,14 @@ extern curandGenerator_t rng;
         hipDeviceReset();                                           \
         exit(1);                                                    \
     }                                                               \
+}
+
+#define RETURN_IF_HIP_ERROR(err)    \
+{                                   \
+    if(err != hipSuccess)           \
+    {                               \
+        return err;                 \
+    }                               \
 }
 
 #define RETURN_IF_HPCG_ERROR(err)   \

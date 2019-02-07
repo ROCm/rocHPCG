@@ -229,7 +229,7 @@ void SetupHalo(SparseMatrix& A)
     }
 
     // Allocate local matrix column index array
-    HIP_CHECK(hipMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
 
 #ifdef HPCG_NO_MPI
     hipLaunchKernelGGL((kernel_copy_indices),
@@ -281,8 +281,8 @@ void SetupHalo(SparseMatrix& A)
     local_int_t* d_nrecv_per_rank;
 
     // Number of elements is stored for each neighboring rank
-    HIP_CHECK(hipMalloc((void**)&d_nsend_per_rank, sizeof(local_int_t) * max_neighbors));
-    HIP_CHECK(hipMalloc((void**)&d_nrecv_per_rank, sizeof(local_int_t) * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_nsend_per_rank, sizeof(local_int_t) * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_nrecv_per_rank, sizeof(local_int_t) * max_neighbors));
 
     // Since we use increments, we have to initialize with 0
     HIP_CHECK(hipMemset(d_nsend_per_rank, 0, sizeof(local_int_t) * max_neighbors));
@@ -290,21 +290,21 @@ void SetupHalo(SparseMatrix& A)
 
     // Array to store the neighboring process ids
     int* d_neighbors;
-    HIP_CHECK(hipMalloc((void**)&d_neighbors, sizeof(int) * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_neighbors, sizeof(int) * max_neighbors));
 
     // Array to hold send indices
     local_int_t* d_send_indices;
 
     // d_send_indices holds max_sending elements per neighboring rank, at max
-    HIP_CHECK(hipMalloc((void**)&d_send_indices, sizeof(local_int_t) * max_sending * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_send_indices, sizeof(local_int_t) * max_sending * max_neighbors));
 
     // Array to hold receive and halo indices
     global_int_t* d_recv_indices;
     local_int_t* d_halo_indices;
 
     // Both arrays hold max_boundary elements per neighboring rank, at max
-    HIP_CHECK(hipMalloc((void**)&d_recv_indices, sizeof(global_int_t) * max_boundary * max_neighbors));
-    HIP_CHECK(hipMalloc((void**)&d_halo_indices, sizeof(local_int_t) * max_boundary * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_recv_indices, sizeof(global_int_t) * max_boundary * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_halo_indices, sizeof(local_int_t) * max_boundary * max_neighbors));
 
     // SetupHalo kernel
     hipLaunchKernelGGL((kernel_setup_halo),
@@ -346,7 +346,7 @@ void SetupHalo(SparseMatrix& A)
                         d_nsend_per_rank,
                         sizeof(local_int_t) * max_neighbors,
                         hipMemcpyDeviceToHost));
-    HIP_CHECK(hipFree(d_nsend_per_rank));
+    HIP_CHECK(deviceFree(d_nsend_per_rank));
 
     nsend_per_rank[0] = 0;
     for(int i = 0; i < max_neighbors; ++i)
@@ -363,12 +363,12 @@ void SetupHalo(SparseMatrix& A)
     // Allocate receive and send buffers on GPU and CPU // TODO can be smaller...
     HIP_CHECK(hipHostMalloc((void**)&A.recv_buffer, sizeof(double) * A.totalToBeSent));
     HIP_CHECK(hipHostMalloc((void**)&A.send_buffer, sizeof(double) * A.totalToBeSent));
-    HIP_CHECK(hipMalloc((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
+    HIP_CHECK(deviceMalloc((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
 
     // Sort send indices to obtain elementsToSend array
     // elementsToSend array has to be in increasing order, so other processes know
     // where to place the elements.
-    HIP_CHECK(hipMalloc((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(deviceMalloc((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
 
     // TODO segmented sort might be faster
     A.numberOfSendNeighbors = 0;
@@ -386,7 +386,6 @@ void SetupHalo(SparseMatrix& A)
             continue;
         }
 
-        // TODO global buffer
         size_t hipcub_size;
         void* hipcub_buffer = NULL;
 
@@ -396,16 +395,7 @@ void SetupHalo(SparseMatrix& A)
                                                     d_send_indices + i * max_sending,
                                                     A.d_elementsToSend + nsend_per_rank[i],
                                                     entriesToSend));
-        if(hipcub_size <= (1 << 23))
-        {
-            hipcub_buffer = workspace;
-        }
-        else
-        {
-            fprintf(stderr, "FATAL error, buffer exceeding\n");
-            exit(1);
-//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
-        }
+        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
 
         // Sort send indices to obtain increasing order
         HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
@@ -413,7 +403,7 @@ void SetupHalo(SparseMatrix& A)
                                                     d_send_indices + i * max_sending,
                                                     A.d_elementsToSend + nsend_per_rank[i],
                                                     entriesToSend));
-//        HIP_CHECK(hipFree(hipcub_buffer));
+        HIP_CHECK(deviceFree(hipcub_buffer));
         hipcub_buffer = NULL;
 
         // Store number of elements that have to be sent to i-th process
@@ -421,7 +411,7 @@ void SetupHalo(SparseMatrix& A)
     }
 
     // Free up memory
-    HIP_CHECK(hipFree(d_send_indices));
+    HIP_CHECK(deviceFree(d_send_indices));
 
     // Prefix sum to obtain receive indices offsets (with duplicates) // TODO gpu scan?
     std::vector<local_int_t> nrecv_per_rank(max_neighbors + 1);
@@ -429,7 +419,7 @@ void SetupHalo(SparseMatrix& A)
                         d_nrecv_per_rank,
                         sizeof(local_int_t) * max_neighbors,
                         hipMemcpyDeviceToHost));
-    HIP_CHECK(hipFree(d_nrecv_per_rank));
+    HIP_CHECK(deviceFree(d_nrecv_per_rank));
 
     nrecv_per_rank[0] = 0;
     for(int i = 0; i < max_neighbors; ++i)
@@ -473,7 +463,7 @@ void SetupHalo(SparseMatrix& A)
                         d_neighbors,
                         sizeof(int) * max_neighbors,
                         hipMemcpyDeviceToHost));
-    HIP_CHECK(hipFree(d_neighbors));
+    HIP_CHECK(deviceFree(d_neighbors));
 
     // Loop over all possible neighbors
     for(int i = 0; i < max_neighbors; ++i)
@@ -499,16 +489,7 @@ void SetupHalo(SparseMatrix& A)
                                                      d_haloList[i],
                                                      d_haloBuffer,
                                                      entriesToRecv));
-        if(hipcub_size <= (1 << 23))
-        {
-            hipcub_buffer = workspace;
-        }
-        else
-        {
-            fprintf(stderr, "FATAL error, buffer exceeding\n");
-            exit(1);
-//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
-        }
+        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
 
         // Sort receive index array and halo index array
         HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(hipcub_buffer,
@@ -518,7 +499,7 @@ void SetupHalo(SparseMatrix& A)
                                                      d_haloList[i],
                                                      d_haloBuffer,
                                                      entriesToRecv));
-//        HIP_CHECK(hipFree(hipcub_buffer));
+        HIP_CHECK(deviceFree(hipcub_buffer));
         hipcub_buffer = NULL;
 
         // Swap receive buffer pointers
@@ -544,16 +525,7 @@ void SetupHalo(SparseMatrix& A)
                                                         d_offsets + 1,
                                                         d_num_runs,
                                                         entriesToRecv));
-        if(hipcub_size <= (1 << 23))
-        {
-            hipcub_buffer = workspace;
-        }
-        else
-        {
-            fprintf(stderr, "FATAL error, buffer exceeding\n");
-            exit(1);
-//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
-        }
+        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
 
         // Perform a run length encode over the receive indices to obtain the number
         // of halo entries in each row
@@ -564,10 +536,8 @@ void SetupHalo(SparseMatrix& A)
                                                         d_offsets + 1,
                                                         d_num_runs,
                                                         entriesToRecv));
-//        HIP_CHECK(hipFree(hipcub_buffer));
+        HIP_CHECK(deviceFree(hipcub_buffer));
         hipcub_buffer = NULL;
-
-//        HIP_CHECK(hipFree(d_unique_out));
 
         // Copy the number of halo entries with respect to the i-th neighbor
         global_int_t currentRankHaloEntries;
@@ -581,20 +551,11 @@ void SetupHalo(SparseMatrix& A)
 
         // Obtain hipcub buffer size
         HIP_CHECK(hipcub::DeviceScan::InclusiveSum(hipcub_buffer, hipcub_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries));
-        if(hipcub_size <= (1 << 23))
-        {
-            hipcub_buffer = workspace;
-        }
-        else
-        {
-            fprintf(stderr, "FATAL error, buffer exceeding\n");
-            exit(1);
-//            HIP_CHECK(hipMalloc(&hipcub_buffer, hipcub_size));
-        }
+        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
 
         // Perform inclusive sum to obtain the offsets to the first halo entry of each row
         HIP_CHECK(hipcub::DeviceScan::InclusiveSum(hipcub_buffer, hipcub_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries));
-//        HIP_CHECK(hipFree(hipcub_buffer));
+        HIP_CHECK(deviceFree(hipcub_buffer));
 
         // Launch kernel to fill all halo columns in the local matrix column index array for the i-th neighbor
         hipLaunchKernelGGL((kernel_halo_columns),
@@ -610,7 +571,7 @@ void SetupHalo(SparseMatrix& A)
                            A.d_mtxIndL);
 
         // Free up data
-//        HIP_CHECK(hipFree(d_offsets));
+//        HIP_CHECK(deviceFree(d_offsets));
 
         // Increase the number of external values by i-th neighbors halo entry contributions
         A.numberOfExternalValues += currentRankHaloEntries;
@@ -620,8 +581,8 @@ void SetupHalo(SparseMatrix& A)
     }
 
     // Free up data
-    HIP_CHECK(hipFree(d_recv_indices));
-    HIP_CHECK(hipFree(d_halo_indices));
+    HIP_CHECK(deviceFree(d_recv_indices));
+    HIP_CHECK(deviceFree(d_halo_indices));
 
     // Allocate MPI communication structures
     A.recv_request = new MPI_Request[A.numberOfSendNeighbors];

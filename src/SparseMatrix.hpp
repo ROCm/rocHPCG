@@ -260,25 +260,25 @@ inline void DeleteMatrix(SparseMatrix & A) {
 
   if(A.recv_request) delete[] A.recv_request;
   if(A.send_request) delete[] A.send_request;
-  if(A.d_elementsToSend) HIP_CHECK(hipFree(A.d_elementsToSend));
+  if(A.d_elementsToSend) HIP_CHECK(deviceFree(A.d_elementsToSend));
   if(A.recv_buffer) HIP_CHECK(hipHostFree(A.recv_buffer));
   if(A.send_buffer) HIP_CHECK(hipHostFree(A.send_buffer));
-  if(A.d_send_buffer) HIP_CHECK(hipFree(A.d_send_buffer));
+  if(A.d_send_buffer) HIP_CHECK(deviceFree(A.d_send_buffer));
 
-  if(A.halo_row_ind) HIP_CHECK(hipFree(A.halo_row_ind));
-  if(A.halo_col_ind) HIP_CHECK(hipFree(A.halo_col_ind));
-  if(A.halo_val) HIP_CHECK(hipFree(A.halo_val));
+  if(A.halo_row_ind) HIP_CHECK(deviceFree(A.halo_row_ind));
+  if(A.halo_col_ind) HIP_CHECK(deviceFree(A.halo_col_ind));
+  if(A.halo_val) HIP_CHECK(deviceFree(A.halo_val));
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}
   if (A.Ac!=0) { DeleteMatrix(*A.Ac); delete A.Ac; A.Ac = 0;} // Delete coarse matrix
   if (A.mgData!=0) { DeleteMGData(*A.mgData); delete A.mgData; A.mgData = 0;} // Delete MG data
 
-  HIP_CHECK(hipFree(A.ell_col_ind));
-  HIP_CHECK(hipFree(A.ell_val));
-  HIP_CHECK(hipFree(A.diag_idx));
-  HIP_CHECK(hipFree(A.inv_diag));
-  HIP_CHECK(hipFree(A.perm));
+  HIP_CHECK(deviceFree(A.ell_col_ind));
+  HIP_CHECK(deviceFree(A.ell_val));
+  HIP_CHECK(deviceFree(A.diag_idx));
+  HIP_CHECK(deviceFree(A.inv_diag));
+  HIP_CHECK(deviceFree(A.perm));
 
   delete[] A.sizes;
   delete[] A.offsets;

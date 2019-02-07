@@ -47,6 +47,7 @@ set(SOURCE
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
   GenerateGeometry.cpp
+  Memory.cpp
   MixedBaseCounter.cpp
   OptimizeProblem.cpp
   OutputFile.cpp

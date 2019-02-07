@@ -59,10 +59,14 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   Vector origDiagA, exaggeratedDiagA, origB;
   InitializeVector(origDiagA, A.localNumberOfRows);
   InitializeVector(exaggeratedDiagA, A.localNumberOfRows);
-  InitializeVector(origB, A.localNumberOfRows);
+  HIPInitializeVector(origDiagA, A.localNumberOfRows);
+  HIPInitializeVector(exaggeratedDiagA, A.localNumberOfRows);
+  HIPInitializeVector(origB, A.localNumberOfRows);
   CopyMatrixDiagonal(A, origDiagA);
   CopyVector(origDiagA, exaggeratedDiagA);
-  CopyVector(b, origB);
+  HIPCopyVector(b, origB);
+
+  // TODO on device
 
   // Modify the matrix diagonal to greatly exaggerate diagonal values.
   // CG should converge in about 10 iterations for this problem, regardless of problem size
@@ -97,7 +101,7 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     int expected_niters = testcg_data.expected_niters_no_prec;
     if (k==1) expected_niters = testcg_data.expected_niters_prec;
     for (int i=0; i< numberOfCgCalls; ++i) {
-      ZeroVector(x); // Zero out x
+      HIPZeroVector(x); // Zero out x
       int ierr = CG(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1, false);
       if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
       if (niters <= expected_niters) {
@@ -117,11 +121,13 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
 
   // Restore matrix diagonal and RHS
   ReplaceMatrixDiagonal(A, origDiagA);
-  CopyVector(origB, b);
+  HIPCopyVector(origB, b);
   // Delete vectors
   DeleteVector(origDiagA);
   DeleteVector(exaggeratedDiagA);
-  DeleteVector(origB);
+  HIPDeleteVector(origDiagA);
+  HIPDeleteVector(exaggeratedDiagA);
+  HIPDeleteVector(origB);
   testcg_data.normr = normr;
 
   return 0;

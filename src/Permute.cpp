@@ -186,8 +186,8 @@ void PermuteMatrix(SparseMatrix& A)
     local_int_t* tmp_cols;
     double* tmp_vals;
 
-    HIP_CHECK(hipMalloc((void**)&tmp_cols, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMalloc((void**)&tmp_vals, sizeof(double) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_cols, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_vals, sizeof(double) * m));
 
     for(local_int_t p = 0; p < A.ell_width; ++p)
     {
@@ -211,8 +211,8 @@ void PermuteMatrix(SparseMatrix& A)
                            A.ell_val);
     }
 
-    HIP_CHECK(hipFree(tmp_cols));
-    HIP_CHECK(hipFree(tmp_vals));
+    HIP_CHECK(deviceFree(tmp_cols));
+    HIP_CHECK(deviceFree(tmp_vals));
 
     // Sort each row by column index
 #define SORT_DIM_X 32
@@ -231,7 +231,7 @@ void PermuteMatrix(SparseMatrix& A)
 #undef SORT_DIM_Y
 
     // Extract diagonal index
-    HIP_CHECK(hipMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
 
     hipLaunchKernelGGL((kernel_extract_diag_index),
                        dim3((m - 1) / 1024 + 1),
@@ -263,7 +263,7 @@ __global__ void kernel_permute(local_int_t size,
 void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
 {
     double* buffer;
-    HIP_CHECK(hipMalloc((void**)&buffer, sizeof(double) * v.localLength));
+    HIP_CHECK(deviceMalloc((void**)&buffer, sizeof(double) * v.localLength));
 
     hipLaunchKernelGGL((kernel_permute),
                        dim3((size - 1) / 1024 + 1),
@@ -275,6 +275,6 @@ void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
                        v.d_values,
                        buffer);
 
-    HIP_CHECK(hipFree(v.d_values));
+    HIP_CHECK(deviceFree(v.d_values));
     v.d_values = buffer;
 }

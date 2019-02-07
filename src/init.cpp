@@ -48,6 +48,7 @@ const char* NULLDEVICE="/dev/null";
 hipStream_t stream_interior;
 hipStream_t stream_halo;
 void* workspace;
+hipAllocator_t allocator;
 #ifdef __HIP_PLATFORM_HCC__
 hiprandGenerator_t rng;
 #else
@@ -178,9 +179,6 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   HIP_CHECK(hipStreamCreate(&stream_interior));
   HIP_CHECK(hipStreamCreate(&stream_halo));
 
-  // Allocate device workspace
-  HIP_CHECK(hipMalloc((void**)&workspace, 1 << 23));
-
   // Initialize random number generator
 #ifdef __HIP_PLATFORM_HCC__
   hiprandCreateGenerator(&rng, HIPRAND_RNG_PSEUDO_DEFAULT);
@@ -189,6 +187,15 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT);
   curandSetPseudoRandomGeneratorSeed(rng, RNG_SEED);
 #endif
+
+  // Initialize memory allocator
+  size_t free_mem;
+  size_t total_mem;
+  hipMemGetInfo(&free_mem, &total_mem);
+  HIP_CHECK(allocator.Initialize(free_mem * 0.9));
+
+  // Allocate device workspace
+  HIP_CHECK(deviceMalloc((void**)&workspace, sizeof(local_int_t) * 1024));
 
 #ifdef HPCG_NO_OPENMP
   params.numThreads = 1;

@@ -396,18 +396,19 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     global_int_t totalNumberOfRows = gnx * gny * gnz;
     assert(totalNumberOfRows > 0);
 
-    // Allocate structures
-    HIP_CHECK(deviceMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, sizeof(global_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(deviceMalloc((void**)&A.d_localToGlobalMap, sizeof(global_int_t) * localNumberOfRows));
-    HIP_CHECK(deviceMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));
-    HIP_CHECK(deviceMalloc((void**)&A.d_rowHash, sizeof(local_int_t) * localNumberOfRows));
-
     // Allocate vectors
     if(b != NULL) HIPInitializeVector(*b, localNumberOfRows);
     if(x != NULL) HIPInitializeVector(*x, localNumberOfRows);
     if(xexact != NULL) HIPInitializeVector(*xexact, localNumberOfRows);
+
+    // Allocate structures
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, sizeof(global_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_localToGlobalMap, sizeof(global_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&A.d_rowHash, sizeof(local_int_t) * localNumberOfRows));
 
     // Determine blocksize
     unsigned int blocksize = 512 / numberOfNonzerosPerRow;
@@ -537,10 +538,7 @@ void CopyProblemToHost(SparseMatrix& A, Vector* b, Vector* x, Vector* xexact)
     HIP_CHECK(hipMemcpy(mtxDiag, A.d_matrixDiagonal, sizeof(local_int_t) * A.localNumberOfRows, hipMemcpyDeviceToHost));
     HIP_CHECK(hipMemcpy(A.localToGlobalMap.data(), A.d_localToGlobalMap, sizeof(global_int_t) * A.localNumberOfRows, hipMemcpyDeviceToHost));
 
-    // TODO put this in a std::thread
     HIP_CHECK(deviceFree(A.d_nonzerosInRow));
-    HIP_CHECK(deviceFree(A.d_mtxIndG));
-    HIP_CHECK(deviceFree(A.d_matrixValues));
     HIP_CHECK(deviceFree(A.d_matrixDiagonal));
     HIP_CHECK(deviceFree(A.d_localToGlobalMap));
 

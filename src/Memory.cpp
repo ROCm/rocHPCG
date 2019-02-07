@@ -249,6 +249,19 @@ hipError_t deviceRealloc(void* ptr, size_t size)
     return allocator.Realloc(ptr, size);
 }
 
+hipError_t deviceDefrag(void** ptr, size_t size)
+{
+    void* defrag;
+
+    RETURN_IF_HIP_ERROR(deviceMalloc(&defrag, size));
+    RETURN_IF_HIP_ERROR(hipMemcpy(defrag, *ptr, size, hipMemcpyDeviceToDevice));
+    RETURN_IF_HIP_ERROR(deviceFree(*ptr));
+
+    *ptr = defrag;
+
+    return hipSuccess;
+}
+
 hipError_t deviceFree(void* ptr)
 {
     if(ptr == NULL)

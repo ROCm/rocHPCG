@@ -43,7 +43,7 @@ option(HPCG_REFERENCE "Build reference mode" OFF)
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.4.0.0 NO_GIT_TAG_VERSION)
+rocm_setup_version(VERSION 0.4.1.0 NO_GIT_TAG_VERSION)
 
 # AMD targets
 set(AMDGPU_TARGETS gfx900;gfx906 CACHE STRING "List of specific machine types for library to target")

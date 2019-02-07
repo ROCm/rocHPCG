@@ -70,6 +70,7 @@ class hipAllocator_t
 
 hipError_t deviceMalloc(void** ptr, size_t size);
 hipError_t deviceRealloc(void* ptr, size_t size);
+hipError_t deviceDefrag(void** ptr, size_t size);
 hipError_t deviceFree(void* ptr);
 
 #endif // MEMORY_HPP

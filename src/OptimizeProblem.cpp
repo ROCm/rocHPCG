@@ -53,16 +53,45 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     PermuteVector(A.localNumberOfRows, b, A.perm);
     PermuteVector(A.localNumberOfRows, xexact, A.perm);
 
-    SparseMatrix* M = A.Ac;
+    // Initialize CG structures
+    HIPInitializeSparseCGData(A, data);
 
     // Process all coarse level matrices
+    SparseMatrix* M = A.Ac;
+
     while(M != NULL)
     {
+        // Convert matrix to ELL format
         ConvertToELL(*M);
+
+        // Defrag matrix arrays
+        HIP_CHECK(deviceDefrag((void**)&M->ell_col_ind, sizeof(local_int_t) * M->ell_width * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->ell_val, sizeof(double) * M->ell_width * M->localNumberOfRows));
+
+        // Perform matrix coloring
         JPLColoring(*M);
+
+        // Permute matrix accordingly
         PermuteMatrix(*M);
 
+        // Go to next level in hierarchy
         M = M->Ac;
+    }
+
+    // Defrag hierarchy structures
+    M = &A;
+    MGData* mg = M->mgData;
+
+    while(mg != NULL)
+    {
+        M = M->Ac;
+
+        HIP_CHECK(deviceDefrag((void**)&mg->d_f2cOperator, sizeof(local_int_t) * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&mg->rc->d_values, sizeof(double) * mg->rc->localLength));
+        HIP_CHECK(deviceDefrag((void**)&mg->xc->d_values, sizeof(double) * mg->xc->localLength));
+        HIP_CHECK(deviceDefrag((void**)&mg->Axf->d_values, sizeof(double) * mg->Axf->localLength));
+
+        mg = M->mgData;
     }
 
     return 0;

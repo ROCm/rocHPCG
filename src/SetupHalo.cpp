@@ -228,9 +228,6 @@ void SetupHalo(SparseMatrix& A)
         blocksize >>= 1;
     }
 
-    // Allocate local matrix column index array
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow));
-
 #ifdef HPCG_NO_MPI
     hipLaunchKernelGGL((kernel_copy_indices),
                        dim3((A.localNumberOfRows - 1) / blocksize + 1),
@@ -242,6 +239,21 @@ void SetupHalo(SparseMatrix& A)
                        A.d_mtxIndG,
                        A.d_mtxIndL);
 #else
+    if(A.geom->size == 1)
+    {
+        hipLaunchKernelGGL((kernel_copy_indices),
+                           dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                           dim3(A.numberOfNonzerosPerRow, blocksize),
+                           0,
+                           0,
+                           A.localNumberOfRows,
+                           A.d_nonzerosInRow,
+                           A.d_mtxIndG,
+                           A.d_mtxIndL);
+
+        return;
+    }
+
     // Local dimensions in x, y and z direction
     local_int_t nx = A.geom->nx;
     local_int_t ny = A.geom->ny;
@@ -556,6 +568,7 @@ void SetupHalo(SparseMatrix& A)
         // Perform inclusive sum to obtain the offsets to the first halo entry of each row
         HIP_CHECK(hipcub::DeviceScan::InclusiveSum(hipcub_buffer, hipcub_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries));
         HIP_CHECK(deviceFree(hipcub_buffer));
+        hipcub_buffer = NULL;
 
         // Launch kernel to fill all halo columns in the local matrix column index array for the i-th neighbor
         hipLaunchKernelGGL((kernel_halo_columns),
@@ -569,9 +582,6 @@ void SetupHalo(SparseMatrix& A)
                            d_haloList[i],
                            d_offsets,
                            A.d_mtxIndL);
-
-        // Free up data
-//        HIP_CHECK(deviceFree(d_offsets));
 
         // Increase the number of external values by i-th neighbors halo entry contributions
         A.numberOfExternalValues += currentRankHaloEntries;

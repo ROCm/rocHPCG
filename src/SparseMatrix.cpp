@@ -152,31 +152,27 @@ __global__ void kernel_to_ell_col(local_int_t m,
 __global__ void kernel_to_ell_val(local_int_t m,
                                   local_int_t nnz_per_row,
                                   const local_int_t* __restrict__ ell_col_ind,
-//                                  const double* __restrict__ matrixValues,
+                                  const double* __restrict__ matrixValues,
                                   double* __restrict__ ell_val,
                                   double* __restrict__ inv_diag)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
 
     if(row >= m)
     {
         return;
     }
 
-    for(int p = 0; p < nnz_per_row; ++p)
+    local_int_t idx = hipThreadIdx_x * m + row;
+    local_int_t col = ell_col_ind[idx];
+    double val = matrixValues[row * nnz_per_row + hipThreadIdx_x];
+
+    if(row == col)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
-        double val = -1.0;//matrixValues[row * nnz_per_row + p];
-
-        if(row == col)
-        {
-            val = 26.0;
-            inv_diag[row] = 1. / val;
-        }
-
-        ell_val[idx] = val;
+        inv_diag[row] = 1.0 / val;
     }
+
+    ell_val[idx] = val;
 }
 
 __global__ void kernel_to_halo(local_int_t halo_rows,
@@ -222,9 +218,15 @@ __global__ void kernel_to_halo(local_int_t halo_rows,
 
 void ConvertToELL(SparseMatrix& A)
 {
+    // We can re-use mtxIndG array for the ELL column indices
+    A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_mtxIndG);
+    A.d_mtxIndG = NULL;
+
+    // Resize the array
+    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
+
     // Convert mtxIndL into ELL column indices
     HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
-    HIP_CHECK(deviceMalloc((void**)&A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
 
     local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
 
@@ -234,10 +236,27 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
 #endif
 
+    // Determine blocksize
+    unsigned int blocksize = 1024 / A.ell_width;
+
+    // Compute next power of two
+    blocksize |= blocksize >> 1;
+    blocksize |= blocksize >> 2;
+    blocksize |= blocksize >> 4;
+    blocksize |= blocksize >> 8;
+    blocksize |= blocksize >> 16;
+    ++blocksize;
+
+    // Shift right until we obtain a valid blocksize
+    while(blocksize * A.ell_width > 1024)
+    {
+        blocksize >>= 1;
+    }
+
     hipLaunchKernelGGL((kernel_to_ell_col),
-                       dim3((A.localNumberOfRows - 1) / 16 + 1),
-                       dim3(A.ell_width, 16),
-                       sizeof(bool) * 16,
+                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                       dim3(A.ell_width, blocksize),
+                       sizeof(bool) * blocksize,
                        0,
                        A.localNumberOfRows,
                        A.ell_width,
@@ -246,7 +265,27 @@ void ConvertToELL(SparseMatrix& A)
                        d_halo_rows,
                        A.halo_row_ind);
 
-    HIP_CHECK(deviceFree(A.d_mtxIndL));
+    // We can re-use mtxIndL array for ELL values
+    A.ell_val = reinterpret_cast<double*>(A.d_mtxIndL);
+    A.d_mtxIndL = NULL;
+
+    // Resize
+    HIP_CHECK(deviceRealloc((void*)A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
+
+    hipLaunchKernelGGL((kernel_to_ell_val),
+                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                       dim3(A.ell_width, blocksize),
+                       0,
+                       0,
+                       A.localNumberOfRows,
+                       A.numberOfNonzerosPerRow,
+                       A.ell_col_ind,
+                       A.d_matrixValues,
+                       A.ell_val,
+                       A.inv_diag);
+
+    // Free old matrix values
+    HIP_CHECK(deviceFree(A.d_matrixValues));
 
 #ifndef HPCG_NO_MPI
     HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
@@ -269,23 +308,7 @@ void ConvertToELL(SparseMatrix& A)
                                                 A.halo_row_ind, // TODO inplace!
                                                 A.halo_rows));
     HIP_CHECK(deviceFree(hipcub_buffer));
-#endif
 
-    HIP_CHECK(deviceMalloc((void**)&A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
-
-    hipLaunchKernelGGL((kernel_to_ell_val),
-                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.numberOfNonzerosPerRow,
-                       A.ell_col_ind,
-//                       A.d_matrixValues,
-                       A.ell_val,
-                       A.inv_diag);
-
-#ifndef HPCG_NO_MPI
     hipLaunchKernelGGL((kernel_to_halo),
                        dim3((A.halo_rows - 1) / 128 + 1),
                        dim3(128),

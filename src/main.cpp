@@ -279,8 +279,6 @@ int main(int argc, char * argv[]) {
   if (geom->size == 1) WriteProblem(*geom, A, b, x, xexact);
 #endif
 
-  HIPInitializeSparseCGData(A, data);
-
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////

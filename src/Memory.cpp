@@ -161,7 +161,7 @@ hipError_t hipAllocator_t::Realloc(void* ptr, size_t size)
 
     while(true)
     {
-        if(it != this->objects_.end())
+        if(it == this->objects_.end())
         {
             return hipErrorInvalidDevicePointer;
         }

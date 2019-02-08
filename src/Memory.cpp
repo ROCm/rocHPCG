@@ -54,7 +54,7 @@ hipError_t hipAllocator_t::Clear(void)
 hipError_t hipAllocator_t::Alloc(void** ptr, size_t size)
 {
     // Align by 2MB
-    size = ((size - 1) / (2 << 21) + 1) * (2 << 21);
+    size = ((size - 1) / (1 << 21) + 1) * (1 << 21);
 
     // Check if sufficient free memory available
     if(this->free_mem_ < size)
@@ -150,7 +150,7 @@ hipError_t hipAllocator_t::Alloc(void** ptr, size_t size)
 hipError_t hipAllocator_t::Realloc(void* ptr, size_t size)
 {
     // Align by 2MB
-    size = ((size - 1) / (2 << 21) + 1) * (2 << 21);
+    size = ((size - 1) / (1 << 21) + 1) * (1 << 21);
 
     std::list<hipMemObject_t*>::iterator it = this->objects_.begin();
 

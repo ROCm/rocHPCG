@@ -21,10 +21,33 @@ hipAllocator_t::~hipAllocator_t(void)
     this->Clear();
 }
 
-hipError_t hipAllocator_t::Initialize(size_t size)
+hipError_t hipAllocator_t::Initialize(int rank,
+                                      int nprocs,
+                                      local_int_t nx,
+                                      local_int_t ny,
+                                      local_int_t nz)
 {
-    RETURN_IF_HIP_ERROR(hipMalloc((void**)&this->buffer_, size));
+    this->rank_ = rank;
 
+    size_t size = this->ComputeMaxMemoryRequirements_(nprocs, nx, ny, nz);
+
+    size_t free_mem;
+    size_t total_mem;
+    hipMemGetInfo(&free_mem, &total_mem);
+
+    if(size > free_mem)
+    {
+        if(rank == 0)
+        {
+            fprintf(stderr, "Insufficient memory. Requesting %lu MB (%lu MB currently available)\n",
+                    size >> 20,
+                    free_mem >> 20);
+        }
+
+        return hipErrorMemoryAllocation;
+    }
+
+    RETURN_IF_HIP_ERROR(hipMalloc((void**)&this->buffer_, size));
     this->total_mem_ = size;
     this->free_mem_ = size;
 
@@ -214,6 +237,129 @@ hipError_t hipAllocator_t::Free(void* ptr)
     }
 
     return hipSuccess;
+}
+
+size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
+                                                     local_int_t nx,
+                                                     local_int_t ny,
+                                                     local_int_t nz) const
+{
+    local_int_t m = nx * ny * nz;
+    int numberOfMgLevels = 4;
+
+    // Alignment
+    size_t align = 1 << 21;
+
+    // rhs, initial guess and exact solution vectors
+    size_t size = ((sizeof(double) * m - 1) / align + 1) * align * 3;
+
+    // Workspace
+    size += align;
+
+    // Matrix data on finest level
+
+    // mtxIndL and matrixValues
+    size += ((sizeof(double) * 27 * m - 1) / align + 1) * align * 2;
+
+    // mtxIndG
+    size += ((sizeof(global_int_t) * 27 * m - 1) / align + 1) * align;
+
+    // nonzerosInRow
+    size += ((sizeof(char) * m - 1) / align + 1) * align;
+
+    // localToGlobalMap
+    size += ((sizeof(global_int_t) * m - 1) / align + 1) * align;
+
+    // matrixDiagonal, rowHash
+    size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 2;
+
+#ifndef HPCG_NO_MPI
+    // Determine two largest dimensions
+    local_int_t max_dim_1 = std::max(nx, std::max(ny, nz));
+    local_int_t max_dim_2 = ((nx >= ny && nx <= nz) || (nx >= nz && nx <= ny)) ? nx
+                          : ((ny >= nz && ny <= nx) || (ny >= nx && ny <= nz)) ? ny
+                          : nz;
+    local_int_t max_sending  = (std::min(nprocs, 27) - 1) * max_dim_1 * max_dim_2;
+    local_int_t max_boundary = 27 * (6 * max_dim_1 * max_dim_2 + 12 * max_dim_1 + 8);
+    local_int_t max_elements = std::min(max_sending, max_boundary);
+
+    // send_buffer
+    size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
+
+    // elementsToSend
+    size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+
+    // halo_row_ind
+    size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+
+    // halo_col_ind
+    size += ((sizeof(local_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+
+    // halo_val
+    size += ((sizeof(double) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+#endif
+
+    // Multigrid hierarchy
+    for(int i = 1; i < numberOfMgLevels; ++i)
+    {
+        // Axf
+        size += ((sizeof(double) * m - 1) / align + 1) * align;
+
+#ifndef HPCG_NO_MPI
+        // Extend Axf
+        size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
+#endif
+
+        // New dimension
+        m /= 8;
+
+        // mtxIndL and matrixValues
+        size += ((sizeof(double) * 27 * m - 1) / align + 1) * align * 2;
+
+        // mtxIndG
+        size += ((sizeof(global_int_t) * 27 * m - 1) / align + 1) * align;
+
+        // nonzerosInRow
+        size += ((sizeof(char) * m - 1) / align + 1) * align;
+
+        // localToGlobalMap
+        size += ((sizeof(global_int_t) * m - 1) / align + 1) * align;
+
+        // matrixDiagonal, rowHash, f2cOperator
+        size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 3;
+
+        // rc, xc
+        size += ((sizeof(double) * m - 1) / align + 1) * align * 2;
+
+#ifndef HPCG_NO_MPI
+        // New dimensions
+        max_dim_1 /= 2;
+        max_dim_2 /= 2;
+        max_sending  = (std::min(nprocs, 27) - 1) * max_dim_1 * max_dim_2;
+        max_boundary = 27 * (6 * max_dim_1 * max_dim_2 + 12 * max_dim_1 + 8);
+        max_elements = std::min(max_sending, max_boundary);
+
+        // send_buffer
+        size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
+
+        // elementsToSend
+        size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+
+        // halo_row_ind
+        size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+
+        // halo_col_ind
+        size += ((sizeof(local_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+
+        // halo_val
+        size += ((sizeof(double) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+
+        // Extend xc
+        size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
+#endif
+    }
+
+    return size;
 }
 
 hipError_t deviceMalloc(void** ptr, size_t size)

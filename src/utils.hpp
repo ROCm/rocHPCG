@@ -52,13 +52,6 @@ extern curandGenerator_t rng;
                 __FILE__,                                           \
                 __LINE__);                                          \
                                                                     \
-        size_t free_mem;                                            \
-        size_t total_mem;                                           \
-        hipMemGetInfo(&free_mem, &total_mem);                       \
-                                                                    \
-        fprintf(stderr, "%lu (%lu) MByte\n",                        \
-                free_mem >> 20, total_mem >> 20);                   \
-                                                                    \
         hipDeviceReset();                                           \
         exit(1);                                                    \
     }                                                               \

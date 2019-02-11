@@ -26,6 +26,8 @@
 #include <string>
 #include <hip/hip_runtime_api.h>
 
+#include "Geometry.hpp"
+
 struct hipMemObject_t
 {
     size_t size;
@@ -39,7 +41,11 @@ class hipAllocator_t
     hipAllocator_t(void);
     ~hipAllocator_t(void);
 
-    hipError_t Initialize(size_t size);
+    hipError_t Initialize(int rank,
+                          int nprocs,
+                          local_int_t nx,
+                          local_int_t ny,
+                          local_int_t nz);
     hipError_t Clear(void);
 
     hipError_t Alloc(void** ptr, size_t size);
@@ -51,6 +57,15 @@ class hipAllocator_t
     inline size_t GetTotalMemory(void) const { return this->total_mem_; }
 
     private:
+
+    // Current rank
+    int rank_;
+
+    // Returns the maximum memory requirements
+    size_t ComputeMaxMemoryRequirements_(int nprocs,
+                                         local_int_t nx,
+                                         local_int_t ny,
+                                         local_int_t nz) const;
 
     // Total memory size
     size_t total_mem_;

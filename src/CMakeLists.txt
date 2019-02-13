@@ -29,6 +29,7 @@ set(HIP_SOURCE
   Permute.cpp
   SetupHalo.cpp
   SparseMatrix.cpp
+  TestCG.cpp
 )
 
 # HPCG sources
@@ -53,7 +54,6 @@ set(SOURCE
   OutputFile.cpp
   ReadHpcgDat.cpp
   ReportResults.cpp
-  TestCG.cpp
   TestNorms.cpp
   TestSymmetry.cpp
   WriteProblem.cpp

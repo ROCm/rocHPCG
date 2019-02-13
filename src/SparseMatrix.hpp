@@ -280,6 +280,7 @@ inline void DeleteMatrix(SparseMatrix & A) {
   HIP_CHECK(deviceFree(A.diag_idx));
   HIP_CHECK(deviceFree(A.inv_diag));
   HIP_CHECK(deviceFree(A.perm));
+  HIP_CHECK(deviceFree(A.d_localToGlobalMap));
 
   delete[] A.sizes;
   delete[] A.offsets;

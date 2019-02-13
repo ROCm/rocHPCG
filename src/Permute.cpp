@@ -23,11 +23,13 @@
 
 #include <hip/hip_runtime.h>
 
-__global__ void kernel_extract_diag_index(local_int_t m,
-                                          local_int_t n,
-                                          local_int_t ell_width,
-                                          const local_int_t* ell_col_ind,
-                                          local_int_t* diag_idx)
+__global__ void kernel_permute_ell_rows(local_int_t m,
+                                        local_int_t p,
+                                        const local_int_t* tmp_cols,
+                                        const double* tmp_vals,
+                                        const local_int_t* perm,
+                                        local_int_t* ell_col_ind,
+                                        double* ell_val)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -36,35 +38,27 @@ __global__ void kernel_extract_diag_index(local_int_t m,
         return;
     }
 
-    for(local_int_t p = 0; p < ell_width; ++p)
-    {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+    local_int_t idx = p * m + perm[row];
+    local_int_t col = tmp_cols[row];
 
-        if(col == row)
-        {
-            diag_idx[row] = p;
-            break;
-        }
-    }
+    ell_col_ind[idx] = col;
+    ell_val[idx] = tmp_vals[row];
 }
 
 __device__ void swap(local_int_t& key, double& val, int mask, int dir)
 {
 #if defined(__HIP_PLATFORM_HCC__)
     local_int_t key1 = __shfl_xor(key, mask);
+    double val1 = __shfl_xor(val, mask);
 #elif defined(__HIP_PLATFORM_NVCC__)
     local_int_t key1 = __shfl_xor_sync(0xffffffff, key, mask);
+    double val1 = __shfl_xor_sync(0xffffffff, val, mask);
 #endif
 
     if(key < key1 == dir)
     {
         key = key1;
-#if defined(__HIP_PLATFORM_HCC__)
-        val = __shfl_xor(val, mask);
-#elif defined(__HIP_PLATFORM_NVCC__)
-        val = __shfl_xor_sync(0xffffffff, val, mask);
-#endif
+        val = val1;
     }
 }
 
@@ -73,36 +67,32 @@ __device__ int get_bit(int x, int i)
     return (x >> i) & 1;
 }
 
-__global__ void kernel_sort_ell_rows(local_int_t m,
-                                     local_int_t n,
-                                     local_int_t ell_width,
-                                     local_int_t* ell_col_ind,
-                                     double* ell_val)
+__global__ void kernel_perm_cols(local_int_t m,
+                                 local_int_t n,
+                                 local_int_t nonzerosPerRow,
+                                 const local_int_t* perm,
+                                 local_int_t* mtxIndL,
+                                 double* matrixValues)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-
-    extern __shared__ char sdata[];
-
-    local_int_t* skey = reinterpret_cast<local_int_t*>(sdata);
-    double* sval = reinterpret_cast<double*>(sdata + sizeof(local_int_t) * hipBlockDim_x * hipBlockDim_x);
-
-    local_int_t idx = hipThreadIdx_y * m + row;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t idx = row * nonzerosPerRow + hipThreadIdx_x;
     local_int_t key = n;
     double val = 0.0;
 
-    if(hipThreadIdx_y < ell_width && row < m)
+    if(hipThreadIdx_x < nonzerosPerRow && row < m)
     {
-        key = ell_col_ind[idx];
-        val = ell_val[idx];
+        local_int_t col = mtxIndL[idx];
+        val = matrixValues[idx];
+
+        if(col >= 0 && col < m)
+        {
+            key = perm[col];
+        }
+        else if(col >= m && col < n)
+        {
+            key = col;
+        }
     }
-
-    skey[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y] = key;
-    sval[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y] = val;
-
-    __syncthreads();
-
-    key = skey[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x];
-    val = sval[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x];
 
     swap(key, val, 1, get_bit(hipThreadIdx_x, 1) ^ get_bit(hipThreadIdx_x, 0));
 
@@ -124,71 +114,68 @@ __global__ void kernel_sort_ell_rows(local_int_t m,
     swap(key, val,  2, get_bit(hipThreadIdx_x, 1));
     swap(key, val,  1, get_bit(hipThreadIdx_x, 0));
 
-    skey[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x] = key;
-    sval[hipThreadIdx_y * hipBlockDim_x + hipThreadIdx_x] = val;
-
-    __syncthreads();
-
-    key = skey[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y];
-    val = sval[hipThreadIdx_x * hipBlockDim_x + hipThreadIdx_y];
-
-    if(hipThreadIdx_y < ell_width && row < m)
+    if(hipThreadIdx_x < nonzerosPerRow && row < m)
     {
-        ell_col_ind[idx] = (key == n) ? -1 : key;
-        ell_val[idx] = val;
+        mtxIndL[idx] = (key == n) ? -1 : key;
+        matrixValues[idx] = val;
     }
 }
 
-__global__ void kernel_permute_ell_column(local_int_t m,
-                                          local_int_t n,
-                                          local_int_t p,
-                                          const local_int_t* tmp_cols,
-                                          const double* tmp_vals,
-                                          const local_int_t* perm,
-                                          local_int_t* ell_col_ind,
-                                          double* ell_val)
+void PermuteColumns(SparseMatrix& A)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    // Determine blocksize in x direction
+    unsigned int dim_x = A.numberOfNonzerosPerRow;
 
-    if(row >= m)
+    // Compute next power of two
+    dim_x |= dim_x >> 1;
+    dim_x |= dim_x >> 2;
+    dim_x |= dim_x >> 4;
+    dim_x |= dim_x >> 8;
+    dim_x |= dim_x >> 16;
+    ++dim_x;
+
+    // Determine blocksize
+    unsigned int dim_y = 512 / dim_x;
+
+    // Compute next power of two
+    dim_y |= dim_y >> 1;
+    dim_y |= dim_y >> 2;
+    dim_y |= dim_y >> 4;
+    dim_y |= dim_y >> 8;
+    dim_y |= dim_y >> 16;
+    ++dim_y;
+
+    // Shift right until we obtain a valid blocksize
+    while(dim_x * dim_y > 512)
     {
-        return;
+        dim_y >>= 1;
     }
 
-    local_int_t idx = p * m + perm[row];
-    local_int_t col = tmp_cols[row];
-
-    if(col >= 0 && col < m)
-    {
-        ell_col_ind[idx] = perm[col];
-        ell_val[idx] = tmp_vals[row];
-    }
-    else
-    {
-        if(col >= m && col < n)
-        {
-            ell_col_ind[idx] = col;
-            ell_val[idx] = tmp_vals[row];
-        }
-        else
-        {
-            ell_col_ind[idx] = n;
-            ell_val[idx] = 0.0;
-        }
-    }
+    hipLaunchKernelGGL((kernel_perm_cols),
+                       dim3((A.localNumberOfRows - 1) / dim_y + 1),
+                       dim3(dim_x, dim_y),
+                       0,
+                       0,
+                       A.localNumberOfRows,
+                       A.localNumberOfColumns,
+                       A.numberOfNonzerosPerRow,
+                       A.perm,
+                       A.d_mtxIndL,
+                       A.d_matrixValues);
 }
 
-void PermuteMatrix(SparseMatrix& A)
+void PermuteRows(SparseMatrix& A)
 {
     local_int_t m = A.localNumberOfRows;
-    local_int_t n = A.localNumberOfColumns;
 
+    // Temporary structures for row permutation
     local_int_t* tmp_cols;
     double* tmp_vals;
 
     HIP_CHECK(deviceMalloc((void**)&tmp_cols, sizeof(local_int_t) * m));
     HIP_CHECK(deviceMalloc((void**)&tmp_vals, sizeof(double) * m));
 
+    // Permute ELL rows
     for(local_int_t p = 0; p < A.ell_width; ++p)
     {
         local_int_t offset = p * m;
@@ -196,13 +183,12 @@ void PermuteMatrix(SparseMatrix& A)
         HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(local_int_t) * m, hipMemcpyDeviceToDevice));
         HIP_CHECK(hipMemcpy(tmp_vals, A.ell_val + offset, sizeof(double) * m, hipMemcpyDeviceToDevice));
 
-        hipLaunchKernelGGL((kernel_permute_ell_column),
+        hipLaunchKernelGGL((kernel_permute_ell_rows),
                            dim3((m - 1) / 1024 + 1),
                            dim3(1024),
                            0,
                            0,
                            m,
-                           n,
                            p,
                            tmp_cols,
                            tmp_vals,
@@ -213,36 +199,6 @@ void PermuteMatrix(SparseMatrix& A)
 
     HIP_CHECK(deviceFree(tmp_cols));
     HIP_CHECK(deviceFree(tmp_vals));
-
-    // Sort each row by column index
-#define SORT_DIM_X 32
-#define SORT_DIM_Y 32
-    hipLaunchKernelGGL((kernel_sort_ell_rows),
-                       dim3((m - 1) / SORT_DIM_X + 1),
-                       dim3(SORT_DIM_X, SORT_DIM_Y),
-                       (sizeof(local_int_t) + sizeof(double)) * SORT_DIM_X * SORT_DIM_Y,
-                       0,
-                       m,
-                       n,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val);
-#undef SORT_DIM_X
-#undef SORT_DIM_Y
-
-    // Extract diagonal index
-    HIP_CHECK(deviceMalloc((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
-
-    hipLaunchKernelGGL((kernel_extract_diag_index),
-                       dim3((m - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       m,
-                       n,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.diag_idx);
 }
 
 __global__ void kernel_permute(local_int_t size,

@@ -402,9 +402,9 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     if(xexact != NULL) HIPInitializeVector(*xexact, localNumberOfRows);
 
     // Allocate structures
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, sizeof(global_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, std::max(sizeof(double), sizeof(global_int_t)) * localNumberOfRows * numberOfNonzerosPerRow));
     HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
     HIP_CHECK(deviceMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
     HIP_CHECK(deviceMalloc((void**)&A.d_localToGlobalMap, sizeof(global_int_t) * localNumberOfRows));
     HIP_CHECK(deviceMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));

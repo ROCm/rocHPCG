@@ -125,11 +125,24 @@ __global__ void kernel_jpl(local_int_t m,
                            const local_int_t* hash,
                            int color1,
                            int color2,
-                           local_int_t ell_width,
-                           const local_int_t* __restrict__ ell_col_ind,
+                           const char* nonzerosInRow,
+                           const local_int_t* __restrict__ mtxIndL,
                            local_int_t* __restrict__ colors)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+
+    extern __shared__ bool sdata[];
+    bool* min = &sdata[0];
+    bool* max = &sdata[hipBlockDim_y];
+
+    // Assume current vertex is maximum
+    if(hipThreadIdx_x == 0)
+    {
+        min[hipThreadIdx_y] = true;
+        max[hipThreadIdx_y] = true;
+    }
+
+    __syncthreads();
 
     if(row >= m)
     {
@@ -142,64 +155,58 @@ __global__ void kernel_jpl(local_int_t m,
         return;
     }
 
-    // Assume current vertex is maximum
-    bool max = true;
-    bool min = true;
-
     // Get row hash value
     local_int_t row_hash = hash[row];
 
-    for(int p = 0; p < ell_width; ++p)
-    {
-        local_int_t idx = p * m + row;
+    local_int_t idx = row * hipBlockDim_x + hipThreadIdx_x;
 #if defined(__HIP_PLATFORM_HCC__)
-        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+    local_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
 #elif defined(__HIP_PLATFORM_NVCC__)
-        local_int_t col = ell_col_ind[idx];
+    local_int_t col = mtxIndL[idx];
 #endif
 
-        if(col >= 0 && col < m)
+    if(col >= 0 && col < m)
+    {
+        // Skip diagonal
+        if(col != row)
         {
-            // Skip diagonal
-            if(col == row)
-            {
-                continue;
-            }
-
             // Get neighbors color
             int color_nb = __ldg(colors + col);
 
             // Compare only with uncolored neighbors
-            if(color_nb != -1 && color_nb != color1 && color_nb != color2)
+            if(color_nb == -1 || color_nb == color1 || color_nb == color2)
             {
-                continue;
-            }
+                // Get column hash value
+                local_int_t col_hash = hash[col];
 
-            // Get column hash value
-            local_int_t col_hash = hash[col];
+                // If neighbor has larger weight, vertex is not a maximum
+                if(col_hash >= row_hash)
+                {
+                    max[hipThreadIdx_y] = false;
+                }
 
-            // If neighbor has larger weight, vertex is not a maximum
-            if(col_hash >= row_hash)
-            {
-                max = false;
-            }
-
-            // If neighbor has lesser weight, vertex is not a minimum
-            if(col_hash <= row_hash)
-            {
-                min = false;
+                // If neighbor has lesser weight, vertex is not a minimum
+                if(col_hash <= row_hash)
+                {
+                    min[hipThreadIdx_y] = false;
+                }
             }
         }
     }
 
+    __syncthreads();
+
     // If vertex is a maximum, color it
-    if(max == true)
+    if(hipThreadIdx_x == 0)
     {
-        colors[row] = color1;
-    }
-    else if(min == true)
-    {
-        colors[row] = color2;
+        if(max[hipThreadIdx_y] == true)
+        {
+           colors[row] = color1;
+        }
+        else if(min[hipThreadIdx_y] == true)
+        {
+            colors[row] = color2;
+        }
     }
 }
 
@@ -228,6 +235,23 @@ void JPLColoring(SparseMatrix& A)
     A.offsets = new local_int_t[MAX_COLORS];
     A.offsets[0] = 0;
 
+    // Determine blocksize
+    unsigned int blocksize = 512 / A.numberOfNonzerosPerRow;
+
+    // Compute next power of two
+    blocksize |= blocksize >> 1;
+    blocksize |= blocksize >> 2;
+    blocksize |= blocksize >> 4;
+    blocksize |= blocksize >> 8;
+    blocksize |= blocksize >> 16;
+    ++blocksize;
+
+    // Shift right until we obtain a valid blocksize
+    while(blocksize * A.numberOfNonzerosPerRow > 512)
+    {
+        blocksize >>= 1;
+    }
+
     // Run Jones-Plassmann Luby algorithm until all vertices have been colored
     while(colored != m)
     {
@@ -236,16 +260,16 @@ void JPLColoring(SparseMatrix& A)
         int color2 = (A.nblocks < 8) ? rand() % 8 : A.nblocks + 1;
 
         hipLaunchKernelGGL((kernel_jpl),
-                           dim3((m - 1) / 256 + 1),
-                           dim3(256),
-                           0,
+                           dim3((m - 1) / blocksize + 1),
+                           dim3(A.numberOfNonzerosPerRow, blocksize),
+                           2 * sizeof(bool) * blocksize,
                            0,
                            m,
                            A.d_rowHash,
                            color1,
                            color2,
-                           A.ell_width,
-                           A.ell_col_ind,
+                           A.d_nonzerosInRow,
+                           A.d_mtxIndL,
                            A.perm);
 
         // Count colored vertices

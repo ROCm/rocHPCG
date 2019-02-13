@@ -151,10 +151,8 @@ __global__ void kernel_to_ell_col(local_int_t m,
 
 __global__ void kernel_to_ell_val(local_int_t m,
                                   local_int_t nnz_per_row,
-                                  const local_int_t* __restrict__ ell_col_ind,
                                   const double* __restrict__ matrixValues,
-                                  double* __restrict__ ell_val,
-                                  double* __restrict__ inv_diag)
+                                  double* __restrict__ ell_val)
 {
     local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
 
@@ -164,15 +162,7 @@ __global__ void kernel_to_ell_val(local_int_t m,
     }
 
     local_int_t idx = hipThreadIdx_x * m + row;
-    local_int_t col = ell_col_ind[idx];
-    double val = matrixValues[row * nnz_per_row + hipThreadIdx_x];
-
-    if(row == col)
-    {
-        inv_diag[row] = 1.0 / val;
-    }
-
-    ell_val[idx] = val;
+    ell_val[idx] = matrixValues[row * nnz_per_row + hipThreadIdx_x];
 }
 
 __global__ void kernel_to_halo(local_int_t halo_rows,
@@ -218,23 +208,12 @@ __global__ void kernel_to_halo(local_int_t halo_rows,
 
 void ConvertToELL(SparseMatrix& A)
 {
-    // We can re-use mtxIndG array for the ELL column indices
-    A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_mtxIndG);
+    // We can re-use mtxIndL array for ELL values
+    A.ell_val = reinterpret_cast<double*>(A.d_mtxIndG);
     A.d_mtxIndG = NULL;
 
-    // Resize the array
-    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
-
-    // Convert mtxIndL into ELL column indices
-    HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
-
-    local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
-
-#ifndef HPCG_NO_MPI
-    HIP_CHECK(deviceMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
-
-    HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
-#endif
+    // Resize
+    HIP_CHECK(deviceRealloc((void*)A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
 
     // Determine blocksize
     unsigned int blocksize = 1024 / A.ell_width;
@@ -253,10 +232,40 @@ void ConvertToELL(SparseMatrix& A)
         blocksize >>= 1;
     }
 
+    hipLaunchKernelGGL((kernel_to_ell_val),
+                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
+                       dim3(A.ell_width, blocksize),
+                       0,
+                       0,
+                       A.localNumberOfRows,
+                       A.numberOfNonzerosPerRow,
+                       A.d_matrixValues,
+                       A.ell_val);
+
+    // We can re-use mtxIndG array for the ELL column indices
+    A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_matrixValues);
+    A.d_matrixValues = NULL;
+
+    // Resize the array
+    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
+
+    // Convert mtxIndL into ELL column indices
+    local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
+
+#ifndef HPCG_NO_MPI
+    HIP_CHECK(deviceMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
+
+    HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
+#endif
+
     hipLaunchKernelGGL((kernel_to_ell_col),
                        dim3((A.localNumberOfRows - 1) / blocksize + 1),
                        dim3(A.ell_width, blocksize),
+#ifndef HPCG_NO_MPI
                        sizeof(bool) * blocksize,
+#else
+                       0,
+#endif
                        0,
                        A.localNumberOfRows,
                        A.ell_width,
@@ -265,27 +274,8 @@ void ConvertToELL(SparseMatrix& A)
                        d_halo_rows,
                        A.halo_row_ind);
 
-    // We can re-use mtxIndL array for ELL values
-    A.ell_val = reinterpret_cast<double*>(A.d_mtxIndL);
-    A.d_mtxIndL = NULL;
-
-    // Resize
-    HIP_CHECK(deviceRealloc((void*)A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
-
-    hipLaunchKernelGGL((kernel_to_ell_val),
-                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                       dim3(A.ell_width, blocksize),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.numberOfNonzerosPerRow,
-                       A.ell_col_ind,
-                       A.d_matrixValues,
-                       A.ell_val,
-                       A.inv_diag);
-
-    // Free old matrix values
-    HIP_CHECK(deviceFree(A.d_matrixValues));
+    // Free old matrix indices
+    HIP_CHECK(deviceFree(A.d_mtxIndL));
 
 #ifndef HPCG_NO_MPI
     HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
@@ -324,4 +314,54 @@ void ConvertToELL(SparseMatrix& A)
                        A.halo_col_ind,
                        A.halo_val);
 #endif
+}
+
+__global__ void kernel_extract_diag_index(local_int_t m,
+                                          local_int_t ell_width,
+                                          const local_int_t* ell_col_ind,
+                                          const double* ell_val,
+                                          local_int_t* diag_idx,
+                                          double* inv_diag)
+{
+    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    for(local_int_t p = 0; p < ell_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = ell_col_ind[idx];
+
+        if(col == row)
+        {
+            diag_idx[row] = p;
+            inv_diag[row] = 1.0 / ell_val[idx];
+            break;
+        }
+    }
+}
+
+void ExtractDiagonal(SparseMatrix& A)
+{
+    local_int_t m = A.localNumberOfRows;
+
+    // Allocate memory to extract diagonal entries
+    HIP_CHECK(deviceMalloc((void**)&A.diag_idx, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * m));
+
+    // Extract diagonal entries
+    hipLaunchKernelGGL((kernel_extract_diag_index),
+                       dim3((m - 1) / 1024 + 1),
+                       dim3(1024),
+                       0,
+                       0,
+                       m,
+                       A.ell_width,
+                       A.ell_col_ind,
+                       A.ell_val,
+                       A.diag_idx,
+                       A.inv_diag);
 }

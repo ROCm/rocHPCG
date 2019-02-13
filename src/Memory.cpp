@@ -258,11 +258,14 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
 
     // Matrix data on finest level
 
-    // mtxIndL and matrixValues
-    size += ((sizeof(double) * 27 * m - 1) / align + 1) * align * 2;
+    // mtxIndL
+    size += ((sizeof(local_int_t) * 27 * m - 1) / align + 1) * align;
 
     // mtxIndG
-    size += ((sizeof(global_int_t) * 27 * m - 1) / align + 1) * align;
+    size += ((std::max(sizeof(global_int_t), sizeof(double)) * 27 * m - 1) / align + 1) * align;
+
+    // matrixValues
+    size += ((sizeof(double) * 27 * m - 1) / align + 1) * align;
 
     // nonzerosInRow
     size += ((sizeof(char) * m - 1) / align + 1) * align;
@@ -405,6 +408,11 @@ hipError_t deviceRealloc(void* ptr, size_t size)
 
 hipError_t deviceDefrag(void** ptr, size_t size)
 {
+    if(size == 0)
+    {
+        return hipSuccess;
+    }
+
 #if defined(DEFRAG_OPT) && defined(HPCG_MEMMGMT)
     void* defrag;
 

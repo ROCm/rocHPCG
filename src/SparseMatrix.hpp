@@ -193,6 +193,7 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
 }
 
 void ConvertToELL(SparseMatrix& A);
+void ExtractDiagonal(SparseMatrix& A);
 
 /*!
   Copy values from matrix diagonal into user-provided vector.

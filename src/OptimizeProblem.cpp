@@ -40,14 +40,31 @@
 */
 int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vector & xexact)
 {
-    // Convert matrix to ELL format
-    ConvertToELL(A);
-
     // Perform matrix coloring
     JPLColoring(A);
 
-    // Permute matrix accordingly
-    PermuteMatrix(A);
+    // Permute matrix columns
+    PermuteColumns(A);
+
+    // Convert matrix to ELL format
+    ConvertToELL(A);
+
+    // Defrag permutation vector
+    HIP_CHECK(deviceDefrag((void**)&A.perm, sizeof(local_int_t) * A.localNumberOfRows));
+
+    // Permute matrix rows
+    PermuteRows(A);
+
+    // Extract diagonal indices and inverse values
+    ExtractDiagonal(A);
+
+    // Defrag
+    HIP_CHECK(deviceDefrag((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+    HIP_CHECK(deviceDefrag((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
+#ifndef HPCG_NO_MPI
+    HIP_CHECK(deviceDefrag((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
+    HIP_CHECK(deviceDefrag((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
+#endif
 
     // Permute vectors
     PermuteVector(A.localNumberOfRows, b, A.perm);
@@ -61,18 +78,33 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
 
     while(M != NULL)
     {
-        // Convert matrix to ELL format
-        ConvertToELL(*M);
-
-        // Defrag matrix arrays
-        HIP_CHECK(deviceDefrag((void**)&M->ell_col_ind, sizeof(local_int_t) * M->ell_width * M->localNumberOfRows));
-        HIP_CHECK(deviceDefrag((void**)&M->ell_val, sizeof(double) * M->ell_width * M->localNumberOfRows));
-
         // Perform matrix coloring
         JPLColoring(*M);
 
-        // Permute matrix accordingly
-        PermuteMatrix(*M);
+        // Permute matrix columns
+        PermuteColumns(*M);
+
+        // Convert matrix to ELL format
+        ConvertToELL(*M);
+
+        // Defrag matrix arrays and permutation vector
+        HIP_CHECK(deviceDefrag((void**)&M->ell_col_ind, sizeof(local_int_t) * M->ell_width * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->ell_val, sizeof(double) * M->ell_width * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->perm, sizeof(local_int_t) * M->localNumberOfRows));
+
+        // Permute matrix rows
+        PermuteRows(*M);
+
+        // Extract diagonal indices and inverse values
+        ExtractDiagonal(*M);
+
+        // Defrag
+        HIP_CHECK(deviceDefrag((void**)&M->diag_idx, sizeof(local_int_t) * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->inv_diag, sizeof(double) * M->localNumberOfRows));
+#ifndef HPCG_NO_MPI
+        HIP_CHECK(deviceDefrag((void**)&M->d_send_buffer, sizeof(double) * M->totalToBeSent));
+        HIP_CHECK(deviceDefrag((void**)&M->d_elementsToSend, sizeof(local_int_t) * M->totalToBeSent));
+#endif
 
         // Go to next level in hierarchy
         M = M->Ac;

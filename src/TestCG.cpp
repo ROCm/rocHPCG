@@ -30,7 +30,7 @@
 #include <iostream>
 using std::endl;
 #include <vector>
-#include <hip/hip_runtime_api.h>
+#include <hip/hip_runtime.h>
 #include "hpcg.hpp"
 
 #include "TestCG.hpp"

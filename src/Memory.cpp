@@ -1,7 +1,7 @@
 #include "Memory.hpp"
 #include "utils.hpp"
 
-#include <cassert>
+#include <algorithm>
 #include <hip/hip_runtime_api.h>
 
 hipAllocator_t::hipAllocator_t(void)
@@ -30,6 +30,7 @@ hipError_t hipAllocator_t::Initialize(int rank,
     this->rank_ = rank;
 
     size_t size = this->ComputeMaxMemoryRequirements_(nprocs, nx, ny, nz);
+    size = std::max(size, 1UL << 27);
 
     size_t free_mem;
     size_t total_mem;

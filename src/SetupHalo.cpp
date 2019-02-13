@@ -352,7 +352,7 @@ void SetupHalo(SparseMatrix& A)
                        d_recv_indices,
                        d_halo_indices);
 
-    // Prefix sum to obtain send index offsets // TODO on device?
+    // Prefix sum to obtain send index offsets
     std::vector<local_int_t> nsend_per_rank(max_neighbors + 1);
     HIP_CHECK(hipMemcpy(nsend_per_rank.data() + 1,
                         d_nsend_per_rank,
@@ -372,7 +372,7 @@ void SetupHalo(SparseMatrix& A)
     // Array to hold number of entries that have to be sent to each process
     A.sendLength = new local_int_t[A.geom->size - 1];
 
-    // Allocate receive and send buffers on GPU and CPU // TODO can be smaller...
+    // Allocate receive and send buffers on GPU and CPU
     HIP_CHECK(hipHostMalloc((void**)&A.recv_buffer, sizeof(double) * A.totalToBeSent));
     HIP_CHECK(hipHostMalloc((void**)&A.send_buffer, sizeof(double) * A.totalToBeSent));
     HIP_CHECK(deviceMalloc((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
@@ -425,7 +425,7 @@ void SetupHalo(SparseMatrix& A)
     // Free up memory
     HIP_CHECK(deviceFree(d_send_indices));
 
-    // Prefix sum to obtain receive indices offsets (with duplicates) // TODO gpu scan?
+    // Prefix sum to obtain receive indices offsets (with duplicates)
     std::vector<local_int_t> nrecv_per_rank(max_neighbors + 1);
     HIP_CHECK(hipMemcpy(nrecv_per_rank.data() + 1,
                         d_nrecv_per_rank,

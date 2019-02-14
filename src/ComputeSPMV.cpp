@@ -43,11 +43,11 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
     }
 
 #if defined(__HIP_PLATFORM_HCC__)
-    local_int_t idx = __builtin_nontemporal_load(f2cOperator + gid);
-    local_int_t row = __builtin_nontemporal_load(perm + idx);
+    local_int_t f2c = __builtin_nontemporal_load(f2cOperator + gid);
+    local_int_t row = __builtin_nontemporal_load(perm + f2c);
 #elif defined(__HIP_PLATFORM_NVCC__)
-    local_int_t idx = f2cOperator[gid];
-    local_int_t row = perm[idx];
+    local_int_t f2c = f2cOperator[gid];
+    local_int_t row = perm[f2c];
 #endif
 
     double sum = 0.0;

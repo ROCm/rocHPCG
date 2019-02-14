@@ -43,6 +43,7 @@ __global__ void kernel_restrict(local_int_t size,
     coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - data[idx_fine];
 }
 
+__launch_bounds__(1024)
 __global__ void kernel_fused_restrict_spmv(local_int_t size,
                                            const local_int_t* f2cOperator,
                                            const double* fine,
@@ -63,22 +64,46 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
         return;
     }
 
-    local_int_t idx_fine = perm_fine[f2cOperator[idx_coarse]];
+#if defined(__HIP_PLATFORM_HCC__)
+    local_int_t idx_f2c  = __builtin_nontemporal_load(f2cOperator + idx_coarse);
+    local_int_t idx_fine = __builtin_nontemporal_load(perm_fine + idx_f2c);
+#elif defined(__HIP_PLATFORM_NVCC__)
+    local_int_t idx_f2c  = f2cOperator[idx_coarse];
+    local_int_t idx_fine = perm_fine[idx_f2c];
+#endif
 
     double sum = 0.0;
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
         local_int_t idx = p * m + idx_fine;
+#if defined(__HIP_PLATFORM_HCC__)
+        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+#elif defined(__HIP_PLATFORM_NVCC__)
         local_int_t col = ell_col_ind[idx];
+#endif
 
         if(col >= 0 && col < n)
         {
-            sum += ell_val[idx] * xf[col];
+#if defined(__HIP_PLATFORM_HCC__)
+            sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(xf + col), sum);
+#elif defined(__HIP_PLATFORM_NVCC__)
+            sum = fma(ell_val[idx], __ldg(xf + col), sum);
+#endif
+        }
+        else
+        {
+            break;
         }
     }
 
+#if defined(__HIP_PLATFORM_HCC__)
+    local_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
+    double val_fine = __builtin_nontemporal_load(fine + idx_fine);
+    __builtin_nontemporal_store(val_fine - sum, coarse + idx_perm);
+#elif defined(__HIP_PLATFORM_NVCC__)
     coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - sum;
+#endif
 }
 
 /*!
@@ -123,8 +148,8 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
 #endif
 
     hipLaunchKernelGGL((kernel_fused_restrict_spmv),
-                       dim3((A.mgData->rc->localLength - 1) / 128 + 1),
-                       dim3(128),
+                       dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
+                       dim3(1024),
                        0,
                        0,
                        A.mgData->rc->localLength,

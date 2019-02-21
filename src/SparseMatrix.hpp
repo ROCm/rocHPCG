@@ -23,6 +23,7 @@
 
 #ifndef HPCG_NO_MPI
 #include <mpi.h>
+#include <numa.h>
 #endif
 
 #include <vector>
@@ -262,8 +263,17 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if(A.recv_request) delete[] A.recv_request;
   if(A.send_request) delete[] A.send_request;
   if(A.d_elementsToSend) HIP_CHECK(deviceFree(A.d_elementsToSend));
-  if(A.recv_buffer) HIP_CHECK(hipHostFree(A.recv_buffer));
-  if(A.send_buffer) HIP_CHECK(hipHostFree(A.send_buffer));
+
+  if(A.recv_buffer)
+  {
+    HIP_CHECK(hipHostUnregister(A.recv_buffer));
+    numa_free(A.recv_buffer, sizeof(double) * A.totalToBeSent);
+  }
+  if(A.send_buffer)
+  {
+    HIP_CHECK(hipHostUnregister(A.send_buffer));
+    numa_free(A.send_buffer, sizeof(double) * A.totalToBeSent);
+  }
   if(A.d_send_buffer) HIP_CHECK(deviceFree(A.d_send_buffer));
 
   if(A.halo_row_ind) HIP_CHECK(deviceFree(A.halo_row_ind));

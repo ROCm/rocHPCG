@@ -42,6 +42,19 @@ extern curandGenerator_t rng;
 #define RNG_SEED 0x586744
 #define MAX_COLORS 128
 
+#define NULL_CHECK(ptr)                                 \
+{                                                       \
+    if(ptr == NULL)                                     \
+    {                                                   \
+        fprintf(stderr, "ERROR in file %s ; line %d\n", \
+                __FILE__,                               \
+                __LINE__);                              \
+                                                        \
+        hipDeviceReset();                               \
+        exit(1);                                        \
+    }                                                   \
+}
+
 #define HIP_CHECK(err)                                              \
 {                                                                   \
     if(err != hipSuccess)                                           \

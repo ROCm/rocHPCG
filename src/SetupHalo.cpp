@@ -20,6 +20,7 @@
 
 #ifndef HPCG_NO_MPI
 #include <mpi.h>
+#include <numa.h>
 #endif
 
 #include <hip/hip_runtime.h>
@@ -373,8 +374,15 @@ void SetupHalo(SparseMatrix& A)
     A.sendLength = new local_int_t[A.geom->size - 1];
 
     // Allocate receive and send buffers on GPU and CPU
-    HIP_CHECK(hipHostMalloc((void**)&A.recv_buffer, sizeof(double) * A.totalToBeSent));
-    HIP_CHECK(hipHostMalloc((void**)&A.send_buffer, sizeof(double) * A.totalToBeSent));
+    A.recv_buffer = (double*)numa_alloc_local(sizeof(double) * A.totalToBeSent);
+    A.send_buffer = (double*)numa_alloc_local(sizeof(double) * A.totalToBeSent);
+
+    NULL_CHECK(A.recv_buffer);
+    NULL_CHECK(A.send_buffer);
+
+    HIP_CHECK(hipHostRegister(A.recv_buffer, sizeof(double) * A.totalToBeSent, hipHostRegisterDefault));
+    HIP_CHECK(hipHostRegister(A.send_buffer, sizeof(double) * A.totalToBeSent, hipHostRegisterDefault));
+
     HIP_CHECK(deviceMalloc((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
 
     // Sort send indices to obtain elementsToSend array

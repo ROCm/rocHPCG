@@ -128,7 +128,7 @@ if(NOT HIP_PLATFORM STREQUAL "nvcc")
 endif()
 
 if(HPCG_MPI)
-  target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH})
+  target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
 endif()
 
 
@@ -147,7 +147,7 @@ else()
 endif()
 
 if(HPCG_MPI)
-  target_link_libraries(rocHPCG PRIVATE ${MPI_CXX_LIBRARIES})
+  target_link_libraries(rocHPCG PRIVATE ${MPI_CXX_LIBRARIES} ${LIBNUMA_LIBRARY})
 endif()
 
 

@@ -41,6 +41,11 @@ if(NOT HIP_HCC_EXECUTABLE)
 endif()
 mark_as_advanced(HIP_HCC_EXECUTABLE)
 
+# Find libnuma if MPI is enabled
+if(HPCG_MPI)
+  find_package(LIBNUMA REQUIRED)
+endif()
+
 # hiprand TODO fix - while hiprand puts its cmake into another subdir!?
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/hiprand/hiprand)
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/lib/cmake/rocrand/rocrand)

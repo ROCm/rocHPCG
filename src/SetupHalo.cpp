@@ -374,8 +374,9 @@ void SetupHalo(SparseMatrix& A)
     A.sendLength = new local_int_t[A.geom->size - 1];
 
     // Allocate receive and send buffers on GPU and CPU
-    A.recv_buffer = (double*)numa_alloc_local(sizeof(double) * A.totalToBeSent);
-    A.send_buffer = (double*)numa_alloc_local(sizeof(double) * A.totalToBeSent);
+    size_t buffer_size = ((A.totalToBeSent - 1) / (1 << 21) + 1) * (1 << 21);
+    A.recv_buffer = (double*)numa_alloc_local(sizeof(double) * buffer_size);
+    A.send_buffer = (double*)numa_alloc_local(sizeof(double) * buffer_size);
 
     NULL_CHECK(A.recv_buffer);
     NULL_CHECK(A.send_buffer);

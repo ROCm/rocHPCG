@@ -53,14 +53,15 @@ __global__ void kernel_dot1_part1(local_int_t n,
     local_int_t tid = hipThreadIdx_x;
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
 
-    __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
-
+    double sum = 0.0;
     for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
     {
         double val = x[idx];
-        sdata[tid] += val * val;
+        sum += val * val;
     }
+
+    __shared__ double sdata[BLOCKSIZE];
+    sdata[tid] = sum;
 
     reduce_sum<BLOCKSIZE>(tid, sdata);
 
@@ -79,13 +80,14 @@ __global__ void kernel_dot2_part1(local_int_t n,
     local_int_t tid = hipThreadIdx_x;
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
 
-    __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
-
+    double sum = 0.0;
     for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
     {
-        sdata[tid] += y[idx] * x[idx];
+        sum += y[idx] * x[idx];
     }
+
+    __shared__ double sdata[BLOCKSIZE];
+    sdata[tid] = sum;
 
     reduce_sum<BLOCKSIZE>(tid, sdata);
 
@@ -96,21 +98,14 @@ __global__ void kernel_dot2_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
-__global__ void kernel_dot_part2(local_int_t n, double* workspace)
+__global__ void kernel_dot_part2(double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
+    sdata[hipThreadIdx_x] = workspace[hipThreadIdx_x];
 
-    for(local_int_t idx = tid; idx < n; idx += BLOCKSIZE)
-    {
-        sdata[tid] += workspace[idx];
-    }
+    reduce_sum<BLOCKSIZE>(hipThreadIdx_x, sdata);
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
-
-    if(tid == 0)
+    if(hipThreadIdx_x == 0)
     {
         workspace[0] = sdata[0];
     }
@@ -178,7 +173,6 @@ int ComputeDotProduct(local_int_t n,
                        dot_threads,
                        0,
                        0,
-                       DOT_DIM,
                        tmp);
 #undef DOT_DIM
 

@@ -11,6 +11,7 @@ function display_help()
   echo "rocHPCG build helper script"
   echo "./install [-h|--help] "
   echo "    [-h|--help] prints this help message"
+  echo "    [-i|--install] install after build"
   echo "    [-d|--dependencies] install dependencies"
   echo "    [-r|--reference] reference mode"
   echo "    [-g|--debug] -DCMAKE_BUILD_TYPE=Debug (default: Release)"
@@ -167,7 +168,9 @@ supported_distro
 # #################################################
 # global variables
 # #################################################
+install_package=false
 install_dependencies=false
+install_prefix=rochpcg-install
 build_release=true
 build_reference=false
 with_mpi=true
@@ -182,7 +185,7 @@ with_memdefrag=true
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,dependencies,reference,debug,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hdrg -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrg -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -201,6 +204,9 @@ while true; do
         display_help
         exit 0
         ;;
+    -i|--install)
+        install_package=true
+        shift ;;
     -d|--dependencies)
         install_dependencies=true
         shift ;;
@@ -288,10 +294,31 @@ pushd .
   echo ${cmake_common_options}
 
   # Build library with AMD toolchain because of existense of device kernels
-  ${cmake_executable} ${cmake_common_options} ../..
+  ${cmake_executable} ${cmake_common_options} -DCMAKE_INSTALL_PREFIX=${install_prefix} ../..
   check_exit_code
 
-  make -j$(nproc)
+  make -j$(nproc) install
   check_exit_code
 
+  # #################################################
+  # install
+  # #################################################
+  # installing through package manager, which makes uninstalling easy
+  if [[ "${install_package}" == true ]]; then
+    make package
+    check_exit_code
+
+    case "${ID}" in
+      ubuntu)
+        elevate_if_not_root dpkg -i rochpcg-*.deb
+      ;;
+      centos|rhel)
+        elevate_if_not_root yum -y localinstall rochpcg-*.rpm
+      ;;
+      fedora)
+        elevate_if_not_root dnf install rochpcg-*.rpm
+      ;;
+    esac
+
+  fi
 popd

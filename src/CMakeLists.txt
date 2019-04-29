@@ -1,8 +1,8 @@
 # Get full git commit SHA-1
-set(GIT_COMMAND ${GIT_EXECUTABLE} rev-parse -q HEAD)
+set(GIT_COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD)
 execute_process(COMMAND ${GIT_COMMAND}
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                OUTPUT_VARIABLE rocHPCG_GIT_REV
+                OUTPUT_VARIABLE rochpcg_GIT_REV
                 OUTPUT_STRIP_TRAILING_WHITESPACE
                 ERROR_QUIET)
 
@@ -70,7 +70,7 @@ foreach(i ${HIP_SOURCE})
 endforeach()
 
 # Target executable
-hip_add_executable(rocHPCG ${SOURCE} ${HIP_SOURCE})
+hip_add_executable(rochpcg ${SOURCE} ${HIP_SOURCE})
 
 # Target compile definitions
 if(HIP_PLATFORM STREQUAL "nvcc")
@@ -80,74 +80,74 @@ else()
 endif()
 
 # Support only for contiguous arrays
-target_compile_definitions(rocHPCG PRIVATE HPCG_CONTIGUOUS_ARRAYS)
+target_compile_definitions(rochpcg PRIVATE HPCG_CONTIGUOUS_ARRAYS)
 
 if(NOT HPCG_OPENMP)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_NO_OPENMP)
+  target_compile_definitions(rochpcg PRIVATE HPCG_NO_OPENMP)
 endif()
 
 if(NOT HPCG_MPI)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_NO_MPI)
+  target_compile_definitions(rochpcg PRIVATE HPCG_NO_MPI)
 endif()
 
 if(HPCG_DEBUG)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_DEBUG)
+  target_compile_definitions(rochpcg PRIVATE HPCG_DEBUG)
 endif()
 
 if(HPCG_DETAILED_DEBUG)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_DETAILED_DEBUG)
+  target_compile_definitions(rochpcg PRIVATE HPCG_DETAILED_DEBUG)
 endif()
 
 if(HPCG_DETAILED_TIMING)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_DETAILED_TIMING)
+  target_compile_definitions(rochpcg PRIVATE HPCG_DETAILED_TIMING)
 endif()
 
 if(HPCG_REFERENCE)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_REFERENCE)
+  target_compile_definitions(rochpcg PRIVATE HPCG_REFERENCE)
 endif()
 
 # Optimization definitions
 if(OPT_MEMMGMT)
-  target_compile_definitions(rocHPCG PRIVATE HPCG_MEMMGMT)
+  target_compile_definitions(rochpcg PRIVATE HPCG_MEMMGMT)
 endif()
 if(OPT_DEFRAG)
-  target_compile_definitions(rocHPCG PRIVATE DEFRAG_OPT)
+  target_compile_definitions(rochpcg PRIVATE DEFRAG_OPT)
 endif()
 
 
 
 # Target include directories
-target_include_directories(rocHPCG PRIVATE
+target_include_directories(rochpcg PRIVATE
                              ${PROJECT_BINARY_DIR}/include
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
                              ${hiprand_INCLUDE_DIRS})
 if(NOT HIP_PLATFORM STREQUAL "nvcc")
-  target_include_directories(rocHPCG PRIVATE ${rocrand_INCLUDE_DIRS})
+  target_include_directories(rochpcg PRIVATE ${rocrand_INCLUDE_DIRS})
 endif()
 
 if(HPCG_MPI)
-  target_include_directories(rocHPCG PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
+  target_include_directories(rochpcg PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
 endif()
 
 
 # Target link libraries
 if(HIP_PLATFORM STREQUAL "nvcc")
-  target_link_libraries(rocHPCG PRIVATE omp curand)
+  target_link_libraries(rochpcg PRIVATE omp curand)
 else()
-  target_link_libraries(rocHPCG PRIVATE ${hiprand_LIBRARIES})
+  target_link_libraries(rochpcg PRIVATE ${hiprand_LIBRARIES})
   foreach(target ${AMDGPU_TARGETS})
-    target_link_libraries(rocHPCG PRIVATE --amdgpu-target=${target})
+    target_link_libraries(rochpcg PRIVATE --amdgpu-target=${target})
   endforeach()
 
   if(HPCG_OPENMP)
-    target_link_libraries(rocHPCG PRIVATE ${OpenMP_CXX_FLAGS})
+    target_link_libraries(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
   endif()
 endif()
 
 if(HPCG_MPI)
-  target_link_libraries(rocHPCG PRIVATE ${MPI_CXX_LIBRARIES} ${LIBNUMA_LIBRARY})
+  target_link_libraries(rochpcg PRIVATE ${MPI_CXX_LIBRARIES} ${LIBNUMA_LIBRARY})
 endif()
 
 
@@ -157,11 +157,11 @@ endif()
 
 # Target compile options
 if(HPCG_OPENMP)
-  target_compile_options(rocHPCG PRIVATE ${OpenMP_CXX_FLAGS})
+  target_compile_options(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
 
 if(HPCG_MPI)
-  target_compile_options(rocHPCG PRIVATE ${MPI_COMPILE_OPTIONS})
+  target_compile_options(rochpcg PRIVATE ${MPI_COMPILE_OPTIONS})
 endif()
 
 
@@ -169,5 +169,21 @@ endif()
 
 
 # Target properties
-set_target_properties(rocHPCG PROPERTIES VERSION ${rocHPCG_VERSION})
-set_target_properties(rocHPCG PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
+set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+# Install target
+rocm_install_targets(TARGETS rochpcg PREFIX rochpcg)
+
+# Symbolic links
+rocm_install_symlink_subdir(rochpcg)
+
+# Package specific CPACK vars
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19055), rocrand") # 1.5.19055 is HIP version in ROCm 2.2
+set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19055, rocrand")
+
+rocm_create_package(
+  NAME "rochpcg"
+  DESCRIPTION "Radeon Open Compute HPCG application"
+  MAINTAINER "Nico Trost"
+)

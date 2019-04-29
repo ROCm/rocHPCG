@@ -23,7 +23,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # rocHPCG project
-project(rocHPCG LANGUAGES CXX)
+project(rochpcg LANGUAGES CXX)
 
 # Set toolchain
 include(cmake/SetToolchain.cmake)

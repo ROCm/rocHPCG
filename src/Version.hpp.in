@@ -2,11 +2,11 @@
 #define VERSION_HPP
 
 // clang-format off
-#define __ROCHPCG_VER_MAJOR @rocHPCG_VERSION_MAJOR@
-#define __ROCHPCG_VER_MINOR @rocHPCG_VERSION_MINOR@
-#define __ROCHPCG_VER_PATCH @rocHPCG_VERSION_PATCH@
-#define __ROCHPCG_VER_TWEAK @rocHPCG_VERSION_TWEAK@
-#define __ROCHPCG_GIT_REV "@rocHPCG_GIT_REV@"
+#define __ROCHPCG_VER_MAJOR @rochpcg_VERSION_MAJOR@
+#define __ROCHPCG_VER_MINOR @rochpcg_VERSION_MINOR@
+#define __ROCHPCG_VER_PATCH @rochpcg_VERSION_PATCH@
+#define __ROCHPCG_VER_TWEAK @rochpcg_VERSION_TWEAK@
+#define __ROCHPCG_GIT_REV "@rochpcg_GIT_REV@"
 // clang-format on
 
 #define __ROCHPCG_VER \

@@ -42,7 +42,13 @@ rochpcg <nx> <ny> <nz> <runtime>
 # runtime - is the desired benchmarking time in seconds (> 1800s for official runs)
 ```
 
-Similarly, these parameters can be entered into `hpcg.dat` input file.
+Similarly, these parameters can be entered into an input file `hpcg.dat` in the working directory, e.g. `nx = ny = nz = 280` and `runtime = 1800`.
+```
+HPCG benchmark input file
+Sandia National Laboratories; University of Tennessee, Knoxville
+280 280 280
+1800
+```
 
 ## Support
 Please use [the issue tracker][] for bugs and feature requests.
@@ -50,4 +56,4 @@ Please use [the issue tracker][] for bugs and feature requests.
 [HPCG]: https://www.hpcg-benchmark.org/
 [ROCm]: https://github.com/RadeonOpenCompute/ROCm
 [HIP]: https://github.com/GPUOpen-ProfessionalCompute-Tools/HIP/
-[the issue tracker]: https://github.com/ROCmSoftwarePlatform/rocSPARSE/issues
+[the issue tracker]: https://github.com/ROCmSoftwarePlatform/rocHPCG/issues

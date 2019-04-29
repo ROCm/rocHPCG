@@ -23,7 +23,7 @@
 
 #include <hip/hip_runtime.h>
 
-__launch_bounds__(1024)
+__launch_bounds__(128)
 __global__ void kernel_symgs_sweep(local_int_t m,
                                    local_int_t n,
                                    local_int_t block_nrow,
@@ -76,7 +76,7 @@ __global__ void kernel_symgs_sweep(local_int_t m,
 #endif
 }
 
-__launch_bounds__(1024)
+__launch_bounds__(128)
 __global__ void kernel_symgs_interior(local_int_t m,
                                       local_int_t block_nrow,
                                       local_int_t ell_width,
@@ -184,7 +184,7 @@ __global__ void kernel_pointwise_mult(local_int_t size,
     out[gid] = x[gid] * y[gid];
 }
 
-__launch_bounds__(1024)
+__launch_bounds__(512)
 __global__ void kernel_forward_sweep_0(local_int_t m,
                                        local_int_t block_nrow,
                                        local_int_t offset,
@@ -235,13 +235,13 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
     }
 
 #if defined(__HIP_PLATFORM_HCC__)
-    __builtin_nontemporal_store(sum / diag_val, y + row);
+    __builtin_nontemporal_store(sum * __drcp_rn(diag_val), y + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
     y[row] = sum / diag_val;
 #endif
 }
 
-__launch_bounds__(1024)
+__launch_bounds__(512)
 __global__ void kernel_backward_sweep_0(local_int_t m,
                                         local_int_t block_nrow,
                                         local_int_t offset,
@@ -293,7 +293,7 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
     }
 
 #if defined(__HIP_PLATFORM_HCC__)
-    __builtin_nontemporal_store(sum / diag_val, x + row);
+    __builtin_nontemporal_store(sum * __drcp_rn(diag_val), x + row);
 #elif defined(__HIP_PLATFORM_NVCC__)
     x[row] = sum / diag_val;
 #endif
@@ -337,8 +337,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
 #endif
 
     hipLaunchKernelGGL((kernel_symgs_interior),
-                       dim3((A.sizes[0] - 1) / 1024 + 1),
-                       dim3(1024),
+                       dim3((A.sizes[0] - 1) / 128 + 1),
+                       dim3(128),
                        0,
                        stream_interior,
                        A.localNumberOfRows,
@@ -379,8 +379,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
-                           dim3((A.sizes[i] - 1) / 1024 + 1),
-                           dim3(1024),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
+                           dim3(128),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -399,8 +399,8 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep),
-                           dim3((A.sizes[i] - 1) / 1024 + 1),
-                           dim3(1024),
+                           dim3((A.sizes[i] - 1) / 128 + 1),
+                           dim3(128),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -436,8 +436,8 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_forward_sweep_0),
-                           dim3((A.sizes[i] - 1) / 1024 + 1),
-                           dim3(1024),
+                           dim3((A.sizes[i] - 1) / 512 + 1),
+                           dim3(512),
                            0,
                            0,
                            A.localNumberOfRows,
@@ -455,8 +455,8 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_backward_sweep_0),
-                           dim3((A.sizes[i] - 1) / 1024 + 1),
-                           dim3(1024),
+                           dim3((A.sizes[i] - 1) / 512 + 1),
+                           dim3(512),
                            0,
                            0,
                            A.localNumberOfRows,

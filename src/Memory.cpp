@@ -49,6 +49,8 @@ hipError_t hipAllocator_t::Initialize(int rank,
     }
 
     RETURN_IF_HIP_ERROR(hipMalloc((void**)&this->buffer_, size));
+    RETURN_IF_HIP_ERROR(hipMemset(this->buffer_, 0, size));
+
     this->total_mem_ = size;
     this->free_mem_ = size;
 

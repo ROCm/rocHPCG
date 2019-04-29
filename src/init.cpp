@@ -169,11 +169,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   HIP_CHECK(hipSetDevice(params.device));
 
   // Warm up
-  hipLaunchKernelGGL((kernel_warmup),
-                     dim3(1024),
-                     dim3(1024),
-                     0,
-                     0);
+  hipLaunchKernelGGL((kernel_warmup), dim3(1), dim3(1), 0, 0);
 
   // Create streams
   HIP_CHECK(hipStreamCreate(&stream_interior));

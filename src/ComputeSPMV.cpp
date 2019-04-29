@@ -82,15 +82,15 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
 #endif
 }
 
-__launch_bounds__(1024)
+__launch_bounds__(512)
 __global__ void kernel_spmv_ell(local_int_t m,
                                 int nblocks,
                                 local_int_t rows_per_block,
                                 local_int_t ell_width,
-                                const local_int_t* ell_col_ind,
-                                const double* ell_val,
-                                const double* x,
-                                double* y)
+                                const local_int_t* __restrict__ ell_col_ind,
+                                const double* __restrict__ ell_val,
+                                const double* __restrict__ x,
+                                double* __restrict__ y)
 {
     // Applies for chunks of hipBlockDim_x * nblocks
     local_int_t color_block_offset = hipBlockDim_x * (hipBlockIdx_x / nblocks);
@@ -205,7 +205,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
         local_int_t rows_per_block = A.localNumberOfRows / A.nblocks;
 
         // Determine blocksize
-        unsigned int blocksize = 1024;
+        unsigned int blocksize = 512;
 
         while(rows_per_block & (blocksize - 1))
         {

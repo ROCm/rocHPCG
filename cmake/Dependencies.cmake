@@ -21,7 +21,7 @@ if(NOT HIPCUB_FOUND)
   message(STATUS "Downloading rocPRIM.")
   download_project(PROJ    rocPRIM
        GIT_REPOSITORY      https://github.com/ROCmSoftwarePlatform/rocPRIM.git
-       GIT_TAG             master
+       GIT_TAG             master-rocm-2.4
        INSTALL_DIR         ${ROCPRIM_ROOT}
        CMAKE_ARGS          -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_TEST=OFF -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> -DCMAKE_CXX_COMPILER=${HIP_HCC_EXECUTABLE}
        LOG_DOWNLOAD        TRUE

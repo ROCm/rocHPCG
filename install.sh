@@ -173,10 +173,10 @@ install_dependencies=false
 install_prefix=rochpcg-install
 build_release=true
 build_reference=false
-with_mpi=true
-with_omp=true
-with_memmgmt=true
-with_memdefrag=true
+with_mpi=ON
+with_omp=ON
+with_memmgmt=ON
+with_memdefrag=ON
 
 # #################################################
 # Parameter parsing

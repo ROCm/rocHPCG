@@ -140,7 +140,9 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
     Vector* Axf = new Vector;
     HIPInitializeVector(*rc, Ac->localNumberOfRows);
     HIPInitializeVector(*xc, Ac->localNumberOfColumns);
+#ifdef HPCG_REFERENCE
     HIPInitializeVector(*Axf, Af.localNumberOfColumns);
+#endif
 
     Af.Ac = Ac;
     MGData* mgData = new MGData;

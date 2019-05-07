@@ -73,7 +73,9 @@ inline void DeleteMGData(MGData & data) {
   DeleteVector(*data.Axf);
   DeleteVector(*data.rc);
   DeleteVector(*data.xc);
+#ifdef HPCG_REFERENCE
   HIPDeleteVector(*data.Axf);
+#endif
   HIPDeleteVector(*data.rc);
   HIPDeleteVector(*data.xc);
   delete data.Axf;

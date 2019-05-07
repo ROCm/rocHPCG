@@ -121,7 +121,9 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
         HIP_CHECK(deviceDefrag((void**)&mg->d_f2cOperator, sizeof(local_int_t) * M->localNumberOfRows));
         HIP_CHECK(deviceDefrag((void**)&mg->rc->d_values, sizeof(double) * mg->rc->localLength));
         HIP_CHECK(deviceDefrag((void**)&mg->xc->d_values, sizeof(double) * mg->xc->localLength));
+#ifdef HPCG_REFERENCE
         HIP_CHECK(deviceDefrag((void**)&mg->Axf->d_values, sizeof(double) * mg->Axf->localLength));
+#endif
 
         mg = M->mgData;
     }

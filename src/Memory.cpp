@@ -308,6 +308,7 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
     // Multigrid hierarchy
     for(int i = 1; i < numberOfMgLevels; ++i)
     {
+#ifdef HPCG_REFERENCE
         // Axf
         size += ((sizeof(double) * m - 1) / align + 1) * align;
 
@@ -315,7 +316,7 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
         // Extend Axf
         size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
 #endif
-
+#endif
         // New dimension
         m /= 8;
 

@@ -9,8 +9,8 @@ ARG user_uid
 # Install dependent packages
 # Dependencies:
 # * hcc-config.cmake: pkg-config
-# * rochpcg-test: googletest
-# * libhsakmt.so: libnuma1
+# * rochpcg-test: googletest rocrand
+# * libhsakmt.so: libnuma1 libnuma-dev
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     rock-dkms \
     sudo \
@@ -22,6 +22,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     clang-format-3.8 \
     pkg-config \
     libnuma1 \
+    libnuma-dev \
+    mpi-default-bin \
+    mpi-default-dev \
+    libomp-dev \
+    rocrand \
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

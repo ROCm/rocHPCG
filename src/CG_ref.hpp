@@ -21,7 +21,7 @@
 
 int CG_ref(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr,  double & normr0,
-    double * times, bool doPreconditioning);
+    double * times, bool doPreconditioning, bool verbose);
 
 // this function will compute the Conjugate Gradient iterations.
 // geom - Domain and processor topology information

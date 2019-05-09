@@ -129,7 +129,8 @@ target_include_directories(rochpcg PRIVATE
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
-                             ${hiprand_INCLUDE_DIRS})
+                             ${hiprand_INCLUDE_DIRS}
+                             /opt/rocm/include)
 if(NOT HIP_PLATFORM STREQUAL "nvcc")
   target_include_directories(rochpcg PRIVATE ${rocrand_INCLUDE_DIRS})
 endif()

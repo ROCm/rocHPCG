@@ -31,7 +31,7 @@ rocHPCGCI:
 
     def rochpcg = new rocProject('rochpcg')
     // customize for project
-    rochpcg.paths.build_command = './install.sh -t'
+    rochpcg.paths.build_command = './install.sh -t --with-openmp=OFF'
 
     // Define test architectures, optional rocm version argument is available
     def nodes = new dockerNodes(['gfx900', 'gfx906'], rochpcg)

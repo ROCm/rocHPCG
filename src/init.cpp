@@ -91,7 +91,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   char ** argv = *argv_p;
   char fname[80];
   int i, j, *iparams;
-  char cparams[][7] = {"--nx=", "--ny=", "--nz=", "--rt=", "--pz=", "--zl=", "--zu=", "--npx=", "--npy=", "--npz="};
+  char cparams[][8] = {"--nx=", "--ny=", "--nz=", "--rt=", "--pz=", "--zl=", "--zu=", "--npx=", "--npy=", "--npz=", "--dev="};
   time_t rawtime;
   tm * ptm;
   const int nparams = (sizeof cparams) / (sizeof cparams[0]);
@@ -152,6 +152,8 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   params.npy = iparams[8];
   params.npz = iparams[9];
 
+  params.device = iparams[10];
+
 #ifndef HPCG_NO_MPI
   MPI_Comm_rank( MPI_COMM_WORLD, &params.comm_rank );
   MPI_Comm_size( MPI_COMM_WORLD, &params.comm_size );
@@ -163,7 +165,22 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   // Simple device management
   int ndevs = 0;
   HIP_CHECK(hipGetDeviceCount(&ndevs));
-  params.device = params.comm_rank % ndevs;
+
+  // Single GPU device can be selected via cli
+  // Multi GPU devices are selected automatically
+  if(params.comm_size == 1)
+  {
+    if(ndevs <= params.device)
+    {
+      fprintf(stderr, "Error: invalid device ID\n");
+      hipDeviceReset();
+      exit(1);
+    }
+  }
+  else
+  {
+    params.device = params.comm_rank % ndevs;
+  }
 
   // Set device
   HIP_CHECK(hipSetDevice(params.device));

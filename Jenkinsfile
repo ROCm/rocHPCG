@@ -1,0 +1,95 @@
+#!/usr/bin/env groovy
+// This shared library is available at https://github.com/ROCmSoftwarePlatform/rocJENKINS/
+@Library('rocJenkins') _
+
+// This is file for internal AMD use.
+// If you are interested in running your own Jenkins, please raise a github issue for assistance.
+
+import com.amd.project.*
+import com.amd.docker.*
+
+////////////////////////////////////////////////////////////////////////
+// Mostly generated from snippet generator 'properties; set job properties'
+// Time-based triggers added to execute nightly tests, eg '30 2 * * *' means 2:30 AM
+properties([
+    pipelineTriggers([cron('0 23 * * *'), [$class: 'PeriodicFolderTrigger', interval: '5m']]),
+    buildDiscarder(logRotator(
+      artifactDaysToKeepStr: '',
+      artifactNumToKeepStr: '',
+      daysToKeepStr: '',
+      numToKeepStr: '10')),
+    disableConcurrentBuilds(),
+    [$class: 'CopyArtifactPermissionProperty', projectNames: '*']
+   ])
+
+
+////////////////////////////////////////////////////////////////////////
+import java.nio.file.Path;
+
+rocHPCGCI:
+{
+
+    def rochpcg = new rocProject('rochpcg')
+    // customize for project
+    rochpcg.paths.build_command = './install.sh -t'
+
+    // Define test architectures, optional rocm version argument is available
+    def nodes = new dockerNodes(['gfx900', 'gfx906'], rochpcg)
+
+    boolean formatCheck = true
+
+    def compileCommand =
+    {
+        platform, project->
+
+        project.paths.construct_build_prefix()
+        def command = """#!/usr/bin/env bash
+                  set -x
+                  cd ${project.paths.project_build_prefix}
+                  LD_LIBRARY_PATH=/opt/rocm/hcc/lib CXX=${project.compiler.compiler_path} ${project.paths.build_command}
+                """
+
+        platform.runCommand(this, command)
+    }
+
+    def testCommand =
+    {
+        platform, project->
+
+        def command
+
+        if(auxiliary.isJobStartedByTimer())
+        {
+          command = """#!/usr/bin/env bash
+                set -x
+                cd ${project.paths.project_build_prefix}/build/release/tests
+                LD_LIBRARY_PATH=/opt/rocm/hcc/lib ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*nightly*-*known_bug* #--gtest_filter=*nightly*
+            """
+        }
+        else
+        {
+          command = """#!/usr/bin/env bash
+                set -x
+                cd ${project.paths.project_build_prefix}/build/release/tests
+                LD_LIBRARY_PATH=/opt/rocm/hcc/lib ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*quick*:*pre_checkin*-*known_bug* #--gtest_filter=*checkin*
+            """
+        }
+
+        platform.runCommand(this, command)
+        junit "${project.paths.project_build_prefix}/build/release/tests/*.xml"
+    }
+
+    def packageCommand =
+    {
+        platform, project->
+
+        def command = """
+                      echo "No packaging"
+                      """
+
+        platform.runCommand(this, command)
+    }
+
+    buildProject(rochpcg, formatCheck, nodes.dockerArray, compileCommand, testCommand, packageCommand)
+
+}

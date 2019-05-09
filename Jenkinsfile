@@ -36,7 +36,7 @@ rocHPCGCI:
     // Define test architectures, optional rocm version argument is available
     def nodes = new dockerNodes(['gfx900', 'gfx906'], rochpcg)
 
-    boolean formatCheck = true
+    boolean formatCheck = false
 
     def compileCommand =
     {

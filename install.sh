@@ -15,6 +15,7 @@ function display_help()
   echo "    [-d|--dependencies] install dependencies"
   echo "    [-r|--reference] reference mode"
   echo "    [-g|--debug] -DCMAKE_BUILD_TYPE=Debug (default: Release)"
+  echo "    [-t]--test] build single GPU test"
   echo "    [--with-mpi] compile with MPI support (default: enabled)"
   echo "    [--with-openmp] compile with OpenMP support (default: enabled)"
   echo "    [--with-memmgmt] compile with smart memory management (default: enabled)"
@@ -173,6 +174,7 @@ install_dependencies=false
 install_prefix=rochpcg-install
 build_release=true
 build_reference=false
+build_test=false
 with_mpi=ON
 with_omp=ON
 with_memmgmt=ON
@@ -185,7 +187,7 @@ with_memdefrag=ON
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrg -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -215,6 +217,9 @@ while true; do
         shift ;;
     -g|--debug)
         build_release=false
+        shift ;;
+    -t|--test)
+        build_test=true
         shift ;;
     --with-mpi)
         with_mpi=${2}
@@ -291,13 +296,20 @@ pushd .
     cmake_common_options="${cmake_common_options} -DHPCG_REFERENCE=ON"
   fi
 
-  echo ${cmake_common_options}
+  # build test
+  if [[ "${build_test}" == true ]]; then
+    cmake_common_options="${cmake_common_options} -DBUILD_TEST=ON"
+  fi
 
   # Build library with AMD toolchain because of existense of device kernels
   ${cmake_executable} ${cmake_common_options} -DCMAKE_INSTALL_PREFIX=${install_prefix} ../..
   check_exit_code
 
-  make -j$(nproc) install
+  if [[ "${build_test}" == false ]]; then
+    make -j$(nproc) install
+  else
+    make -j$(nproc)
+  fi
   check_exit_code
 
   # #################################################
@@ -305,20 +317,21 @@ pushd .
   # #################################################
   # installing through package manager, which makes uninstalling easy
   if [[ "${install_package}" == true ]]; then
-    make package
-    check_exit_code
+    if [[ "${build_test}" == false ]]; then
+      make package
+      check_exit_code
 
-    case "${ID}" in
-      ubuntu)
-        elevate_if_not_root dpkg -i rochpcg-*.deb
-      ;;
-      centos|rhel)
-        elevate_if_not_root yum -y localinstall rochpcg-*.rpm
-      ;;
-      fedora)
-        elevate_if_not_root dnf install rochpcg-*.rpm
-      ;;
-    esac
-
+      case "${ID}" in
+        ubuntu)
+          elevate_if_not_root dpkg -i rochpcg-*.deb
+        ;;
+        centos|rhel)
+          elevate_if_not_root yum -y localinstall rochpcg-*.rpm
+        ;;
+        fedora)
+          elevate_if_not_root dnf install rochpcg-*.rpm
+        ;;
+      esac
+    fi
   fi
 popd

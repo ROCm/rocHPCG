@@ -13,6 +13,11 @@ list(APPEND CMAKE_PREFIX_PATH /opt/rocm/hcc /opt/rocm/hip /opt/rocm)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 find_package(hip REQUIRED CONFIG PATHS ${CMAKE_PREFIX_PATH})
 
+# gtest
+if(BUILD_TEST)
+  find_package(GTest REQUIRED)
+endif()
+
 # rocPRIM package
 find_package(ROCPRIM QUIET CONFIG PATHS ${CMAKE_PREFIX_PATH})
 find_package(HIPCUB QUIET CONFIG PATHS ${CMAKE_PREFIX_PATH})

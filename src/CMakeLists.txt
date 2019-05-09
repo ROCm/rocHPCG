@@ -60,7 +60,6 @@ set(SOURCE
   YAML_Doc.cpp
   YAML_Element.cpp
   finalize.cpp
-  main.cpp
   mytimer.cpp
 )
 
@@ -70,7 +69,11 @@ foreach(i ${HIP_SOURCE})
 endforeach()
 
 # Target executable
-hip_add_executable(rochpcg ${SOURCE} ${HIP_SOURCE})
+if(BUILD_TEST)
+  hip_add_executable(rochpcg ${SOURCE} rochpcg_gtest_main.cpp test_rochpcg.cpp ${HIP_SOURCE})
+else()
+  hip_add_executable(rochpcg ${SOURCE} main.cpp ${HIP_SOURCE})
+endif()
 
 # Target compile definitions
 if(HIP_PLATFORM STREQUAL "nvcc")
@@ -106,6 +109,10 @@ if(HPCG_REFERENCE)
   target_compile_definitions(rochpcg PRIVATE HPCG_REFERENCE)
 endif()
 
+if(BUILD_TEST)
+  target_compile_definitions(rochpcg PRIVATE GOOGLE_TEST)
+endif()
+
 # Optimization definitions
 if(OPT_MEMMGMT)
   target_compile_definitions(rochpcg PRIVATE HPCG_MEMMGMT)
@@ -131,6 +138,9 @@ if(HPCG_MPI)
   target_include_directories(rochpcg PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
 endif()
 
+if(BUILD_TEST)
+  target_include_directories(rochpcg PRIVATE ${GTEST_INCLUDE_DIRS})
+endif()
 
 # Target link libraries
 if(HIP_PLATFORM STREQUAL "nvcc")
@@ -148,6 +158,10 @@ endif()
 
 if(HPCG_MPI)
   target_link_libraries(rochpcg PRIVATE ${MPI_CXX_LIBRARIES} ${LIBNUMA_LIBRARY})
+endif()
+
+if(BUILD_TEST)
+  target_link_libraries(rochpcg PRIVATE ${GTEST_BOTH_LIBRARIES})
 endif()
 
 
@@ -170,7 +184,12 @@ endif()
 
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
-set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(BUILD_TEST)
+  set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+  set_target_properties(rochpcg PROPERTIES OUTPUT_NAME "rochpcg-test")
+else()
+  set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
 
 # Install target
 rocm_install_targets(TARGETS rochpcg PREFIX rochpcg)

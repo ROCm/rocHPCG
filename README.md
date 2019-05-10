@@ -8,6 +8,7 @@ rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented 
 * NUMA library
 * AMD [ROCm] 2.2 platform
 * rocRAND
+* googletest (for test application only)
 
 ## Quickstart rocHPCG build and install
 

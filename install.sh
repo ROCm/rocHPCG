@@ -110,7 +110,7 @@ install_packages( )
   fi
 
   # dependencies needed for executable to build
-  local library_dependencies_ubuntu=( "make" "hip_hcc" "pkg-config" "libnuma1" "rocrand" )
+  local library_dependencies_ubuntu=( "make" "hip_hcc" "pkg-config" "libnuma1" "rocrand" "cmake" "libnuma-dev" )
   local library_dependencies_centos=( "epel-release" "make" "cmake3" "hip_hcc" "gcc-c++" "rpm-build" "numactl-libs" "rocrand" )
   local library_dependencies_fedora=( "make" "cmake" "hip_hcc" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "rocrand" )
 

@@ -4,7 +4,10 @@ rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented 
 ## Requirements
 * Git
 * CMake (3.5 or later)
+* MPI
+* NUMA library
 * AMD [ROCm] 2.2 platform
+* rocRAND
 
 ## Quickstart rocHPCG build and install
 
@@ -24,6 +27,7 @@ cd rocHPCG
 #    -d|--dependencies - install dependencies
 #    -r|--reference    - reference mode
 #    -g|--debug        - -DCMAKE_BUILD_TYPE=Debug (default: Release)
+#    -t|--test         - build HPCG test application for single GPU
 #    --with-mpi        - compile with MPI support (default: enabled)
 #    --with-openmp     - compile with OpenMP support (default: enabled)
 #    --with-memmgmt    - compile with smart memory management (default: enabled)

@@ -48,12 +48,19 @@ int main(int argc, char* argv[])
 
     if(status != hipSuccess)
     {
-        fprintf(stderr, "Error: cannot get device count\n");
+        if(rank == 0)
+        {
+            fprintf(stderr, "Error: cannot get device count\n");
+        }
+
         return -1;
     }
     else
     {
-        printf("There are %d devices\n", device_count);
+        if(rank == 0)
+        {
+            printf("There are %d devices\n", device_count);
+        }
     }
 
     for(int i = 0; i < device_count; ++i)
@@ -61,39 +68,46 @@ int main(int argc, char* argv[])
         hipDeviceProp_t props;
         status = hipGetDeviceProperties(&props, i);
 
-        if(status != hipSuccess)
+        if(rank == 0)
         {
-            fprintf(stderr, "Error: cannot get device ID %d's properties\n", i);
-        }
-        else
-        {
-            printf("Device ID %d : %s\n", i, props.name);
-            printf("-------------------------------------------------------------------------\n");
-            printf("with %ldMB memory, clock rate %dMHz @ computing capability %d.%d \n",
-                   props.totalGlobalMem >> 20,
-                   (int)(props.clockRate / 1000),
-                   props.major,
-                   props.minor);
-            printf("maxGridDimX %d, sharedMemPerBlock %ldKB, maxThreadsPerBlock %d, wavefrontSize "
-                   "%d\n",
-                   props.maxGridSize[0],
-                   props.sharedMemPerBlock >> 10,
-                   props.maxThreadsPerBlock,
-                   props.warpSize);
+            if(status != hipSuccess)
+            {
+                fprintf(stderr, "Error: cannot get device ID %d's properties\n", i);
+            }
+            else
+            {
+                printf("Device ID %d : %s\n", i, props.name);
+                printf("-------------------------------------------------------------------------\n");
+                printf("with %ldMB memory, clock rate %dMHz @ computing capability %d.%d \n",
+                       props.totalGlobalMem >> 20,
+                       (int)(props.clockRate / 1000),
+                       props.major,
+                       props.minor);
+                printf("maxGridDimX %d, sharedMemPerBlock %ldKB, maxThreadsPerBlock %d, wavefrontSize "
+                       "%d\n",
+                       props.maxGridSize[0],
+                       props.sharedMemPerBlock >> 10,
+                       props.maxThreadsPerBlock,
+                       props.warpSize);
 
-            printf("-------------------------------------------------------------------------\n");
+                printf("-------------------------------------------------------------------------\n");
+            }
         }
     }
 
     if(device_count <= device_id)
     {
-        fprintf(stderr, "Error: invalid device ID. There may not be such device ID. Exiting\n");
+        if(rank == 0)
+        {
+            fprintf(stderr, "Error: invalid device ID. There may not be such device ID. Exiting\n");
+        }
+
         return -1;
     }
 
     status = hipSetDevice(device_id);
 
-    if(status != hipSuccess)
+    if(rank == 0 && status != hipSuccess)
     {
         fprintf(stderr, "Error: cannot set device ID %d, there may not be such device ID\n", device_id);
     }
@@ -101,7 +115,23 @@ int main(int argc, char* argv[])
     hipDeviceProp_t prop;
     hipGetDeviceProperties(&prop, device_id);
     printf("Using device ID %d (%s) for rocHPCG\n", device_id, prop.name);
-    printf("-------------------------------------------------------------------------\n");
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if(rank == 0)
+    {
+        printf("-------------------------------------------------------------------------\n");
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // Only rank 0 should listen
+    ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+
+    if(rank != 0)
+    {
+        delete listeners.Release(listeners.default_result_printer());
+    }
 
     int ret = RUN_ALL_TESTS();
 

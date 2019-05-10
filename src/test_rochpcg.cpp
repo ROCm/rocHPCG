@@ -51,14 +51,37 @@ class parameterized_rochpcg : public testing::TestWithParam<std::vector<local_in
     virtual void TearDown() {}
 };
 
-void check_niter(const int* dim, int niters)
+void check_niter(int size, const int* dim, int niters)
 {
-         if(dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 53); }
-    else if(dim[0] ==  32 && dim[1] ==  32 && dim[2] ==  32) { EXPECT_LE(niters, 53); }
-    else if(dim[0] == 104 && dim[1] == 104 && dim[2] == 104) { EXPECT_LE(niters, 53); }
-    else if(dim[0] == 256 && dim[1] == 256 && dim[2] == 256) { EXPECT_LE(niters, 52); }
-    else if(dim[0] == 288 && dim[1] == 288 && dim[2] == 288) { EXPECT_LE(niters, 51); }
-    else                                                     { EXPECT_LE(niters, 50); }
+         if(size == 1 && dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 53); }
+    else if(size == 2 && dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 53); }
+    else if(size == 4 && dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 56); }
+    else if(size == 1 && dim[0] ==  32 && dim[1] ==  32 && dim[2] ==  32) { EXPECT_LE(niters, 53); }
+    else if(size == 4 && dim[0] ==  32 && dim[1] ==  32 && dim[2] ==  32) { EXPECT_LE(niters, 55); }
+    else if(size == 2 && dim[0] ==  48 && dim[1] ==  48 && dim[2] ==  48) { EXPECT_LE(niters, 52); }
+    else if(size == 4 && dim[0] ==  48 && dim[1] ==  48 && dim[2] ==  48) { EXPECT_LE(niters, 55); }
+    else if(size == 2 && dim[0] ==  64 && dim[1] ==  64 && dim[2] ==  64) { EXPECT_LE(niters, 52); }
+    else if(size == 4 && dim[0] ==  64 && dim[1] ==  64 && dim[2] ==  64) { EXPECT_LE(niters, 52); }
+    else if(size == 2 && dim[0] ==  80 && dim[1] ==  80 && dim[2] ==  80) { EXPECT_LE(niters, 53); }
+    else if(size == 4 && dim[0] ==  80 && dim[1] ==  80 && dim[2] ==  80) { EXPECT_LE(niters, 54); }
+    else if(size == 2 && dim[0] ==  96 && dim[1] ==  96 && dim[2] ==  96) { EXPECT_LE(niters, 52); }
+    else if(size == 4 && dim[0] ==  96 && dim[1] ==  96 && dim[2] ==  96) { EXPECT_LE(niters, 51); }
+    else if(size == 1 && dim[0] == 104 && dim[1] == 104 && dim[2] == 104) { EXPECT_LE(niters, 53); }
+    else if(size == 2 && dim[0] == 104 && dim[1] == 104 && dim[2] == 104) { EXPECT_LE(niters, 51); }
+    else if(size == 4 && dim[0] == 104 && dim[1] == 104 && dim[2] == 104) { EXPECT_LE(niters, 51); }
+    else if(size == 2 && dim[0] == 112 && dim[1] == 112 && dim[2] == 112) { EXPECT_LE(niters, 51); }
+    else if(size == 4 && dim[0] == 112 && dim[1] == 112 && dim[2] == 112) { EXPECT_LE(niters, 51); }
+    else if(size == 2 && dim[0] == 120 && dim[1] == 120 && dim[2] == 120) { EXPECT_LE(niters, 51); }
+    else if(size == 4 && dim[0] == 120 && dim[1] == 120 && dim[2] == 120) { EXPECT_LE(niters, 51); }
+    else if(size == 2 && dim[0] == 128 && dim[1] == 128 && dim[2] == 128) { EXPECT_LE(niters, 51); }
+    else if(size == 4 && dim[0] == 128 && dim[1] == 128 && dim[2] == 128) { EXPECT_LE(niters, 51); }
+    else if(size == 1 && dim[0] == 256 && dim[1] == 256 && dim[2] == 256) { EXPECT_LE(niters, 52); }
+    else if(size == 2 && dim[0] == 256 && dim[1] == 256 && dim[2] == 256) { EXPECT_LE(niters, 52); }
+    else if(size == 4 && dim[0] == 256 && dim[1] == 256 && dim[2] == 256) { EXPECT_LE(niters, 52); }
+    else if(size == 1 && dim[0] == 288 && dim[1] == 288 && dim[2] == 288) { EXPECT_LE(niters, 51); }
+    else if(size == 2 && dim[0] == 288 && dim[1] == 288 && dim[2] == 288) { EXPECT_LE(niters, 51); }
+    else if(size == 4 && dim[0] == 288 && dim[1] == 288 && dim[2] == 288) { EXPECT_LE(niters, 51); }
+    else                                                                  { EXPECT_LE(niters, 50); }
 }
 
 TEST_P(parameterized_rochpcg, rochpcg)
@@ -250,7 +273,7 @@ TEST_P(parameterized_rochpcg, rochpcg)
     double last_cummulative_time = opt_times[0];
     EXPECT_EQ(CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true, false), false);
     EXPECT_LE(normr / normr0, refTolerance);
-    check_niter(dim.data(), niters);
+    check_niter(size, dim.data(), niters);
 
     // pick the largest number of iterations to guarantee convergence
     if (niters > optNiters) optNiters = niters;
@@ -292,7 +315,7 @@ TEST_P(parameterized_rochpcg, rochpcg)
   for (int i=0; i< numberOfCgSets; ++i) {
     HIPZeroVector(x); // Zero out x
     EXPECT_EQ(CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false), false);
-    check_niter(dim.data(), niters);
+    check_niter(size, dim.data(), niters);
 
     testnorms_data.values[i] = normr / normr0; // Record scaled residual from this run
   }

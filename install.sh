@@ -141,6 +141,82 @@ install_packages( )
   esac
 }
 
+check_apt_packages( )
+{
+  package_dependencies=("$@")
+  for package in "${package_dependencies[@]}"; do
+    dpkg-query -W $package > /dev/null
+    if [ $? -eq 1 ]; then
+      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
+      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
+      exit 2
+    fi
+  done
+}
+
+check_yum_packages( )
+{
+  package_dependencies=("$@")
+  for package in "${package_dependencies[@]}"; do
+    rpm -q $package > /dev/null
+    if [ $? -eq 1 ]; then
+      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
+      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
+      exit 2
+    fi
+  done
+}
+
+check_dnf_packages( )
+{
+  package_dependencies=("$@")
+  for package in "${package_dependencies[@]}"; do
+    rpm -q $package > /dev/null
+    if [ $? -eq 1 ]; then
+      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
+      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
+      exit 2
+    fi
+  done
+}
+
+check_packages( )
+{
+  if [ -z ${ID+foo} ]; then
+    printf "check_packages(): \$ID must be set\n"
+    exit 2
+  fi
+
+  package_dependency=("$@")
+
+  if [[ "$package_dependency" == mpi ]]; then
+    local build_dependencies_ubuntu=( "libopenmpi-dev" )
+    local build_dependencies_centos=( "openmpi-devel" )
+    local build_dependencies_fedora=( "openmpi-devel" )
+  fi
+  if [[ "$package_dependency" == omp ]]; then
+    local build_dependencies_ubuntu=( "libomp-dev" )
+    local build_dependencies_centos=( "libgomp" )
+    local build_dependencies_fedora=( "libgomp" )
+  fi
+
+  case "${ID}" in
+    ubuntu)
+      check_apt_packages "${build_dependencies_ubuntu[@]}"
+      ;;
+    centos|rhel)
+      check_yum_packages "${build_dependencies_centos[@]}"
+      ;;
+    fedora)
+      check_dnf_packages "${build_dependencies_fedora[@]}"
+      ;;
+    *)
+      echo "This script is currently supported on Ubuntu, CentOS, RHEL and Fedora"
+      exit 2
+      ;;
+  esac
+}
+
 # #################################################
 # Pre-requisites check
 # #################################################
@@ -261,6 +337,21 @@ case "${ID}" in
   cmake_executable=cmake3
   ;;
 esac
+
+# #################################################
+# check dependencies
+# #################################################
+shopt -s nocasematch
+# check for mpi
+if [[ "${with_mpi}" == on || "${with_mpi}" == true || "${with_mpi}" == 1 || "${with_mpi}" == enabled ]]; then
+  check_packages "mpi"
+fi
+
+# check for openmp
+if [[ "${with_omp}" == on || "${with_omp}" == true || "${with_omp}" == 1 || "${with_omp}" == enabled ]]; then
+  check_packages "omp"
+fi
+shopt -u nocasematch
 
 # #################################################
 # dependencies

@@ -48,7 +48,7 @@ option(OPT_DEFRAG "Build with memory management defragmentation" ON)
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.5.1.0 NO_GIT_TAG_VERSION)
+rocm_setup_version(VERSION 0.5.2.0 NO_GIT_TAG_VERSION)
 
 # AMD targets
 set(AMDGPU_TARGETS gfx900;gfx906 CACHE STRING "List of specific machine types for library to target")

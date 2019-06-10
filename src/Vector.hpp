@@ -23,11 +23,6 @@
 #include <cassert>
 #include <cstdlib>
 #include <hip/hip_runtime_api.h>
-#ifdef __HIP_PLATFORM_HCC__
-#include <hiprand.h>
-#else
-#include <curand.h>
-#endif
 
 #include "utils.hpp"
 #include "Geometry.hpp"
@@ -109,11 +104,16 @@ inline void FillRandomVector(Vector & v) {
 
 inline void HIPFillRandomVector(Vector& v)
 {
-#ifdef __HIP_PLATFORM_HCC__
-  hiprandGenerateUniformDouble(rng, v.d_values, v.localLength);
-#else
-  curandGenerateUniformDouble(rng, v.d_values, v.localLength);
-#endif
+  std::vector<double> rng(v.localLength);
+  for(int i = 0; i < v.localLength; ++i)
+  {
+    rng[i] = rand() / (double)(RAND_MAX) + 1.0;
+  }
+
+  HIP_CHECK(hipMemcpy(v.d_values,
+                      rng.data(),
+                      sizeof(double) * v.localLength,
+                      hipMemcpyHostToDevice));
 }
 
 /*!

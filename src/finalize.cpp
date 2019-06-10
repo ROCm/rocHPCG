@@ -15,12 +15,6 @@
 #include <fstream>
 #include <hip/hip_runtime_api.h>
 
-#ifdef __HIP_PLATFORM_HCC__
-#include <hiprand.h>
-#else
-#include <curand.h>
-#endif
-
 #include "utils.hpp"
 #include "hpcg.hpp"
 
@@ -45,13 +39,6 @@ HPCG_Finalize(void) {
 #ifdef HPCG_MEMMGMT
   // Clear allocator
   HIP_CHECK(allocator.Clear());
-#endif
-
-  // Free RNG
-#ifdef __HIP_PLATFORM_HCC__
-  hiprandDestroyGenerator(rng);
-#else
-  curandDestroyGenerator(rng);
 #endif
 
   // Reset HIP device

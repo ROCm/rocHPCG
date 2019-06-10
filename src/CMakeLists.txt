@@ -129,11 +129,7 @@ target_include_directories(rochpcg PRIVATE
                              ${HIP_INCLUDE_DIRS}
                              ${HIPCUB_INCLUDE_DIRS}
                              ${ROCPRIM_INCLUDE_DIRS}
-                             ${hiprand_INCLUDE_DIRS}
                              /opt/rocm/include)
-if(NOT HIP_PLATFORM STREQUAL "nvcc")
-  target_include_directories(rochpcg PRIVATE ${rocrand_INCLUDE_DIRS})
-endif()
 
 if(HPCG_MPI)
   target_include_directories(rochpcg PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
@@ -145,9 +141,8 @@ endif()
 
 # Target link libraries
 if(HIP_PLATFORM STREQUAL "nvcc")
-  target_link_libraries(rochpcg PRIVATE omp curand)
+  target_link_libraries(rochpcg PRIVATE omp)
 else()
-  target_link_libraries(rochpcg PRIVATE ${hiprand_LIBRARIES})
   foreach(target ${AMDGPU_TARGETS})
     target_link_libraries(rochpcg PRIVATE --amdgpu-target=${target})
   endforeach()
@@ -199,8 +194,8 @@ rocm_install_targets(TARGETS rochpcg PREFIX rochpcg)
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19055), rocrand") # 1.5.19055 is HIP version in ROCm 2.2
-set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19055, rocrand")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19055)") # 1.5.19055 is HIP version in ROCm 2.2
+set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19055")
 
 rocm_create_package(
   NAME "rochpcg"

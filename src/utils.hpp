@@ -17,11 +17,6 @@
 
 #include <cstdio>
 #include <hip/hip_runtime_api.h>
-#ifdef __HIP_PLATFORM_HCC__
-#include <hiprand.h>
-#else
-#include <curand.h>
-#endif
 
 #include "Memory.hpp"
 
@@ -32,12 +27,6 @@ extern hipStream_t stream_halo;
 extern void* workspace;
 // Memory allocator
 extern hipAllocator_t allocator;
-// RNG generator
-#ifdef __HIP_PLATFORM_HCC__
-extern hiprandGenerator_t rng;
-#else
-extern curandGenerator_t rng;
-#endif
 
 #define RNG_SEED 0x586744
 #define MAX_COLORS 128

@@ -34,11 +34,6 @@ const char* NULLDEVICE="/dev/null";
 #include <fstream>
 #include <iostream>
 #include <hip/hip_runtime.h>
-#ifdef __HIP_PLATFORM_HCC__
-#include <hiprand.h>
-#else
-#include <curand.h>
-#endif
 
 #include "utils.hpp"
 #include "hpcg.hpp"
@@ -49,11 +44,6 @@ hipStream_t stream_interior;
 hipStream_t stream_halo;
 void* workspace;
 hipAllocator_t allocator;
-#ifdef __HIP_PLATFORM_HCC__
-hiprandGenerator_t rng;
-#else
-curandGenerator_t rng;
-#endif
 
 std::ofstream HPCG_fout; //!< output file stream for logging activities during HPCG run
 
@@ -191,15 +181,6 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   // Create streams
   HIP_CHECK(hipStreamCreate(&stream_interior));
   HIP_CHECK(hipStreamCreate(&stream_halo));
-
-  // Initialize random number generator
-#ifdef __HIP_PLATFORM_HCC__
-  hiprandCreateGenerator(&rng, HIPRAND_RNG_PSEUDO_DEFAULT);
-  hiprandSetPseudoRandomGeneratorSeed(rng, RNG_SEED);
-#else
-  curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(rng, RNG_SEED);
-#endif
 
   // Initialize memory allocator
 #ifdef HPCG_MEMMGMT

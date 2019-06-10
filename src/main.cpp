@@ -91,7 +91,7 @@ int main(int argc, char * argv[]) {
   // Print rocHPCG version and device
   if(rank == 0)
   {
-    printf("rocHPCG version: %d.%d.%d-%s\n",
+    printf("rocHPCG version: %d.%d.%d-%s (based on hpcg-3.1)\n",
            __ROCHPCG_VER_MAJOR,
            __ROCHPCG_VER_MINOR,
            __ROCHPCG_VER_PATCH,
@@ -104,7 +104,10 @@ int main(int argc, char * argv[]) {
 
   hipDeviceProp_t prop;
   hipGetDeviceProperties(&prop, params.device);
-  printf("Using HIP device (%d): %s\n", params.device, prop.name);
+  printf("Using HIP device (%d): %s (%lu MB global memory)\n",
+         params.device,
+         prop.name,
+         (prop.totalGlobalMem >> 20));
 
 #ifdef HPCG_DETAILED_DEBUG
   if (size < 100 && rank==0) HPCG_fout << "Process "<<rank<<" of "<<size<<" is alive with " << params.numThreads << " threads." <<endl;

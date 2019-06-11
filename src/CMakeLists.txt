@@ -76,11 +76,7 @@ else()
 endif()
 
 # Target compile definitions
-if(HIP_PLATFORM STREQUAL "nvcc")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_NVCC__")
-else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_HCC__")
-endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_HCC__")
 
 # Support only for contiguous arrays
 target_compile_definitions(rochpcg PRIVATE HPCG_CONTIGUOUS_ARRAYS)
@@ -140,16 +136,12 @@ if(BUILD_TEST)
 endif()
 
 # Target link libraries
-if(HIP_PLATFORM STREQUAL "nvcc")
-  target_link_libraries(rochpcg PRIVATE omp)
-else()
-  foreach(target ${AMDGPU_TARGETS})
-    target_link_libraries(rochpcg PRIVATE --amdgpu-target=${target})
-  endforeach()
+foreach(target ${AMDGPU_TARGETS})
+  target_link_libraries(rochpcg PRIVATE --amdgpu-target=${target})
+endforeach()
 
-  if(HPCG_OPENMP)
-    target_link_libraries(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
-  endif()
+if(HPCG_OPENMP)
+  target_link_libraries(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
 
 if(HPCG_MPI)
@@ -194,8 +186,8 @@ rocm_install_targets(TARGETS rochpcg PREFIX rochpcg)
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19055)") # 1.5.19055 is HIP version in ROCm 2.2
-set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19055")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19211)") # 1.5.19211 is HIP version in ROCm 2.5
+set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19211")
 
 rocm_create_package(
   NAME "rochpcg"

@@ -3,9 +3,6 @@
 # Git
 find_package(Git REQUIRED)
 
-# DownloadProject package
-include(cmake/DownloadProject/DownloadProject.cmake)
-
 # Add some paths
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/hcc /opt/rocm/hip /opt/rocm)
 
@@ -16,29 +13,6 @@ find_package(hip REQUIRED CONFIG PATHS ${CMAKE_PREFIX_PATH})
 # gtest
 if(BUILD_TEST)
   find_package(GTest REQUIRED)
-endif()
-
-# rocPRIM package
-find_package(ROCPRIM QUIET CONFIG PATHS ${CMAKE_PREFIX_PATH})
-find_package(HIPCUB QUIET CONFIG PATHS ${CMAKE_PREFIX_PATH})
-if(NOT HIPCUB_FOUND)
-  set(ROCPRIM_ROOT ${CMAKE_CURRENT_BINARY_DIR}/rocPRIM CACHE PATH "")
-  message(STATUS "Downloading rocPRIM.")
-  download_project(PROJ    rocPRIM
-       GIT_REPOSITORY      https://github.com/ROCmSoftwarePlatform/rocPRIM.git
-       GIT_TAG             master-rocm-2.4
-       INSTALL_DIR         ${ROCPRIM_ROOT}
-       CMAKE_ARGS          -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_TEST=OFF -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> -DCMAKE_CXX_COMPILER=${HIP_HCC_EXECUTABLE}
-       LOG_DOWNLOAD        TRUE
-       LOG_CONFIGURE       TRUE
-       LOG_INSTALL         TRUE
-       BUILD_PROJECT       TRUE
-       UPDATE_DISCONNECT   TRUE
-  )
-if(HIP_PLATFORM STREQUAL "hcc")
-  find_package(ROCPRIM REQUIRED CONFIG PATHS ${ROCPRIM_ROOT})
-endif()
-find_package(HIPCUB REQUIRED CONFIG PATHS ${ROCPRIM_ROOT})
 endif()
 
 # ROCm package

@@ -47,13 +47,8 @@ __global__ void kernel_permute_ell_rows(local_int_t m,
 
 __device__ void swap(local_int_t& key, double& val, int mask, int dir)
 {
-#if defined(__HIP_PLATFORM_HCC__)
     local_int_t key1 = __shfl_xor(key, mask);
     double val1 = __shfl_xor(val, mask);
-#elif defined(__HIP_PLATFORM_NVCC__)
-    local_int_t key1 = __shfl_xor_sync(0xffffffff, key, mask);
-    double val1 = __shfl_xor_sync(0xffffffff, val, mask);
-#endif
 
     if(key < key1 == dir)
     {

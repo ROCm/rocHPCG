@@ -1,7 +1,7 @@
 #include "SparseMatrix.hpp"
 
 #include <hip/hip_runtime.h>
-#include <hipcub/hipcub.hpp>
+#include <rocprim/rocprim.hpp>
 
 __global__ void kernel_copy_diagonal(local_int_t m,
                                      local_int_t n,
@@ -284,20 +284,20 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(deviceMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
     HIP_CHECK(deviceMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
 
-    size_t hipcub_size;
-    void* hipcub_buffer = NULL;
-    HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
-                                                hipcub_size,
-                                                A.halo_row_ind,
-                                                A.halo_row_ind,
-                                                A.halo_rows));
-    HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
-    HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
-                                                hipcub_size,
-                                                A.halo_row_ind,
-                                                A.halo_row_ind, // TODO inplace!
-                                                A.halo_rows));
-    HIP_CHECK(deviceFree(hipcub_buffer));
+    size_t rocprim_size;
+    void* rocprim_buffer = NULL;
+    HIP_CHECK(rocprim::radix_sort_keys(rocprim_buffer,
+                                       rocprim_size,
+                                       A.halo_row_ind,
+                                       A.halo_row_ind,
+                                       A.halo_rows));
+    HIP_CHECK(deviceMalloc(&rocprim_buffer, rocprim_size));
+    HIP_CHECK(rocprim::radix_sort_keys(rocprim_buffer,
+                                       rocprim_size,
+                                       A.halo_row_ind,
+                                       A.halo_row_ind, // TODO inplace!
+                                       A.halo_rows));
+    HIP_CHECK(deviceFree(rocprim_buffer));
 
     hipLaunchKernelGGL((kernel_to_halo),
                        dim3((A.halo_rows - 1) / 128 + 1),

@@ -170,36 +170,20 @@ __global__ void kernel_generate_problem(local_int_t m,
         // Diagonal entry is threated differently
         if(curcol == currentGlobalRow)
         {
-#if defined(__HIP_PLATFORM_HCC__)
             // Store diagonal entry index
             __builtin_nontemporal_store(hipThreadIdx_x, matrixDiagonal + currentLocalRow);
 
             // Diagonal matrix values are 26
             __builtin_nontemporal_store(26.0, matrixValues + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-            // Store diagonal entry index
-            matrixDiagonal[currentLocalRow] = hipThreadIdx_x;
-
-            // Diagonal matrix values are 26
-            matrixValues[idx] = 26.0;
-#endif
         }
         else
         {
             // Off-diagonal matrix values are -1
-#if defined(__HIP_PLATFORM_HCC__)
             __builtin_nontemporal_store(-1.0, matrixValues + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-            matrixValues[idx] = -1.0;
-#endif
         }
 
         // Store current global column
-#if defined(__HIP_PLATFORM_HCC__)
         __builtin_nontemporal_store(curcol, mtxIndG + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-        mtxIndG[idx] = curcol;
-#endif
 
         // Interior vertices have 27 neighboring vertices
         numberOfNonzerosInRow = numberOfNonzerosPerRow;
@@ -221,36 +205,20 @@ __global__ void kernel_generate_problem(local_int_t m,
             // Diagonal entry is threated differently
             if(curcol == currentGlobalRow)
             {
-#if defined(__HIP_PLATFORM_HCC__)
                 // Store diagonal entry index
                 __builtin_nontemporal_store(offset, matrixDiagonal + currentLocalRow);
 
                 // Diagonal matrix values are 26
                 __builtin_nontemporal_store(26.0, matrixValues + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-                // Store diagonal entry index
-                matrixDiagonal[currentLocalRow] = offset;
-
-                // Diagonal matrix values are 26
-                matrixValues[idx] = 26.0;
-#endif
             }
             else
             {
                 // Off-diagonal matrix values are -1
-#if defined(__HIP_PLATFORM_HCC__)
                 __builtin_nontemporal_store(-1.0, matrixValues + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-                matrixValues[idx] = -1.0;
-#endif
             }
 
             // Store current global column
-#if defined(__HIP_PLATFORM_HCC__)
             __builtin_nontemporal_store(curcol, mtxIndG + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-            mtxIndG[idx] = curcol;
-#endif
         }
 
         // First thread writes number of neighboring vertices, including the
@@ -264,7 +232,6 @@ __global__ void kernel_generate_problem(local_int_t m,
     // For each row, initialize vector arrays and number of vertices
     if(hipThreadIdx_x == 0)
     {
-#if defined(__HIP_PLATFORM_HCC__)
         __builtin_nontemporal_store(numberOfNonzerosInRow, nonzerosInRow + currentLocalRow);
 
         // Store local to global mapping
@@ -274,24 +241,10 @@ __global__ void kernel_generate_problem(local_int_t m,
         local_int_t crd  = iz * nx * ny + iy * (nx << 1) + (ix << 2);
         local_int_t hash = get_hash(ix, iy, iz) * nx * ny * nz + crd;
         __builtin_nontemporal_store(hash, rowHash + currentLocalRow);
-#elif defined(__HIP_PLATFORM_NVCC__)
-        nonzerosInRow[currentLocalRow] = numberOfNonzerosInRow;
-
-        // Store local to global mapping
-        localToGlobalMap[currentLocalRow] = currentGlobalRow;
-
-        // Store local row hash
-        local_int_t crd  = iz * nx * ny + iy * (nx << 1) + (ix << 2);
-        rowHash[currentLocalRow] = get_hash(ix, iy, iz) * nx * ny * nz + crd;
-#endif
 
         if(b != NULL)
         {
-#if defined(__HIP_PLATFORM_HCC__)
             __builtin_nontemporal_store(26.0 - (numberOfNonzerosInRow - 1.0), b + currentLocalRow);
-#elif defined(__HIP_PLATFORM_NVCC__)
-            b[currentLocalRow] = 26.0 - (numberOfNonzerosInRow - 1.0);
-#endif
         }
     }
 }

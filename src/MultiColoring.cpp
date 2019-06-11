@@ -22,7 +22,7 @@
 #include "MultiColoring.hpp"
 
 #include <hip/hip_runtime.h>
-#include <hipcub/hipcub.hpp>
+#include <rocprim/rocprim.hpp>
 
 __global__ void kernel_identity(local_int_t size, local_int_t* data)
 {
@@ -159,11 +159,7 @@ __global__ void kernel_jpl(local_int_t m,
     local_int_t row_hash = hash[row];
 
     local_int_t idx = row * hipBlockDim_x + hipThreadIdx_x;
-#if defined(__HIP_PLATFORM_HCC__)
     local_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
-#elif defined(__HIP_PLATFORM_NVCC__)
-    local_int_t col = mtxIndL[idx];
-#endif
 
     if(col >= 0 && col < m)
     {
@@ -346,8 +342,8 @@ void JPLColoring(SparseMatrix& A)
                        m,
                        perm);
 
-    hipcub::DoubleBuffer<local_int_t> keys(A.perm, tmp_color);
-    hipcub::DoubleBuffer<local_int_t> vals(perm, tmp_perm);
+    rocprim::double_buffer<local_int_t> keys(A.perm, tmp_color);
+    rocprim::double_buffer<local_int_t> vals(perm, tmp_perm);
 
     size_t size;
     void* buf = NULL;
@@ -355,9 +351,9 @@ void JPLColoring(SparseMatrix& A)
     int startbit = 0;
     int endbit = 32 - __builtin_clz(A.nblocks);
 
-    HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
+    HIP_CHECK(rocprim::radix_sort_pairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(deviceMalloc(&buf, size));
-    HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(buf, size, keys, vals, m, startbit, endbit));
+    HIP_CHECK(rocprim::radix_sort_pairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(deviceFree(buf));
 
     hipLaunchKernelGGL((kernel_create_perm),
@@ -366,7 +362,7 @@ void JPLColoring(SparseMatrix& A)
                        0,
                        0,
                        m,
-                       vals.Current(),
+                       vals.current(),
                        A.perm);
 
     HIP_CHECK(deviceFree(tmp_color));

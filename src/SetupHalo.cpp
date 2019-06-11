@@ -24,7 +24,7 @@
 #endif
 
 #include <hip/hip_runtime.h>
-#include <hipcub/hipcub.hpp>
+#include <rocprim/rocprim.hpp>
 
 #include "utils.hpp"
 #include "SetupHalo.hpp"
@@ -407,25 +407,25 @@ void SetupHalo(SparseMatrix& A)
             continue;
         }
 
-        size_t hipcub_size;
-        void* hipcub_buffer = NULL;
+        size_t rocprim_size;
+        void* rocprim_buffer = NULL;
 
         // Obtain buffer size
-        HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
-                                                    hipcub_size,
-                                                    d_send_indices + i * max_sending,
-                                                    A.d_elementsToSend + nsend_per_rank[i],
-                                                    entriesToSend));
-        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
+        HIP_CHECK(rocprim::radix_sort_keys(rocprim_buffer,
+                                           rocprim_size,
+                                           d_send_indices + i * max_sending,
+                                           A.d_elementsToSend + nsend_per_rank[i],
+                                           entriesToSend));
+        HIP_CHECK(deviceMalloc(&rocprim_buffer, rocprim_size));
 
         // Sort send indices to obtain increasing order
-        HIP_CHECK(hipcub::DeviceRadixSort::SortKeys(hipcub_buffer,
-                                                    hipcub_size,
-                                                    d_send_indices + i * max_sending,
-                                                    A.d_elementsToSend + nsend_per_rank[i],
-                                                    entriesToSend));
-        HIP_CHECK(deviceFree(hipcub_buffer));
-        hipcub_buffer = NULL;
+        HIP_CHECK(rocprim::radix_sort_keys(rocprim_buffer,
+                                           rocprim_size,
+                                           d_send_indices + i * max_sending,
+                                           A.d_elementsToSend + nsend_per_rank[i],
+                                           entriesToSend));
+        HIP_CHECK(deviceFree(rocprim_buffer));
+        rocprim_buffer = NULL;
 
         // Store number of elements that have to be sent to i-th process
         A.sendLength[A.numberOfSendNeighbors++] = entriesToSend;
@@ -499,29 +499,29 @@ void SetupHalo(SparseMatrix& A)
             continue;
         }
 
-        size_t hipcub_size;
-        void* hipcub_buffer = NULL;
+        size_t rocprim_size;
+        void* rocprim_buffer = NULL;
 
         // Obtain buffer size
-        HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(hipcub_buffer,
-                                                     hipcub_size,
-                                                     d_recvList[i],
-                                                     d_recvBuffer,
-                                                     d_haloList[i],
-                                                     d_haloBuffer,
-                                                     entriesToRecv));
-        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
+        HIP_CHECK(rocprim::radix_sort_pairs(rocprim_buffer,
+                                            rocprim_size,
+                                            d_recvList[i],
+                                            d_recvBuffer,
+                                            d_haloList[i],
+                                            d_haloBuffer,
+                                            entriesToRecv));
+        HIP_CHECK(deviceMalloc(&rocprim_buffer, rocprim_size));
 
         // Sort receive index array and halo index array
-        HIP_CHECK(hipcub::DeviceRadixSort::SortPairs(hipcub_buffer,
-                                                     hipcub_size,
-                                                     d_recvList[i],
-                                                     d_recvBuffer,
-                                                     d_haloList[i],
-                                                     d_haloBuffer,
-                                                     entriesToRecv));
-        HIP_CHECK(deviceFree(hipcub_buffer));
-        hipcub_buffer = NULL;
+        HIP_CHECK(rocprim::radix_sort_pairs(rocprim_buffer,
+                                            rocprim_size,
+                                            d_recvList[i],
+                                            d_recvBuffer,
+                                            d_haloList[i],
+                                            d_haloBuffer,
+                                            entriesToRecv));
+        HIP_CHECK(deviceFree(rocprim_buffer));
+        rocprim_buffer = NULL;
 
         // Swap receive buffer pointers
         global_int_t* gptr = d_recvBuffer;
@@ -538,27 +538,27 @@ void SetupHalo(SparseMatrix& A)
         global_int_t* d_offsets = reinterpret_cast<global_int_t*>(d_recvBuffer);
         global_int_t* d_unique_out = reinterpret_cast<global_int_t*>(d_haloBuffer);;
 
-        // Obtain hipcub buffer size
-        HIP_CHECK(hipcub::DeviceRunLengthEncode::Encode(hipcub_buffer,
-                                                        hipcub_size,
-                                                        d_recvList[i],
-                                                        d_unique_out,
-                                                        d_offsets + 1,
-                                                        d_num_runs,
-                                                        entriesToRecv));
-        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
+        // Obtain rocprim buffer size
+        HIP_CHECK(rocprim::run_length_encode(rocprim_buffer,
+                                             rocprim_size,
+                                             d_recvList[i],
+                                             entriesToRecv,
+                                             d_unique_out,
+                                             d_offsets + 1,
+                                             d_num_runs));
+        HIP_CHECK(deviceMalloc(&rocprim_buffer, rocprim_size));
 
         // Perform a run length encode over the receive indices to obtain the number
         // of halo entries in each row
-        HIP_CHECK(hipcub::DeviceRunLengthEncode::Encode(hipcub_buffer,
-                                                        hipcub_size,
-                                                        d_recvList[i],
-                                                        d_unique_out,
-                                                        d_offsets + 1,
-                                                        d_num_runs,
-                                                        entriesToRecv));
-        HIP_CHECK(deviceFree(hipcub_buffer));
-        hipcub_buffer = NULL;
+        HIP_CHECK(rocprim::run_length_encode(rocprim_buffer,
+                                             rocprim_size,
+                                             d_recvList[i],
+                                             entriesToRecv,
+                                             d_unique_out,
+                                             d_offsets + 1,
+                                             d_num_runs));
+        HIP_CHECK(deviceFree(rocprim_buffer));
+        rocprim_buffer = NULL;
 
         // Copy the number of halo entries with respect to the i-th neighbor
         global_int_t currentRankHaloEntries;
@@ -570,14 +570,14 @@ void SetupHalo(SparseMatrix& A)
         // d_offsets[0] = 0
         HIP_CHECK(hipMemset(d_offsets, 0, sizeof(global_int_t)));
 
-        // Obtain hipcub buffer size
-        HIP_CHECK(hipcub::DeviceScan::InclusiveSum(hipcub_buffer, hipcub_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries));
-        HIP_CHECK(deviceMalloc(&hipcub_buffer, hipcub_size));
+        // Obtain rocprim buffer size
+        HIP_CHECK(rocprim::inclusive_scan(rocprim_buffer, rocprim_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries, rocprim::plus<global_int_t>()));
+        HIP_CHECK(deviceMalloc(&rocprim_buffer, rocprim_size));
 
         // Perform inclusive sum to obtain the offsets to the first halo entry of each row
-        HIP_CHECK(hipcub::DeviceScan::InclusiveSum(hipcub_buffer, hipcub_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries));
-        HIP_CHECK(deviceFree(hipcub_buffer));
-        hipcub_buffer = NULL;
+        HIP_CHECK(rocprim::inclusive_scan(rocprim_buffer, rocprim_size, d_offsets + 1, d_offsets + 1, currentRankHaloEntries, rocprim::plus<global_int_t>()));
+        HIP_CHECK(deviceFree(rocprim_buffer));
+        rocprim_buffer = NULL;
 
         // Launch kernel to fill all halo columns in the local matrix column index array for the i-th neighbor
         hipLaunchKernelGGL((kernel_halo_columns),

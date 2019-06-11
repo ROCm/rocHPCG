@@ -19,7 +19,10 @@ else()
 endif()
 
 # Find HIP package
-find_package(HIP 1.5.18442 REQUIRED) # ROCm 1.9.2
+find_package(HIP 1.5.19211 REQUIRED) # ROCm 2.5
+
+# rocPRIM package
+find_package(ROCPRIM 2.5.0 REQUIRED) # ROCm 2.5
 
 # Find HCC executable
 find_program(

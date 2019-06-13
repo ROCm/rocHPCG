@@ -6,8 +6,8 @@ rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented 
 * CMake (3.5 or later)
 * MPI
 * NUMA library
-* AMD [ROCm] 2.2 platform
-* rocRAND
+* AMD [ROCm] 2.5 platform
+* rocPRIM
 * googletest (for test application only)
 
 ## Quickstart rocHPCG build and install
@@ -57,7 +57,7 @@ Sandia National Laboratories; University of Tennessee, Knoxville
 
 ## Performance evaluation
 For performance evaluation purposes, the number of iterations should be as low as possible (e.g. convergence rate as high as possible), since the final HPCG score is scaled to 50 iterations.
-Furthermore, it is observed that high memory occupancy performs better on our devices. My problem size suggestion for devices with 16GB is `nx = ny = nz = 280`, runtime for official runs have to be at least 1800 seconds, e.g.
+Furthermore, it is observed that high memory occupancy performs better on our devices. My problem size suggestion for devices with 16GB is `nx = ny = nz = 280` and `nx = 560, ny = nz = 280` for devices with 32GB. Runtime for official runs have to be at least 1800 seconds (use 1860 to be on the safe side), e.g.
 ```
 ./rochpcg 280 280 280 1860
 ```

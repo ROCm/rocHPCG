@@ -2,12 +2,15 @@
 #define VERSION_HPP
 
 // clang-format off
-#define __ROCHPCG_VER_MAJOR @rochpcg_VERSION_MAJOR@
-#define __ROCHPCG_VER_MINOR @rochpcg_VERSION_MINOR@
-#define __ROCHPCG_VER_PATCH @rochpcg_VERSION_PATCH@
-#define __ROCHPCG_VER_TWEAK @rochpcg_VERSION_TWEAK@
-#define __ROCHPCG_GIT_REV "@rochpcg_GIT_REV@"
+#define __ROCHPCG_VER_MAJOR     @rochpcg_VERSION_MAJOR@
+#define __ROCHPCG_VER_MINOR     @rochpcg_VERSION_MINOR@
+#define __ROCHPCG_VER_PATCH     @rochpcg_VERSION_PATCH@
+#define __ROCHPCG_VER_TWEAK     @rochpcg_VERSION_TWEAK@
+#define __ROCHPCG_VER_COMMIT_ID @rochpcg_VERSION_COMMIT_ID@
 // clang-format on
+
+#define TO_STR2(x) #x
+#define TO_STR(x) TO_STR2(x)
 
 #define __ROCHPCG_VER \
     10000 * __ROCHPCG_VER_MAJOR + 100 * __ROCHPCG_VER_MINOR + __ROCHPCG_VER_PATCH

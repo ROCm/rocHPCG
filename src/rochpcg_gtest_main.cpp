@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
                __ROCHPCG_VER_MAJOR,
                __ROCHPCG_VER_MINOR,
                __ROCHPCG_VER_PATCH,
-               __ROCHPCG_GIT_REV);
+               TO_STR(__ROCHPCG_VER_COMMIT_ID));
     }
 
     // Get device id from command line

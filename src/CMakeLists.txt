@@ -1,19 +1,14 @@
-# Get full git commit SHA-1
-set(GIT_COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD)
-execute_process(COMMAND ${GIT_COMMAND}
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                OUTPUT_VARIABLE rochpcg_GIT_REV
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-                ERROR_QUIET)
+# This option only works for make/nmake and the ninja generators, but no reason it shouldn't be on all the time
+# This tells cmake to create a compile_commands.json file that can be used with clang tooling or vim
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Configure a header file to pass the rocALUTION version
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Version.hpp.in"
                "${PROJECT_BINARY_DIR}/include/Version.hpp"
-               @ONLY
 )
 
 # HPCG HIP sources
-set(HIP_SOURCE
+set(rochpcg_hip_source
   ComputeDotProduct.cpp
   ComputeSPMV.cpp
   ComputeSYMGS.cpp
@@ -33,7 +28,7 @@ set(HIP_SOURCE
 )
 
 # HPCG sources
-set(SOURCE
+set(rochpcg_source
   CG.cpp
   CG_ref.cpp
   CheckAspectRatio.cpp
@@ -64,15 +59,21 @@ set(SOURCE
 )
 
 # Flag source files as hip source files
-foreach(i ${HIP_SOURCE})
+foreach(i ${rochpcg_hip_source})
   set_source_files_properties(${i} PROPERTIES HIP_SOURCE_PROPERTY_FORMAT TRUE)
+endforeach()
+
+# HIP flags workaround while target_compile_options does not work
+list(APPEND HIP_HIPCC_FLAGS "-fno-gpu-rdc -Wall -Wno-unused-command-line-argument")
+foreach(target ${AMDGPU_TARGETS})
+  list(APPEND HIP_HIPCC_FLAGS "-amdgpu-target=${target}")
 endforeach()
 
 # Target executable
 if(BUILD_TEST)
-  hip_add_executable(rochpcg ${SOURCE} rochpcg_gtest_main.cpp test_rochpcg.cpp ${HIP_SOURCE})
+  hip_add_executable(rochpcg ${rochpcg_source} rochpcg_gtest_main.cpp test_rochpcg.cpp ${rochpcg_hip_source})
 else()
-  hip_add_executable(rochpcg ${SOURCE} main.cpp ${HIP_SOURCE})
+  hip_add_executable(rochpcg ${rochpcg_source} main.cpp ${rochpcg_hip_source})
 endif()
 
 # Target compile definitions
@@ -87,6 +88,8 @@ endif()
 
 if(NOT HPCG_MPI)
   target_compile_definitions(rochpcg PRIVATE HPCG_NO_MPI)
+else()
+  target_compile_definitions(rochpcg PRIVATE ${MPI_COMPILE_DEFINITIONS})
 endif()
 
 if(HPCG_DEBUG)
@@ -120,15 +123,18 @@ endif()
 
 
 # Target include directories
-target_include_directories(rochpcg PRIVATE
-                             ${PROJECT_BINARY_DIR}/include
-                             ${HIP_INCLUDE_DIRS}
-                             ${HIPCUB_INCLUDE_DIRS}
-                             ${ROCPRIM_INCLUDE_DIRS}
-                             /opt/rocm/include)
+target_include_directories(rochpcg
+                             PRIVATE
+                               $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+                               $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>
+                               $<BUILD_INTERFACE:${ROCPRIM_INCLUDE_DIRS}>
+                               $<BUILD_INTERFACE:/opt/rocm/include>)
 
 if(HPCG_MPI)
-  target_include_directories(rochpcg PRIVATE ${MPI_CXX_INCLUDE_PATH} ${LIBNUMA_INCLUDE_DIR})
+  target_include_directories(rochpcg
+                               PRIVATE
+                                 $<BUILD_INTERFACE:${MPI_CXX_INCLUDE_PATH}>
+                                 $<BUILD_INTERFACE:${LIBNUMA_INCLUDE_DIR}>)
 endif()
 
 if(BUILD_TEST)
@@ -136,10 +142,6 @@ if(BUILD_TEST)
 endif()
 
 # Target link libraries
-foreach(target ${AMDGPU_TARGETS})
-  target_link_libraries(rochpcg PRIVATE --amdgpu-target=${target})
-endforeach()
-
 if(HPCG_OPENMP)
   target_link_libraries(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
@@ -166,10 +168,6 @@ if(HPCG_MPI)
   target_compile_options(rochpcg PRIVATE ${MPI_COMPILE_OPTIONS})
 endif()
 
-
-
-
-
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
 if(BUILD_TEST)
@@ -178,9 +176,12 @@ if(BUILD_TEST)
 else()
   set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endif()
+set_target_properties(rochpcg PROPERTIES DEBUG_POSTFIX "-d")
 
-# Install target
-rocm_install_targets(TARGETS rochpcg PREFIX rochpcg)
+# Install targets
+rocm_install_targets(TARGETS rochpcg
+                     PREFIX rochpcg
+)
 
 # Symbolic links
 rocm_install_symlink_subdir(rochpcg)
@@ -188,9 +189,19 @@ rocm_install_symlink_subdir(rochpcg)
 # Package specific CPACK vars
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "hip_hcc (>= 1.5.19211)") # 1.5.19211 is HIP version in ROCm 2.5
 set(CPACK_RPM_PACKAGE_REQUIRES "hip_hcc >= 1.5.19211")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
+
+if(NOT CPACK_PACKAGING_INSTALL_PREFIX)
+  set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+endif()
+
+set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "\${CPACK_PACKAGING_INSTALL_PREFIX}" "\${CPACK_PACKAGING_INSTALL_PREFIX}/include")
+
+# Package name
+set(package_name rochpcg)
 
 rocm_create_package(
-  NAME "rochpcg"
+  NAME ${package_name}
   DESCRIPTION "Radeon Open Compute HPCG application"
   MAINTAINER "Nico Trost"
 )

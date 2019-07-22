@@ -1,5 +1,5 @@
 # The ROCm platform requires Ubuntu 16.04 or Fedora 24, which has cmake 3.5
-cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 # Consider removing this in the future
 # This should appear before the project command, because it does not use FORCE
@@ -22,11 +22,16 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "" "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+# Honor per-config flags in try_compile() source-file signature. cmake v3.7 and up
+if(POLICY CMP0066)
+  cmake_policy(SET CMP0066 NEW)
+endif()
+
 # rocHPCG project
 project(rochpcg LANGUAGES CXX)
 
-# Set toolchain
-include(cmake/SetToolchain.cmake)
+# Force library install path to lib (CentOS 7 defaults to lib64)
+set(CMAKE_INSTALL_LIBDIR "lib" CACHE INTERNAL "Installation directory for libraries" FORCE)
 
 # Build flags
 set(CMAKE_CXX_STANDARD 11)
@@ -48,10 +53,21 @@ option(OPT_DEFRAG "Build with memory management defragmentation" ON)
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.5.5.0 NO_GIT_TAG_VERSION)
+set(VERSION_STRING "0.5.6.")
+# Check if BUILD_NUMBER if defined in a Jenkins environment
+if($ENV{BUILD_NUMBER})
+  string(CONCAT BUILD_VERSION ${VERSION_STRING} $ENV{BUILD_NUMBER})
+else()
+  string(CONCAT BUILD_VERSION ${VERSION_STRING} "0")
+endif()
+rocm_setup_version(VERSION ${BUILD_VERSION} NO_GIT_TAG_VERSION)
+
+# Get the git tag version
+include(cmake/version.cmake)
+rocm_get_git_commit_id(rochpcg_VERSION_COMMIT_ID)
 
 # AMD targets
 set(AMDGPU_TARGETS gfx900;gfx906 CACHE STRING "List of specific machine types for library to target")
 
-# rocALUTION library
+# rocHPCG source directory
 add_subdirectory(src)

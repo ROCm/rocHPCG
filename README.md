@@ -78,7 +78,11 @@ Please note that for successful testing, a device with at least 16GB of device m
 ## Support
 Please use [the issue tracker][] for bugs and feature requests.
 
+## License
+The [license file][] can be found in the main repository.
+
 [HPCG]: https://www.hpcg-benchmark.org/
 [ROCm]: https://github.com/RadeonOpenCompute/ROCm
 [HIP]: https://github.com/GPUOpen-ProfessionalCompute-Tools/HIP/
 [the issue tracker]: https://github.com/ROCmSoftwarePlatform/rocHPCG/issues
+[license file]: https://github.com/ROCmSoftwarePlatform/rocHPCG

@@ -74,6 +74,7 @@ __device__ void reduce_sum(local_int_t tid, double* data)
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_dot1_part1(local_int_t n,
                                   const double* x,
                                   double* workspace)
@@ -100,6 +101,7 @@ __global__ void kernel_dot1_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_dot2_part1(local_int_t n,
                                   const double* x,
                                   const double* y,
@@ -126,6 +128,7 @@ __global__ void kernel_dot2_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_dot_part2(double* workspace)
 {
     __shared__ double sdata[BLOCKSIZE];

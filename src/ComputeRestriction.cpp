@@ -37,6 +37,7 @@
 
 #include <hip/hip_runtime.h>
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_restrict(local_int_t size,
                                 const local_int_t* f2cOperator,
                                 const double* fine,
@@ -57,7 +58,7 @@ __global__ void kernel_restrict(local_int_t size,
     coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - data[idx_fine];
 }
 
-__launch_bounds__(1024)
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_fused_restrict_spmv(local_int_t size,
                                            const local_int_t* f2cOperator,
                                            const double* fine,

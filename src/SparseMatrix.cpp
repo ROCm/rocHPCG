@@ -37,6 +37,7 @@
 #include <hip/hip_runtime.h>
 #include <rocprim/rocprim.hpp>
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_copy_diagonal(local_int_t m,
                                      local_int_t n,
                                      local_int_t ell_width,
@@ -86,6 +87,7 @@ void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
                        diagonal.d_values);
 }
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_replace_diagonal(local_int_t m,
                                         local_int_t n,
                                         const double* diagonal,
@@ -141,6 +143,7 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
                        A.inv_diag);
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 1024)))
 __global__ void kernel_to_ell_col(local_int_t m,
                                   local_int_t nonzerosPerRow,
                                   const local_int_t* __restrict__ mtxIndL,
@@ -183,6 +186,7 @@ __global__ void kernel_to_ell_col(local_int_t m,
 #endif
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 1024)))
 __global__ void kernel_to_ell_val(local_int_t m,
                                   local_int_t nnz_per_row,
                                   const double* __restrict__ matrixValues,
@@ -199,6 +203,7 @@ __global__ void kernel_to_ell_val(local_int_t m,
     ell_val[idx] = matrixValues[row * nnz_per_row + hipThreadIdx_x];
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_to_halo(local_int_t halo_rows,
                                local_int_t m,
                                local_int_t n,
@@ -350,6 +355,7 @@ void ConvertToELL(SparseMatrix& A)
 #endif
 }
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_extract_diag_index(local_int_t m,
                                           local_int_t ell_width,
                                           const local_int_t* ell_col_ind,

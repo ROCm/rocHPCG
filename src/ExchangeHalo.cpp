@@ -138,6 +138,7 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   return;
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_gather(local_int_t size,
                               const double* in,
                               const local_int_t* map,

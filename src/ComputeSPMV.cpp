@@ -51,7 +51,7 @@
 
 #include <hip/hip_runtime.h>
 
-__launch_bounds__(1024)
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        local_int_t m,
                                        local_int_t n,
@@ -93,7 +93,7 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-__launch_bounds__(512)
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_spmv_ell(local_int_t m,
                                 int nblocks,
                                 local_int_t rows_per_block,
@@ -137,6 +137,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
     __builtin_nontemporal_store(sum, y + row);
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_spmv_halo(local_int_t m,
                                  local_int_t n,
                                  local_int_t halo_width,

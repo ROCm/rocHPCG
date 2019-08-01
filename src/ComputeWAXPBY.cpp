@@ -56,6 +56,7 @@
 
 #include "ComputeWAXPBY.hpp"
 
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_waxpby(local_int_t size,
                               double alpha,
                               const double* x,
@@ -147,6 +148,7 @@ __device__ void reduce_sum(local_int_t tid, double* data)
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
                                               double alpha,
                                               const double* x,
@@ -176,6 +178,7 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_fused_waxpby_dot_part2(local_int_t size, double* workspace)
 {
     local_int_t tid = hipThreadIdx_x;

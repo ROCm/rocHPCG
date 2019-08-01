@@ -55,6 +55,7 @@
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_set_one(local_int_t size, double* array)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
@@ -72,6 +73,7 @@ __device__ local_int_t get_hash(local_int_t ix, local_int_t iy, local_int_t iz)
     return ((ix & 1) << 2) | ((iy & 1) << 1) | ((iz & 1) << 0);
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_generate_problem(local_int_t m,
                                         local_int_t nx,
                                         local_int_t ny,
@@ -296,6 +298,7 @@ __device__ void reduce_sum(local_int_t tid, local_int_t* data)
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_local_nnz_part1(local_int_t size, const char* nonzerosInRow, local_int_t* workspace)
 {
     local_int_t tid = hipThreadIdx_x;
@@ -318,6 +321,7 @@ __global__ void kernel_local_nnz_part1(local_int_t size, const char* nonzerosInR
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_local_nnz_part2(local_int_t size, local_int_t* workspace)
 {
     local_int_t tid = hipThreadIdx_x;

@@ -78,21 +78,10 @@ option(OPT_DEFRAG "Build with memory management defragmentation" ON)
 include(cmake/Dependencies.cmake)
 
 # Setup version
-set(VERSION_STRING "0.5.6.")
-# Check if BUILD_NUMBER if defined in a Jenkins environment
-if($ENV{BUILD_NUMBER})
-  string(CONCAT BUILD_VERSION ${VERSION_STRING} $ENV{BUILD_NUMBER})
-else()
-  string(CONCAT BUILD_VERSION ${VERSION_STRING} "0")
-endif()
-rocm_setup_version(VERSION ${BUILD_VERSION} NO_GIT_TAG_VERSION)
-
-# Get the git tag version
-include(cmake/version.cmake)
-rocm_get_git_commit_id(rochpcg_VERSION_COMMIT_ID)
+rocm_setup_version(VERSION 0.5.7)
 
 # AMD targets
-set(AMDGPU_TARGETS gfx900;gfx906 CACHE STRING "List of specific machine types for library to target")
+set(AMDGPU_TARGETS gfx900;gfx906;gfx908 CACHE STRING "List of specific machine types for library to target")
 
 # rocHPCG source directory
 add_subdirectory(src)

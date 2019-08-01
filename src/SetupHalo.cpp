@@ -57,6 +57,7 @@
 #include "utils.hpp"
 #include "SetupHalo.hpp"
 
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_copy_indices(local_int_t size,
                                     const char* nonzerosInRow,
                                     const global_int_t* mtxIndG,
@@ -81,6 +82,7 @@ __global__ void kernel_copy_indices(local_int_t size,
     }
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_setup_halo(local_int_t m,
                                   local_int_t max_boundary,
                                   local_int_t max_sending,
@@ -203,6 +205,7 @@ __global__ void kernel_setup_halo(local_int_t m,
     }
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_halo_columns(local_int_t size,
                                     local_int_t m,
                                     local_int_t rank_offset,

@@ -179,6 +179,9 @@ if(BUILD_TEST)
   target_link_libraries(rochpcg PRIVATE ${GTEST_BOTH_LIBRARIES})
 endif()
 
+foreach(target ${AMDGPU_TARGETS})
+  target_link_libraries(rochpcg PRIVATE "--amdgpu-target=${target}")
+endforeach()
 
 
 

@@ -37,6 +37,7 @@
 
 #include <hip/hip_runtime.h>
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_permute_ell_rows(local_int_t m,
                                         local_int_t p,
                                         const local_int_t* tmp_cols,
@@ -76,6 +77,7 @@ __device__ int get_bit(int x, int i)
     return (x >> i) & 1;
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_perm_cols(local_int_t m,
                                  local_int_t n,
                                  local_int_t nonzerosPerRow,
@@ -210,6 +212,7 @@ void PermuteRows(SparseMatrix& A)
     HIP_CHECK(deviceFree(tmp_vals));
 }
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_permute(local_int_t size,
                                const local_int_t* perm,
                                const double* in,

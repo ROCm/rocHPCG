@@ -55,7 +55,7 @@ else()
 endif()
 
 # Find HIP package
-find_package(HIP 1.5.19211 REQUIRED) # ROCm 2.5
+find_package(HIP REQUIRED)
 
 # gtest
 if(BUILD_TEST)
@@ -63,7 +63,7 @@ if(BUILD_TEST)
 endif()
 
 # rocprim
-find_package(rocprim 2.5.0 REQUIRED) # ROCm 2.5
+find_package(rocprim REQUIRED)
 
 # libnuma if MPI is enabled
 if(HPCG_MPI)

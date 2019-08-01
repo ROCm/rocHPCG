@@ -64,6 +64,7 @@ using std::endl;
 #include "TestCG.hpp"
 #include "CG.hpp"
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_scale_vector_values(local_int_t m,
                                            const global_int_t* localToGlobalMap,
                                            double* exaggeratedDiagA,

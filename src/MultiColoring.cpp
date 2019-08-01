@@ -38,6 +38,7 @@
 #include <hip/hip_runtime.h>
 #include <rocprim/rocprim.hpp>
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_identity(local_int_t size, local_int_t* data)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
@@ -50,6 +51,7 @@ __global__ void kernel_identity(local_int_t size, local_int_t* data)
     data[gid] = gid;
 }
 
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_create_perm(local_int_t size,
                                    const local_int_t* in,
                                    local_int_t* out)
@@ -82,6 +84,7 @@ __device__ void reduce_sum(local_int_t tid, local_int_t* data)
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_count_color_part1(local_int_t size,
                                          local_int_t color,
                                          const local_int_t* colors,
@@ -112,6 +115,7 @@ __global__ void kernel_count_color_part1(local_int_t size,
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_count_color_part2(local_int_t size,
                                          local_int_t* workspace)
 {
@@ -135,6 +139,7 @@ __global__ void kernel_count_color_part2(local_int_t size,
     }
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 512)))
 __global__ void kernel_jpl(local_int_t m,
                            const local_int_t* hash,
                            int color1,

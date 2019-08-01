@@ -71,6 +71,7 @@ __device__ void reduce_max(local_int_t tid, double* data)
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_residual_part1(local_int_t n,
                                       const double* v1,
                                       const double* v2,
@@ -96,6 +97,7 @@ __global__ void kernel_residual_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
+__attribute__((amdgpu_flat_work_group_size(256, 256)))
 __global__ void kernel_residual_part2(local_int_t n, double* workspace)
 {
     local_int_t tid = hipThreadIdx_x;

@@ -51,7 +51,7 @@
 
 #include <hip/hip_runtime.h>
 
-__launch_bounds__(128)
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_symgs_sweep(local_int_t m,
                                    local_int_t n,
                                    local_int_t block_nrow,
@@ -88,7 +88,7 @@ __global__ void kernel_symgs_sweep(local_int_t m,
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
-__launch_bounds__(128)
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_symgs_interior(local_int_t m,
                                       local_int_t block_nrow,
                                       local_int_t ell_width,
@@ -121,6 +121,7 @@ __global__ void kernel_symgs_interior(local_int_t m,
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
+__attribute__((amdgpu_flat_work_group_size(128, 128)))
 __global__ void kernel_symgs_halo(local_int_t m,
                                   local_int_t n,
                                   local_int_t block_nrow,
@@ -164,7 +165,7 @@ __global__ void kernel_symgs_halo(local_int_t m,
     y[perm_idx] = fma(sum, inv_diag[halo_idx], y[perm_idx]);
 }
 
-__launch_bounds__(1024)
+__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
 __global__ void kernel_pointwise_mult(local_int_t size,
                                       const double* __restrict__ x,
                                       const double* __restrict__ y,
@@ -180,7 +181,7 @@ __global__ void kernel_pointwise_mult(local_int_t size,
     out[gid] = x[gid] * y[gid];
 }
 
-__launch_bounds__(512)
+__attribute__((amdgpu_flat_work_group_size(512, 512)))
 __global__ void kernel_forward_sweep_0(local_int_t m,
                                        local_int_t block_nrow,
                                        local_int_t offset,
@@ -219,7 +220,7 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
     __builtin_nontemporal_store(sum * __drcp_rn(diag_val), y + row);
 }
 
-__launch_bounds__(512)
+__attribute__((amdgpu_flat_work_group_size(512, 512)))
 __global__ void kernel_backward_sweep_0(local_int_t m,
                                         local_int_t block_nrow,
                                         local_int_t offset,

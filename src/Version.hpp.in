@@ -34,7 +34,6 @@
 #define __ROCHPCG_VER_MINOR     @rochpcg_VERSION_MINOR@
 #define __ROCHPCG_VER_PATCH     @rochpcg_VERSION_PATCH@
 #define __ROCHPCG_VER_TWEAK     @rochpcg_VERSION_TWEAK@
-#define __ROCHPCG_VER_COMMIT_ID @rochpcg_VERSION_COMMIT_ID@
 // clang-format on
 
 #define TO_STR2(x) #x

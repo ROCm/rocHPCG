@@ -50,6 +50,7 @@
 #define VECTOR_HPP
 #include <cassert>
 #include <cstdlib>
+#include <vector>
 #include <hip/hip_runtime_api.h>
 
 #include "utils.hpp"

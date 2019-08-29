@@ -166,9 +166,19 @@ if(BUILD_TEST)
   target_include_directories(rochpcg PRIVATE ${GTEST_INCLUDE_DIRS})
 endif()
 
+# OpenMP cmake fix for cmake <= 3.9
+if(HPCG_OPENMP)
+  if(NOT TARGET OpenMP::OpenMP_CXX)
+    find_package(Threads REQUIRED)
+    add_library(OpenMP::OpenMP_CXX IMPORTED INTERFACE)
+    set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_COMPILE_OPTIONS ${OpenMP_CXX_FLAGS})
+    set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_LINK_LIBRARIES ${OpenMP_CXX_FLAGS} Threads::Threads)
+  endif()
+endif()
+
 # Target link libraries
 if(HPCG_OPENMP)
-  target_link_libraries(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
+  target_link_libraries(rochpcg PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
 if(HPCG_MPI)
@@ -188,10 +198,6 @@ endforeach()
 
 
 # Target compile options
-if(HPCG_OPENMP)
-  target_compile_options(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
-endif()
-
 if(HPCG_MPI)
   target_compile_options(rochpcg PRIVATE ${MPI_COMPILE_OPTIONS})
 endif()

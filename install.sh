@@ -33,10 +33,10 @@ supported_distro( )
   fi
 
   case "${ID}" in
-    ubuntu|centos|rhel|fedora)
+    ubuntu|centos|rhel|fedora|sles)
         true
         ;;
-    *)  printf "This script is currently supported on Ubuntu, CentOS, RHEL and Fedora\n"
+    *)  printf "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES\n"
         exit 2
         ;;
   esac
@@ -100,6 +100,18 @@ install_dnf_packages( )
   done
 }
 
+# Take an array of packages as input, and install those packages with 'zypper' if they are not already installed
+install_zypper_packages( )
+{
+  package_dependencies=("$@")
+  for package in "${package_dependencies[@]}"; do
+    if [[ $(rpm -q ${package} &> /dev/null; echo $? ) -ne 0 ]]; then
+      printf "\033[32mInstalling \033[33m${package}\033[32m from distro package manager\033[0m\n"
+      elevate_if_not_root zypper -n install ${package}
+    fi
+  done
+}
+
 # Take an array of packages as input, and delegate the work to the appropriate distro installer
 # prereq: ${ID} must be defined before calling
 install_packages( )
@@ -110,9 +122,10 @@ install_packages( )
   fi
 
   # dependencies needed for executable to build
-  local library_dependencies_ubuntu=( "make" "hip_hcc" "pkg-config" "libnuma1" "rocrand" "rocprim" "cmake" "libnuma-dev" )
-  local library_dependencies_centos=( "epel-release" "make" "cmake3" "hip_hcc" "gcc-c++" "rpm-build" "numactl-libs" "rocrand" "rocprim" )
-  local library_dependencies_fedora=( "make" "cmake" "hip_hcc" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "rocrand" "rocprim" )
+  local library_dependencies_ubuntu=( "make" "hip_hcc" "pkg-config" "libnuma1" "rocprim" "cmake" "libnuma-dev" )
+  local library_dependencies_centos=( "epel-release" "make" "cmake3" "hip_hcc" "gcc-c++" "rpm-build" "numactl-libs" "rocprim" )
+  local library_dependencies_fedora=( "make" "cmake" "hip_hcc" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "rocprim" )
+  local library_dependencies_sles=( "make" "cmake" "hip_hcc" "gcc-c++" "libcxxtools9" "rpm-build" "libnuma-devel" "rocprim" )
 
   case "${ID}" in
     ubuntu)
@@ -134,8 +147,14 @@ install_packages( )
       install_dnf_packages "${library_dependencies_fedora[@]}"
 
       ;;
+
+    sles)
+#     elevate_if_not_root zypper -y update
+      install_zypper_packages "${library_dependencies_sles[@]}"
+
+       ;;
     *)
-      echo "This script is currently supported on Ubuntu, CentOS, RHEL and Fedora"
+      echo "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES"
       exit 2
       ;;
   esac
@@ -180,6 +199,19 @@ check_dnf_packages( )
   done
 }
 
+check_zypper_packages( )
+{
+  package_dependencies=("$@")
+  for package in "${package_dependencies[@]}"; do
+    rpm -q $package > /dev/null
+    if [ $? -eq 1 ]; then
+      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
+      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
+      exit 2
+    fi
+  done
+}
+
 check_packages( )
 {
   if [ -z ${ID+foo} ]; then
@@ -193,11 +225,13 @@ check_packages( )
     local build_dependencies_ubuntu=( "libopenmpi-dev" )
     local build_dependencies_centos=( "openmpi-devel" )
     local build_dependencies_fedora=( "openmpi-devel" )
+    local build_dependencies_sles=( "mpich" "mpich-devel" )
   fi
   if [[ "$package_dependency" == omp ]]; then
     local build_dependencies_ubuntu=( "libomp-dev" )
     local build_dependencies_centos=( "libgomp" )
     local build_dependencies_fedora=( "libgomp" )
+    local build_dependencies_sles=( "libgomp1" )
   fi
 
   case "${ID}" in
@@ -209,6 +243,9 @@ check_packages( )
       ;;
     fedora)
       check_dnf_packages "${build_dependencies_fedora[@]}"
+      ;;
+    sles)
+      check_zypper_packages "${build_dependencies_sles[@]}"
       ;;
     *)
       echo "This script is currently supported on Ubuntu, CentOS, RHEL and Fedora"
@@ -421,6 +458,9 @@ pushd .
         ;;
         fedora)
           elevate_if_not_root dnf install rochpcg-*.rpm
+        ;;
+        sles)
+          elevate_if_not_root zypper -y install rochpcg-*.rpm
         ;;
       esac
     fi

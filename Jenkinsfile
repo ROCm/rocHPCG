@@ -29,12 +29,12 @@ import java.nio.file.Path;
 rocHPCGCI:
 {
 
-    def rochpcg = new rocProject('rochpcg')
+    def rochpcg = new rocProject('rocHPCG')
     // customize for project
     rochpcg.paths.build_command = './install.sh -t --with-openmp=OFF'
 
     // Define test architectures, optional rocm version argument is available
-    def nodes = new dockerNodes(['gfx906'], rochpcg)
+    def nodes = new dockerNodes(['gfx906 && ubuntu'], rochpcg)
 
     boolean formatCheck = false
 

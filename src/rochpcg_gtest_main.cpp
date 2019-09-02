@@ -150,14 +150,18 @@ int main(int argc, char* argv[])
     hipGetDeviceProperties(&prop, device_id);
     printf("Using device ID %d (%s) for rocHPCG\n", device_id, prop.name);
 
+#ifndef HPCG_NO_MPI
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     if(rank == 0)
     {
         printf("-------------------------------------------------------------------------\n");
     }
 
+#ifndef HPCG_NO_MPI
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // Only rank 0 should listen
     ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();

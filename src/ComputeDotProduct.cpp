@@ -86,7 +86,7 @@ __global__ void kernel_dot1_part1(local_int_t n,
     for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
     {
         double val = x[idx];
-        sum += val * val;
+        sum = fma(val, val, sum);
     }
 
     __shared__ double sdata[BLOCKSIZE];
@@ -113,7 +113,7 @@ __global__ void kernel_dot2_part1(local_int_t n,
     double sum = 0.0;
     for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
     {
-        sum += y[idx] * x[idx];
+        sum = fma(y[idx], x[idx], sum);
     }
 
     __shared__ double sdata[BLOCKSIZE];

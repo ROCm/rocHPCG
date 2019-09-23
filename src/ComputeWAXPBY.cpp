@@ -166,7 +166,7 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
         double val = fma(alpha, x[idx], y[idx]);
 
         y[idx] = val;
-        sdata[tid] += val * val;
+        sdata[tid] = fma(val, val, sdata[tid]);
     }
 
     reduce_sum<BLOCKSIZE>(tid, sdata);

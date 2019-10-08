@@ -34,7 +34,7 @@ rocHPCGCI:
     rochpcg.paths.build_command = './install.sh -t --with-openmp=OFF --with-mpi=OFF'
 
     // Define test architectures, optional rocm version argument is available
-    def nodes = new dockerNodes(['gfx906 && ubuntu', 'gfx906 && centos7'], rochpcg)
+    def nodes = new dockerNodes(['gfx906 && ubuntu', 'gfx906 && centos7', 'gfx908 && centos'], rochpcg)
 
     boolean formatCheck = false
 
@@ -44,10 +44,10 @@ rocHPCGCI:
 
         project.paths.construct_build_prefix()
         def command = """#!/usr/bin/env bash
-                  set -x
-                  cd ${project.paths.project_build_prefix}
-                  LD_LIBRARY_PATH=/opt/rocm/hcc/lib CXX=${project.compiler.compiler_path} ${project.paths.build_command}
-                """
+                        set -x
+                        cd ${project.paths.project_build_prefix}
+                        LD_LIBRARY_PATH=/opt/rocm/hcc/lib CXX=${project.compiler.compiler_path} ${project.paths.build_command}
+                    """
 
         platform.runCommand(this, command)
     }
@@ -56,46 +56,12 @@ rocHPCGCI:
     {
         platform, project->
 
-        def command
-
-        if(platform.jenkinsLabel.contains('centos'))
-        {
-            if(auxiliary.isJobStartedByTimer())
-            {
-                command = """#!/usr/bin/env bash
+        String sudo = auxiliary.sudo(platform.jenkinsLabel)
+        def command = """#!/usr/bin/env bash
                         set -x
                         cd ${project.paths.project_build_prefix}/build/release/tests
-                        LD_LIBRARY_PATH=/opt/rocm/hcc/lib sudo ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*nightly*-*known_bug* #--gtest_filter=*nightly*
+                        ${sudo} LD_LIBRARY_PATH=/opt/rocm/hcc/lib ./rochpcg-test --gtest_output=xml --gtest_color=yes
                     """
-            }
-            else
-            {
-              command = """#!/usr/bin/env bash
-                    set -x
-                    cd ${project.paths.project_build_prefix}/build/release/tests
-                    LD_LIBRARY_PATH=/opt/rocm/hcc/lib sudo ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*quick*:*pre_checkin*-*known_bug* #--gtest_filter=*checkin*
-                """
-            }
-        }
-        else
-        {
-            if(auxiliary.isJobStartedByTimer())
-            {
-                command = """#!/usr/bin/env bash
-                        set -x
-                        cd ${project.paths.project_build_prefix}/build/release/tests
-                        LD_LIBRARY_PATH=/opt/rocm/hcc/lib ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*nightly*-*known_bug* #--gtest_filter=*nightly*
-                    """
-            }
-            else
-            {
-              command = """#!/usr/bin/env bash
-                    set -x
-                    cd ${project.paths.project_build_prefix}/build/release/tests
-                    LD_LIBRARY_PATH=/opt/rocm/hcc/lib ./rochpcg-test --gtest_output=xml --gtest_color=yes #--gtest_filter=*quick*:*pre_checkin*-*known_bug* #--gtest_filter=*checkin*
-                """
-            }
-        }
 
         platform.runCommand(this, command)
         junit "${project.paths.project_build_prefix}/build/release/tests/*.xml"

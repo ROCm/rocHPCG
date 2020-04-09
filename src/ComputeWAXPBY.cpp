@@ -56,13 +56,14 @@
 
 #include "ComputeWAXPBY.hpp"
 
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_waxpby(local_int_t size,
                               double alpha,
-                              const double* x,
+                              const double* __restrict__ x,
                               double beta,
-                              const double* y,
-                              double* w)
+                              const double* __restrict__ y,
+                              double* __restrict__ w)
 {
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -115,7 +116,7 @@ int ComputeWAXPBY(local_int_t n,
     assert(y.localLength >= n);
     assert(w.localLength >= n);
 
-    hipLaunchKernelGGL((kernel_waxpby),
+    hipLaunchKernelGGL((kernel_waxpby<256>),
                        dim3((n - 1) / 256 + 1),
                        dim3(256),
                        0,
@@ -148,12 +149,12 @@ __device__ void reduce_sum(local_int_t tid, double* data)
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
                                               double alpha,
-                                              const double* x,
-                                              double* y,
-                                              double* workspace)
+                                              const double* __restrict__ x,
+                                              double* __restrict__ y,
+                                              double* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
     local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
@@ -178,8 +179,8 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
-__global__ void kernel_fused_waxpby_dot_part2(local_int_t size, double* workspace)
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_fused_waxpby_dot_part2(local_int_t size, double* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
 
@@ -213,7 +214,7 @@ int ComputeFusedWAXPBYDot(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-#define WAXPBY_DOT_DIM 128
+#define WAXPBY_DOT_DIM 256
     hipLaunchKernelGGL((kernel_fused_waxpby_dot_part1<WAXPBY_DOT_DIM>),
                        dim3(WAXPBY_DOT_DIM),
                        dim3(WAXPBY_DOT_DIM),

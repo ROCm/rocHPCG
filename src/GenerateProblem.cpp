@@ -55,10 +55,30 @@
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
-__global__ void kernel_set_one(local_int_t size, double* array)
+#define LAUNCH_GENERATE_PROBLEM(blocksizex, blocksizey)                                     \
+    hipLaunchKernelGGL((kernel_generate_problem<blocksizex, blocksizey>),                   \
+                       dim3((localNumberOfRows - 1) / blocksizey + 1),                      \
+                       dim3(blocksizex, blocksizey),                                        \
+                       sizeof(bool) * blocksizey + sizeof(int) * blocksizex * blocksizey,   \
+                       0,                                                                   \
+                       localNumberOfRows,                                                   \
+                       nx, ny, nz, nx * ny,                                                 \
+                       gnx, gny, gnz, gnx * gny,                                            \
+                       gix0, giy0, giz0,                                                    \
+                       numberOfNonzerosPerRow,                                              \
+                       A.d_nonzerosInRow,                                                   \
+                       A.d_mtxIndG,                                                         \
+                       A.d_matrixValues,                                                    \
+                       A.d_matrixDiagonal,                                                  \
+                       A.d_localToGlobalMap,                                                \
+                       A.d_rowHash,                                                         \
+                       (b != NULL) ? b->d_values : NULL)
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_set_one(local_int_t size, double* __restrict__ array)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -73,7 +93,8 @@ __device__ local_int_t get_hash(local_int_t ix, local_int_t iy, local_int_t iz)
     return ((ix & 1) << 2) | ((iy & 1) << 1) | ((iz & 1) << 0);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_generate_problem(local_int_t m,
                                         local_int_t nx,
                                         local_int_t ny,
@@ -87,16 +108,16 @@ __global__ void kernel_generate_problem(local_int_t m,
                                         global_int_t giy0,
                                         global_int_t giz0,
                                         local_int_t numberOfNonzerosPerRow,
-                                        char* nonzerosInRow,
-                                        global_int_t* mtxIndG,
-                                        double* matrixValues,
-                                        local_int_t* matrixDiagonal,
-                                        global_int_t* localToGlobalMap,
-                                        local_int_t* rowHash,
-                                        double* b)
+                                        char* __restrict__ nonzerosInRow,
+                                        global_int_t* __restrict__ mtxIndG,
+                                        double* __restrict__ matrixValues,
+                                        local_int_t* __restrict__ matrixDiagonal,
+                                        global_int_t* __restrict__ localToGlobalMap,
+                                        local_int_t* __restrict__ rowHash,
+                                        double* __restrict__ b)
 {
     // Current local row
-    local_int_t currentLocalRow = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t currentLocalRow = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
     extern __shared__ char sdata[];
 
@@ -106,10 +127,10 @@ __global__ void kernel_generate_problem(local_int_t m,
     bool* interior_vertex = reinterpret_cast<bool*>(sdata);
     // and column offset, that stores the column index array offset of the
     // current thread index in x direction
-    int* column_offset = reinterpret_cast<int*>(sdata + sizeof(bool) * hipBlockDim_y);
+    int* column_offset = reinterpret_cast<int*>(sdata + sizeof(bool) * BLOCKSIZEY);
 
     // Offset into current local row
-    column_offset += hipThreadIdx_y * hipBlockDim_x;
+    column_offset += hipThreadIdx_y * BLOCKSIZEX;
 
     // Initialize interior vertex marker
     if(hipThreadIdx_x == 0)
@@ -255,7 +276,7 @@ __global__ void kernel_generate_problem(local_int_t m,
         // identity vertex
         if(hipThreadIdx_x == 0)
         {
-            numberOfNonzerosInRow = column_offset[hipBlockDim_x - 1];
+            numberOfNonzerosInRow = column_offset[BLOCKSIZEX - 1];
         }
     }
 
@@ -298,16 +319,19 @@ __device__ void reduce_sum(local_int_t tid, local_int_t* data)
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
-__global__ void kernel_local_nnz_part1(local_int_t size, const char* nonzerosInRow, local_int_t* workspace)
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_local_nnz_part1(local_int_t size,
+                                       const char* __restrict__ nonzerosInRow,
+                                       local_int_t* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
+    local_int_t inc = hipGridDim_x * BLOCKSIZE;
 
     __shared__ local_int_t sdata[BLOCKSIZE];
     sdata[tid] = 0;
 
-    for(local_int_t idx = gid; idx < size; idx += hipGridDim_x * hipBlockDim_x)
+    for(local_int_t idx = gid; idx < size; idx += inc)
     {
         sdata[tid] += nonzerosInRow[idx];
     }
@@ -321,8 +345,8 @@ __global__ void kernel_local_nnz_part1(local_int_t size, const char* nonzerosInR
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
-__global__ void kernel_local_nnz_part2(local_int_t size, local_int_t* workspace)
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_local_nnz_part2(local_int_t size, local_int_t* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
 
@@ -413,23 +437,10 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     }
 
     // Generate problem
-    hipLaunchKernelGGL((kernel_generate_problem),
-                       dim3((localNumberOfRows - 1) / blocksize + 1),
-                       dim3(numberOfNonzerosPerRow, blocksize),
-                       sizeof(bool) * blocksize + sizeof(int) * numberOfNonzerosPerRow * blocksize,
-                       0,
-                       localNumberOfRows,
-                       nx, ny, nz, nx * ny,
-                       gnx, gny, gnz, gnx * gny,
-                       gix0, giy0, giz0,
-                       numberOfNonzerosPerRow,
-                       A.d_nonzerosInRow,
-                       A.d_mtxIndG,
-                       A.d_matrixValues,
-                       A.d_matrixDiagonal,
-                       A.d_localToGlobalMap,
-                       A.d_rowHash,
-                       (b != NULL) ? b->d_values : NULL);
+    if     (blocksize == 32) LAUNCH_GENERATE_PROBLEM(27, 32);
+    else if(blocksize == 16) LAUNCH_GENERATE_PROBLEM(27, 16);
+    else if(blocksize ==  8) LAUNCH_GENERATE_PROBLEM(27, 8);
+    else                     LAUNCH_GENERATE_PROBLEM(27, 4);
 
     // Initialize x vector, if not NULL
     if(x != NULL)
@@ -440,7 +451,7 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     // Initialize exact solution, if not NULL
     if(xexact != NULL)
     {
-        hipLaunchKernelGGL((kernel_set_one),
+        hipLaunchKernelGGL((kernel_set_one<1024>),
                            dim3((localNumberOfRows - 1) / 1024 + 1),
                            dim3(1024),
                            0,

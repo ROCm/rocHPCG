@@ -64,13 +64,14 @@ using std::endl;
 #include "TestCG.hpp"
 #include "CG.hpp"
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_scale_vector_values(local_int_t m,
-                                           const global_int_t* localToGlobalMap,
-                                           double* exaggeratedDiagA,
-                                           double* b)
+                                           const global_int_t* __restrict__ localToGlobalMap,
+                                           double* __restrict__ exaggeratedDiagA,
+                                           double* __restrict__ b)
 {
-    local_int_t i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t i = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(i >= m)
     {
@@ -123,7 +124,7 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
 
   // Modify the matrix diagonal to greatly exaggerate diagonal values.
   // CG should converge in about 10 iterations for this problem, regardless of problem size
-  hipLaunchKernelGGL((kernel_scale_vector_values),
+  hipLaunchKernelGGL((kernel_scale_vector_values<1024>),
                      dim3((A.localNumberOfRows - 1) / 1024 + 1),
                      dim3(1024),
                      0,

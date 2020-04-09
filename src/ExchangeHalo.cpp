@@ -138,14 +138,15 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   return;
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_gather(local_int_t size,
-                              const double* in,
-                              const local_int_t* map,
-                              const local_int_t* perm,
-                              double* out)
+                              const double* __restrict__ in,
+                              const local_int_t* __restrict__ map,
+                              const local_int_t* __restrict__ perm,
+                              double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -158,7 +159,7 @@ __global__ void kernel_gather(local_int_t size,
 void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
 {
     // Prepare send buffer
-    hipLaunchKernelGGL((kernel_gather),
+    hipLaunchKernelGGL((kernel_gather<128>),
                        dim3((A.totalToBeSent - 1) / 128 + 1),
                        dim3(128),
                        0,

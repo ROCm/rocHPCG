@@ -37,15 +37,40 @@
 #include <hip/hip_runtime.h>
 #include <rocprim/rocprim.hpp>
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+#define LAUNCH_TO_ELL_COL(blocksizex, blocksizey)                           \
+    hipLaunchKernelGGL((kernel_to_ell_col<blocksizex, blocksizey>),         \
+                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
+                       dim3(blocksizex, blocksizey),                        \
+                       0,                                                   \
+                       0,                                                   \
+                       A.localNumberOfRows,                                 \
+                       A.ell_width,                                         \
+                       A.d_mtxIndL,                                         \
+                       A.ell_col_ind,                                       \
+                       d_halo_rows,                                         \
+                       A.halo_row_ind)
+
+#define LAUNCH_TO_ELL_VAL(blocksizex, blocksizey)                           \
+    hipLaunchKernelGGL((kernel_to_ell_val<blocksizex, blocksizey>),         \
+                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
+                       dim3(blocksizex, blocksizey),                        \
+                       0,                                                   \
+                       0,                                                   \
+                       A.localNumberOfRows,                                 \
+                       A.numberOfNonzerosPerRow,                            \
+                       A.d_matrixValues,                                    \
+                       A.ell_val)
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_copy_diagonal(local_int_t m,
                                      local_int_t n,
                                      local_int_t ell_width,
-                                     const local_int_t* ell_col_ind,
-                                     const double* ell_val,
-                                     double* diagonal)
+                                     const local_int_t* __restrict__ ell_col_ind,
+                                     const double* __restrict__ ell_val,
+                                     double* __restrict__ diagonal)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -74,7 +99,7 @@ __global__ void kernel_copy_diagonal(local_int_t m,
 
 void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
 {
-    hipLaunchKernelGGL((kernel_copy_diagonal),
+    hipLaunchKernelGGL((kernel_copy_diagonal<1024>),
                        dim3((A.localNumberOfRows - 1) / 1024 + 1),
                        dim3(1024),
                        0,
@@ -87,16 +112,17 @@ void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
                        diagonal.d_values);
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_replace_diagonal(local_int_t m,
                                         local_int_t n,
-                                        const double* diagonal,
+                                        const double* __restrict__ diagonal,
                                         local_int_t ell_width,
-                                        const local_int_t* ell_col_ind,
-                                        double* ell_val,
-                                        double* inv_diag)
+                                        const local_int_t* __restrict__ ell_col_ind,
+                                        double* __restrict__ ell_val,
+                                        double* __restrict__ inv_diag)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -129,7 +155,7 @@ __global__ void kernel_replace_diagonal(local_int_t m,
 
 void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
 {
-    hipLaunchKernelGGL((kernel_replace_diagonal),
+    hipLaunchKernelGGL((kernel_replace_diagonal<1024>),
                        dim3((A.localNumberOfRows - 1) / 1024 + 1),
                        dim3(1024),
                        0,
@@ -143,7 +169,8 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
                        A.inv_diag);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 1024)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_to_ell_col(local_int_t m,
                                   local_int_t nonzerosPerRow,
                                   const local_int_t* __restrict__ mtxIndL,
@@ -151,10 +178,10 @@ __global__ void kernel_to_ell_col(local_int_t m,
                                   local_int_t* __restrict__ halo_rows,
                                   local_int_t* __restrict__ halo_row_ind)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
 #ifndef HPCG_NO_MPI
-    extern __shared__ bool sdata[];
+    __shared__ bool sdata[BLOCKSIZEY];
     sdata[threadIdx.y] = false;
 
     __syncthreads();
@@ -186,13 +213,14 @@ __global__ void kernel_to_ell_col(local_int_t m,
 #endif
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 1024)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_to_ell_val(local_int_t m,
                                   local_int_t nnz_per_row,
                                   const double* __restrict__ matrixValues,
                                   double* __restrict__ ell_val)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
     if(row >= m)
     {
@@ -203,18 +231,19 @@ __global__ void kernel_to_ell_val(local_int_t m,
     ell_val[idx] = matrixValues[row * nnz_per_row + hipThreadIdx_x];
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_to_halo(local_int_t halo_rows,
                                local_int_t m,
                                local_int_t n,
                                local_int_t ell_width,
-                               const local_int_t* ell_col_ind,
-                               const double* ell_val,
-                               const local_int_t* halo_row_ind,
-                               local_int_t* halo_col_ind,
-                               double* halo_val)
+                               const local_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               const local_int_t* __restrict__ halo_row_ind,
+                               local_int_t* __restrict__ halo_col_ind,
+                               double* __restrict__ halo_val)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= halo_rows)
     {
@@ -271,15 +300,10 @@ void ConvertToELL(SparseMatrix& A)
         blocksize >>= 1;
     }
 
-    hipLaunchKernelGGL((kernel_to_ell_val),
-                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                       dim3(A.ell_width, blocksize),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.numberOfNonzerosPerRow,
-                       A.d_matrixValues,
-                       A.ell_val);
+    if     (blocksize == 32) LAUNCH_TO_ELL_VAL(27, 32);
+    else if(blocksize == 16) LAUNCH_TO_ELL_VAL(27, 16);
+    else if(blocksize ==  8) LAUNCH_TO_ELL_VAL(27,  8);
+    else                     LAUNCH_TO_ELL_VAL(27,  4);
 
     // We can re-use mtxIndG array for the ELL column indices
     A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_matrixValues);
@@ -297,21 +321,10 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
 #endif
 
-    hipLaunchKernelGGL((kernel_to_ell_col),
-                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                       dim3(A.ell_width, blocksize),
-#ifndef HPCG_NO_MPI
-                       sizeof(bool) * blocksize,
-#else
-                       0,
-#endif
-                       0,
-                       A.localNumberOfRows,
-                       A.ell_width,
-                       A.d_mtxIndL,
-                       A.ell_col_ind,
-                       d_halo_rows,
-                       A.halo_row_ind);
+    if     (blocksize == 32) LAUNCH_TO_ELL_COL(27, 32);
+    else if(blocksize == 16) LAUNCH_TO_ELL_COL(27, 16);
+    else if(blocksize ==  8) LAUNCH_TO_ELL_COL(27,  8);
+    else                     LAUNCH_TO_ELL_COL(27,  4);
 
     // Free old matrix indices
     HIP_CHECK(deviceFree(A.d_mtxIndL));
@@ -338,7 +351,7 @@ void ConvertToELL(SparseMatrix& A)
                                        A.halo_rows));
     HIP_CHECK(deviceFree(rocprim_buffer));
 
-    hipLaunchKernelGGL((kernel_to_halo),
+    hipLaunchKernelGGL((kernel_to_halo<128>),
                        dim3((A.halo_rows - 1) / 128 + 1),
                        dim3(128),
                        0,
@@ -355,15 +368,16 @@ void ConvertToELL(SparseMatrix& A)
 #endif
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_extract_diag_index(local_int_t m,
                                           local_int_t ell_width,
-                                          const local_int_t* ell_col_ind,
-                                          const double* ell_val,
-                                          local_int_t* diag_idx,
-                                          double* inv_diag)
+                                          const local_int_t* __restrict__ ell_col_ind,
+                                          const double* __restrict__ ell_val,
+                                          local_int_t* __restrict__ diag_idx,
+                                          double* __restrict__ inv_diag)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -393,7 +407,7 @@ void ExtractDiagonal(SparseMatrix& A)
     HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * m));
 
     // Extract diagonal entries
-    hipLaunchKernelGGL((kernel_extract_diag_index),
+    hipLaunchKernelGGL((kernel_extract_diag_index<1024>),
                        dim3((m - 1) / 1024 + 1),
                        dim3(1024),
                        0,

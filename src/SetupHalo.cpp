@@ -57,20 +57,66 @@
 #include "utils.hpp"
 #include "SetupHalo.hpp"
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+#define LAUNCH_COPY_INDICES(blocksizex, blocksizey)                         \
+    hipLaunchKernelGGL((kernel_copy_indices<blocksizex, blocksizey>),       \
+                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
+                       dim3(blocksizex, blocksizey),                        \
+                       0,                                                   \
+                       0,                                                   \
+                       A.localNumberOfRows,                                 \
+                       A.d_nonzerosInRow,                                   \
+                       A.d_mtxIndG,                                         \
+                       A.d_mtxIndL)
+
+#define LAUNCH_SETUP_HALO(blocksizex, blocksizey)                               \
+    hipLaunchKernelGGL((kernel_setup_halo<blocksizex, blocksizey>),             \
+                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),        \
+                       dim3(blocksizex, blocksizey),                            \
+                       0,                                                       \
+                       0,                                                       \
+                       A.localNumberOfRows,                                     \
+                       max_boundary,                                            \
+                       max_sending,                                             \
+                       max_neighbors,                                           \
+                       nx,                                                      \
+                       ny,                                                      \
+                       nz,                                                      \
+                       (nx & (nx - 1)),                                         \
+                       (ny & (ny - 1)),                                         \
+                       (nz & (nz - 1)),                                         \
+                       A.geom->npx,                                             \
+                       A.geom->npy,                                             \
+                       A.geom->npz,                                             \
+                       A.geom->gnx,                                             \
+                       A.geom->gnx * A.geom->gny,                               \
+                       A.geom->gix0 / nx,                                       \
+                       A.geom->giy0 / ny,                                       \
+                       A.geom->giz0 / nz,                                       \
+                       A.d_nonzerosInRow,                                       \
+                       A.d_mtxIndG,                                             \
+                       A.d_mtxIndL,                                             \
+                       d_nsend_per_rank,                                        \
+                       d_nrecv_per_rank,                                        \
+                       d_neighbors,                                             \
+                       d_send_indices,                                          \
+                       d_recv_indices,                                          \
+                       d_halo_indices)
+
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_copy_indices(local_int_t size,
-                                    const char* nonzerosInRow,
-                                    const global_int_t* mtxIndG,
-                                    local_int_t* mtxIndL)
+                                    const char* __restrict__ nonzerosInRow,
+                                    const global_int_t* __restrict__ mtxIndG,
+                                    local_int_t* __restrict__ mtxIndL)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
     if(row >= size)
     {
         return;
     }
 
-    local_int_t idx = row * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t idx = row * BLOCKSIZEX + hipThreadIdx_x;
 
     if(hipThreadIdx_x < nonzerosInRow[row])
     {
@@ -82,7 +128,8 @@ __global__ void kernel_copy_indices(local_int_t size,
     }
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_setup_halo(local_int_t m,
                                   local_int_t max_boundary,
                                   local_int_t max_sending,
@@ -101,21 +148,21 @@ __global__ void kernel_setup_halo(local_int_t m,
                                   global_int_t ipx0,
                                   global_int_t ipy0,
                                   global_int_t ipz0,
-                                  const char* nonzerosInRow,
-                                  const global_int_t* mtxIndG,
-                                  local_int_t* mtxIndL,
-                                  local_int_t* nsend_per_rank,
-                                  local_int_t* nrecv_per_rank,
-                                  int* neighbors,
-                                  local_int_t* send_indices,
-                                  global_int_t* recv_indices,
-                                  local_int_t* halo_indices)
+                                  const char* __restrict__ nonzerosInRow,
+                                  const global_int_t* __restrict__ mtxIndG,
+                                  local_int_t* __restrict__ mtxIndL,
+                                  local_int_t* __restrict__ nsend_per_rank,
+                                  local_int_t* __restrict__ nrecv_per_rank,
+                                  int* __restrict__ neighbors,
+                                  local_int_t* __restrict__ send_indices,
+                                  global_int_t* __restrict__ recv_indices,
+                                  local_int_t* __restrict__ halo_indices)
 {
     // Each block processes hipBlockDim_y rows
-    local_int_t currentLocalRow = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t currentLocalRow = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
     // Some shared memory to mark rows that need to be sent to neighboring processes
-    extern __shared__ bool sdata[];
+    __shared__ bool sdata[BLOCKSIZEX * BLOCKSIZEY];
     sdata[hipThreadIdx_x + hipThreadIdx_y * max_neighbors] = false;
 
     __syncthreads();
@@ -127,7 +174,7 @@ __global__ void kernel_setup_halo(local_int_t m,
     }
 
     // Global ID for 1D grid of 2D blocks
-    local_int_t gid = currentLocalRow * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = currentLocalRow * BLOCKSIZEX + hipThreadIdx_x;
 
     // Process only non-zeros of current row ; each thread index in x direction processes one column entry
     if(hipThreadIdx_x < nonzerosInRow[currentLocalRow])
@@ -197,7 +244,7 @@ __global__ void kernel_setup_halo(local_int_t m,
     __syncthreads();
 
     // Check if current row has been marked for sending its entry
-    if(sdata[hipThreadIdx_x + hipThreadIdx_y * hipBlockDim_x] == true)
+    if(sdata[hipThreadIdx_x + hipThreadIdx_y * BLOCKSIZEX] == true)
     {
         // If current row has been marked for sending, store its index
         local_int_t idx = atomicAdd(&nsend_per_rank[hipThreadIdx_x], 1);
@@ -205,16 +252,17 @@ __global__ void kernel_setup_halo(local_int_t m,
     }
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_halo_columns(local_int_t size,
                                     local_int_t m,
                                     local_int_t rank_offset,
-                                    const local_int_t* halo_indices,
-                                    const global_int_t* offsets,
-                                    local_int_t* mtxIndL)
+                                    const local_int_t* __restrict__ halo_indices,
+                                    const global_int_t* __restrict__ offsets,
+                                    local_int_t* __restrict__ mtxIndL)
 {
     // 1D thread indexing
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     // Do not run out of bounds
     if(gid >= size)
@@ -261,27 +309,17 @@ void SetupHalo(SparseMatrix& A)
     }
 
 #ifdef HPCG_NO_MPI
-    hipLaunchKernelGGL((kernel_copy_indices),
-                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                       dim3(A.numberOfNonzerosPerRow, blocksize),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.d_nonzerosInRow,
-                       A.d_mtxIndG,
-                       A.d_mtxIndL);
+    if     (blocksize == 32) LAUNCH_COPY_INDICES(27, 32);
+    else if(blocksize == 16) LAUNCH_COPY_INDICES(27, 16);
+    else if(blocksize ==  8) LAUNCH_COPY_INDICES(27,  8);
+    else                     LAUNCH_COPY_INDICES(27,  4);
 #else
     if(A.geom->size == 1)
     {
-        hipLaunchKernelGGL((kernel_copy_indices),
-                           dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                           dim3(A.numberOfNonzerosPerRow, blocksize),
-                           0,
-                           0,
-                           A.localNumberOfRows,
-                           A.d_nonzerosInRow,
-                           A.d_mtxIndG,
-                           A.d_mtxIndL);
+        if     (blocksize == 32) LAUNCH_COPY_INDICES(27, 32);
+        else if(blocksize == 16) LAUNCH_COPY_INDICES(27, 16);
+        else if(blocksize ==  8) LAUNCH_COPY_INDICES(27,  8);
+        else                     LAUNCH_COPY_INDICES(27,  4);
 
         return;
     }
@@ -351,38 +389,10 @@ void SetupHalo(SparseMatrix& A)
     HIP_CHECK(deviceMalloc((void**)&d_halo_indices, sizeof(local_int_t) * max_boundary * max_neighbors));
 
     // SetupHalo kernel
-    hipLaunchKernelGGL((kernel_setup_halo),
-                       dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                       dim3(A.numberOfNonzerosPerRow, blocksize),
-                       sizeof(bool) * A.numberOfNonzerosPerRow * blocksize,
-                       0,
-                       A.localNumberOfRows,
-                       max_boundary,
-                       max_sending,
-                       max_neighbors,
-                       nx,
-                       ny,
-                       nz,
-                       (nx & (nx - 1)),
-                       (ny & (ny - 1)),
-                       (nz & (nz - 1)),
-                       A.geom->npx,
-                       A.geom->npy,
-                       A.geom->npz,
-                       A.geom->gnx,
-                       A.geom->gnx * A.geom->gny,
-                       A.geom->gix0 / nx,
-                       A.geom->giy0 / ny,
-                       A.geom->giz0 / nz,
-                       A.d_nonzerosInRow,
-                       A.d_mtxIndG,
-                       A.d_mtxIndL,
-                       d_nsend_per_rank,
-                       d_nrecv_per_rank,
-                       d_neighbors,
-                       d_send_indices,
-                       d_recv_indices,
-                       d_halo_indices);
+    if     (blocksize == 32) LAUNCH_SETUP_HALO(27, 32);
+    else if(blocksize == 16) LAUNCH_SETUP_HALO(27, 16);
+    else if(blocksize ==  8) LAUNCH_SETUP_HALO(27,  8);
+    else                     LAUNCH_SETUP_HALO(27,  4);
 
     // Prefix sum to obtain send index offsets
     std::vector<local_int_t> nsend_per_rank(max_neighbors + 1);
@@ -611,7 +621,7 @@ void SetupHalo(SparseMatrix& A)
         rocprim_buffer = NULL;
 
         // Launch kernel to fill all halo columns in the local matrix column index array for the i-th neighbor
-        hipLaunchKernelGGL((kernel_halo_columns),
+        hipLaunchKernelGGL((kernel_halo_columns<128>),
                            dim3((currentRankHaloEntries - 1) / 128 + 1),
                            dim3(128),
                            0,

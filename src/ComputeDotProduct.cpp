@@ -74,16 +74,17 @@ __device__ void reduce_sum(local_int_t tid, double* data)
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_dot1_part1(local_int_t n,
                                   const double* x,
                                   double* workspace)
 {
     local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
+    local_int_t inc = hipGridDim_x * BLOCKSIZE;
 
     double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
+    for(local_int_t idx = gid; idx < n; idx += inc)
     {
         double val = x[idx];
         sum = fma(val, val, sum);
@@ -101,17 +102,18 @@ __global__ void kernel_dot1_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_dot2_part1(local_int_t n,
                                   const double* x,
                                   const double* y,
                                   double* workspace)
 {
     local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
+    local_int_t inc = hipGridDim_x * BLOCKSIZE;
 
     double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += hipGridDim_x * hipBlockDim_x)
+    for(local_int_t idx = gid; idx < n; idx += inc)
     {
         sum = fma(y[idx], x[idx], sum);
     }
@@ -128,7 +130,7 @@ __global__ void kernel_dot2_part1(local_int_t n,
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+__launch_bounds__(256)
 __global__ void kernel_dot_part2(double* workspace)
 {
     __shared__ double sdata[BLOCKSIZE];

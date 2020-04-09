@@ -51,7 +51,8 @@
 
 #include <hip/hip_runtime.h>
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_sweep(local_int_t m,
                                    local_int_t n,
                                    local_int_t block_nrow,
@@ -63,7 +64,7 @@ __global__ void kernel_symgs_sweep(local_int_t m,
                                    const double* __restrict__ x,
                                    double* __restrict__ y)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= block_nrow)
     {
@@ -88,7 +89,8 @@ __global__ void kernel_symgs_sweep(local_int_t m,
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_interior(local_int_t m,
                                       local_int_t block_nrow,
                                       local_int_t ell_width,
@@ -98,7 +100,7 @@ __global__ void kernel_symgs_interior(local_int_t m,
                                       const double* __restrict__ x,
                                       double* __restrict__ y)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= block_nrow)
     {
@@ -121,20 +123,21 @@ __global__ void kernel_symgs_interior(local_int_t m,
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_halo(local_int_t m,
                                   local_int_t n,
                                   local_int_t block_nrow,
                                   local_int_t halo_width,
-                                  const local_int_t* halo_row_ind,
-                                  const local_int_t* halo_col_ind,
-                                  const double* halo_val,
-                                  const double* inv_diag,
-                                  const local_int_t* perm,
-                                  const double* x,
-                                  double* y)
+                                  const local_int_t* __restrict__ halo_row_ind,
+                                  const local_int_t* __restrict__ halo_col_ind,
+                                  const double* __restrict__ halo_val,
+                                  const double* __restrict__ inv_diag,
+                                  const local_int_t* __restrict__ perm,
+                                  const double* __restrict__ x,
+                                  double* __restrict__ y)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -165,13 +168,14 @@ __global__ void kernel_symgs_halo(local_int_t m,
     y[perm_idx] = fma(sum, inv_diag[halo_idx], y[perm_idx]);
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_pointwise_mult(local_int_t size,
                                       const double* __restrict__ x,
                                       const double* __restrict__ y,
                                       double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -181,7 +185,8 @@ __global__ void kernel_pointwise_mult(local_int_t size,
     out[gid] = x[gid] * y[gid];
 }
 
-__attribute__((amdgpu_flat_work_group_size(512, 512)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_forward_sweep_0(local_int_t m,
                                        local_int_t block_nrow,
                                        local_int_t offset,
@@ -192,7 +197,7 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
                                        const double* __restrict__ x,
                                        double* __restrict__ y)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= block_nrow)
     {
@@ -220,7 +225,8 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
     __builtin_nontemporal_store(sum * __drcp_rn(diag_val), y + row);
 }
 
-__attribute__((amdgpu_flat_work_group_size(512, 512)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_backward_sweep_0(local_int_t m,
                                         local_int_t block_nrow,
                                         local_int_t offset,
@@ -230,7 +236,7 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
                                         const local_int_t* __restrict__ diag_idx,
                                         double* __restrict__ x)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= block_nrow)
     {
@@ -297,7 +303,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     }
 #endif
 
-    hipLaunchKernelGGL((kernel_symgs_interior),
+    hipLaunchKernelGGL((kernel_symgs_interior<128>),
                        dim3((A.sizes[0] - 1) / 128 + 1),
                        dim3(128),
                        0,
@@ -317,7 +323,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
         ExchangeHaloAsync(A);
         ObtainRecvBuffer(A, x);
 
-        hipLaunchKernelGGL((kernel_symgs_halo),
+        hipLaunchKernelGGL((kernel_symgs_halo<128>),
                            dim3((A.halo_rows - 1) / 128 + 1),
                            dim3(128),
                            0,
@@ -339,7 +345,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     // Solve L
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
-        hipLaunchKernelGGL((kernel_symgs_sweep),
+        hipLaunchKernelGGL((kernel_symgs_sweep<128>),
                            dim3((A.sizes[i] - 1) / 128 + 1),
                            dim3(128),
                            0,
@@ -359,7 +365,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     // Solve U
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
-        hipLaunchKernelGGL((kernel_symgs_sweep),
+        hipLaunchKernelGGL((kernel_symgs_sweep<128>),
                            dim3((A.sizes[i] - 1) / 128 + 1),
                            dim3(128),
                            0,
@@ -384,7 +390,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
     // Solve L
-    hipLaunchKernelGGL((kernel_pointwise_mult),
+    hipLaunchKernelGGL((kernel_pointwise_mult<1024>),
                        dim3((A.sizes[0] - 1) / 1024 + 1),
                        dim3(1024),
                        0,
@@ -396,7 +402,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
-        hipLaunchKernelGGL((kernel_forward_sweep_0),
+        hipLaunchKernelGGL((kernel_forward_sweep_0<512>),
                            dim3((A.sizes[i] - 1) / 512 + 1),
                            dim3(512),
                            0,
@@ -415,7 +421,7 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     // Solve U
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
-        hipLaunchKernelGGL((kernel_backward_sweep_0),
+        hipLaunchKernelGGL((kernel_backward_sweep_0<512>),
                            dim3((A.sizes[i] - 1) / 512 + 1),
                            dim3(512),
                            0,

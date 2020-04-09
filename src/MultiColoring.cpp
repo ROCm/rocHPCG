@@ -38,10 +38,25 @@
 #include <hip/hip_runtime.h>
 #include <rocprim/rocprim.hpp>
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
-__global__ void kernel_identity(local_int_t size, local_int_t* data)
+#define LAUNCH_JPL(blocksizex, blocksizey)                          \
+    hipLaunchKernelGGL((kernel_jpl<blocksizex, blocksizey>),        \
+                       dim3((m - 1) / blocksizey + 1),              \
+                       dim3(blocksizex, blocksizey),                \
+                       2 * sizeof(bool) * blocksizey,               \
+                       0,                                           \
+                       m,                                           \
+                       A.d_rowHash,                                 \
+                       color1,                                      \
+                       color2,                                      \
+                       A.d_nonzerosInRow,                           \
+                       A.d_mtxIndL,                                 \
+                       A.perm)
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_identity(local_int_t size, local_int_t* __restrict__ data)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -51,12 +66,13 @@ __global__ void kernel_identity(local_int_t size, local_int_t* data)
     data[gid] = gid;
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_create_perm(local_int_t size,
-                                   const local_int_t* in,
-                                   local_int_t* out)
+                                   const local_int_t* __restrict__ in,
+                                   local_int_t* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -84,19 +100,20 @@ __device__ void reduce_sum(local_int_t tid, local_int_t* data)
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_count_color_part1(local_int_t size,
                                          local_int_t color,
-                                         const local_int_t* colors,
-                                         local_int_t* workspace)
+                                         const local_int_t* __restrict__ colors,
+                                         local_int_t* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
+    local_int_t inc = hipGridDim_x * BLOCKSIZE;
 
     __shared__ local_int_t sdata[BLOCKSIZE];
 
     local_int_t sum = 0;
-    for(local_int_t idx = gid; idx < size; idx += hipGridDim_x * hipBlockDim_x)
+    for(local_int_t idx = gid; idx < size; idx += inc)
     {
         if(colors[idx] == color)
         {
@@ -115,9 +132,9 @@ __global__ void kernel_count_color_part1(local_int_t size,
 }
 
 template <unsigned int BLOCKSIZE>
-__attribute__((amdgpu_flat_work_group_size(256, 256)))
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_count_color_part2(local_int_t size,
-                                         local_int_t* workspace)
+                                         local_int_t* __restrict__ workspace)
 {
     local_int_t tid = hipThreadIdx_x;
 
@@ -139,20 +156,21 @@ __global__ void kernel_count_color_part2(local_int_t size,
     }
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_jpl(local_int_t m,
-                           const local_int_t* hash,
+                           const local_int_t* __restrict__ hash,
                            int color1,
                            int color2,
-                           const char* nonzerosInRow,
+                           const char* __restrict__ nonzerosInRow,
                            const local_int_t* __restrict__ mtxIndL,
                            local_int_t* __restrict__ colors)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
 
     extern __shared__ bool sdata[];
     bool* min = &sdata[0];
-    bool* max = &sdata[hipBlockDim_y];
+    bool* max = &sdata[BLOCKSIZEY];
 
     // Assume current vertex is maximum
     if(hipThreadIdx_x == 0)
@@ -177,7 +195,7 @@ __global__ void kernel_jpl(local_int_t m,
     // Get row hash value
     local_int_t row_hash = hash[row];
 
-    local_int_t idx = row * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t idx = row * BLOCKSIZEX + hipThreadIdx_x;
     local_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
 
     if(col >= 0 && col < m)
@@ -274,18 +292,10 @@ void JPLColoring(SparseMatrix& A)
         int color1 = (A.nblocks < 8) ? rand() % 8 : A.nblocks;
         int color2 = (A.nblocks < 8) ? rand() % 8 : A.nblocks + 1;
 
-        hipLaunchKernelGGL((kernel_jpl),
-                           dim3((m - 1) / blocksize + 1),
-                           dim3(A.numberOfNonzerosPerRow, blocksize),
-                           2 * sizeof(bool) * blocksize,
-                           0,
-                           m,
-                           A.d_rowHash,
-                           color1,
-                           color2,
-                           A.d_nonzerosInRow,
-                           A.d_mtxIndL,
-                           A.perm);
+        if     (blocksize == 32) LAUNCH_JPL(27, 32);
+        else if(blocksize == 16) LAUNCH_JPL(27, 16);
+        else if(blocksize ==  8) LAUNCH_JPL(27,  8);
+        else                     LAUNCH_JPL(27,  4);
 
         // Count colored vertices
         hipLaunchKernelGGL((kernel_count_color_part1<256>),
@@ -353,7 +363,7 @@ void JPLColoring(SparseMatrix& A)
     HIP_CHECK(deviceMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
     HIP_CHECK(deviceMalloc((void**)&perm, sizeof(local_int_t) * m));
 
-    hipLaunchKernelGGL((kernel_identity),
+    hipLaunchKernelGGL((kernel_identity<1024>),
                        dim3((m - 1) / 1024 + 1),
                        dim3(1024),
                        0,
@@ -375,7 +385,7 @@ void JPLColoring(SparseMatrix& A)
     HIP_CHECK(rocprim::radix_sort_pairs(buf, size, keys, vals, m, startbit, endbit));
     HIP_CHECK(deviceFree(buf));
 
-    hipLaunchKernelGGL((kernel_create_perm),
+    hipLaunchKernelGGL((kernel_create_perm<1024>),
                        dim3((m - 1) / 1024 + 1),
                        dim3(1024),
                        0,

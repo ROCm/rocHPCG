@@ -51,19 +51,34 @@
 
 #include <hip/hip_runtime.h>
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+#define LAUNCH_SPMV_ELL(blocksize) hipLaunchKernelGGL((kernel_spmv_ell<blocksize>),                     \
+                                                      dim3((A.localNumberOfRows - 1) / blocksize + 1),  \
+                                                      dim3(blocksize),                                  \
+                                                      0,                                                \
+                                                      stream_interior,                                  \
+                                                      A.localNumberOfRows,                              \
+                                                      A.nblocks,                                        \
+                                                      A.localNumberOfRows / A.nblocks,                  \
+                                                      A.ell_width,                                      \
+                                                      A.ell_col_ind,                                    \
+                                                      A.ell_val,                                        \
+                                                      x.d_values,                                       \
+                                                      y.d_values)
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        local_int_t m,
                                        local_int_t n,
                                        local_int_t ell_width,
-                                       const local_int_t* ell_col_ind,
-                                       const double* ell_val,
-                                       const local_int_t* perm,
-                                       const local_int_t* f2cOperator,
-                                       const double* x,
-                                       double* y)
+                                       const local_int_t* __restrict__ ell_col_ind,
+                                       const double* __restrict__ ell_val,
+                                       const local_int_t* __restrict__ perm,
+                                       const local_int_t* __restrict__ f2cOperator,
+                                       const double* __restrict__ x,
+                                       double* __restrict__ y)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -93,7 +108,8 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell(local_int_t m,
                                 int nblocks,
                                 local_int_t rows_per_block,
@@ -104,7 +120,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
                                 double* __restrict__ y)
 {
     // Applies for chunks of hipBlockDim_x * nblocks
-    local_int_t color_block_offset = hipBlockDim_x * (hipBlockIdx_x / nblocks);
+    local_int_t color_block_offset = BLOCKSIZE * (hipBlockIdx_x / nblocks);
 
     // Applies for chunks of hipBlockDim_x and restarts for each color_block_offset
     local_int_t thread_block_offset = (hipBlockIdx_x & (nblocks - 1)) * rows_per_block;
@@ -137,18 +153,19 @@ __global__ void kernel_spmv_ell(local_int_t m,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_halo(local_int_t m,
                                  local_int_t n,
                                  local_int_t halo_width,
-                                 const local_int_t* halo_row_ind,
-                                 const local_int_t* halo_col_ind,
-                                 const double* halo_val,
-                                 const local_int_t* perm,
-                                 const double* x,
-                                 double* y)
+                                 const local_int_t* __restrict__ halo_row_ind,
+                                 const local_int_t* __restrict__ halo_col_ind,
+                                 const double* __restrict__ halo_val,
+                                 const local_int_t* __restrict__ perm,
+                                 const double* __restrict__ x,
+                                 double* __restrict__ y)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -212,19 +229,10 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
             blocksize >>= 1;
         }
 
-        hipLaunchKernelGGL((kernel_spmv_ell),
-                           dim3((A.localNumberOfRows - 1) / blocksize + 1),
-                           dim3(blocksize),
-                           0,
-                           stream_interior,
-                           A.localNumberOfRows,
-                           A.nblocks,
-                           A.localNumberOfRows / A.nblocks,
-                           A.ell_width,
-                           A.ell_col_ind,
-                           A.ell_val,
-                           x.d_values,
-                           y.d_values);
+        if     (blocksize == 512) LAUNCH_SPMV_ELL(512);
+        else if(blocksize == 256) LAUNCH_SPMV_ELL(256);
+        else if(blocksize == 128) LAUNCH_SPMV_ELL(128);
+        else                      LAUNCH_SPMV_ELL(64);
     }
 
 #ifndef HPCG_NO_MPI
@@ -235,7 +243,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
         if(&y != A.mgData->Axf)
         {
-            hipLaunchKernelGGL((kernel_spmv_halo),
+            hipLaunchKernelGGL((kernel_spmv_halo<128>),
                                dim3((A.halo_rows - 1) / 128 + 1),
                                dim3(128),
                                0,
@@ -255,7 +263,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
     if(&y == A.mgData->Axf)
     {
-        hipLaunchKernelGGL((kernel_spmv_ell_coarse),
+        hipLaunchKernelGGL((kernel_spmv_ell_coarse<1024>),
                            dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
                            dim3(1024),
                            0,

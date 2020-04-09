@@ -37,16 +37,17 @@
 
 #include <hip/hip_runtime.h>
 
-__attribute__((amdgpu_flat_work_group_size(128, 128)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_restrict(local_int_t size,
-                                const local_int_t* f2cOperator,
-                                const double* fine,
-                                const double* data,
-                                double* coarse,
-                                const local_int_t* perm_fine,
-                                const local_int_t* perm_coarse)
+                                const local_int_t* __restrict__ f2cOperator,
+                                const double* __restrict__ fine,
+                                const double* __restrict__ data,
+                                double* __restrict__ coarse,
+                                const local_int_t* __restrict__ perm_fine,
+                                const local_int_t* __restrict__ perm_coarse)
 {
-    local_int_t idx_coarse = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t idx_coarse = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(idx_coarse >= size)
     {
@@ -58,21 +59,22 @@ __global__ void kernel_restrict(local_int_t size,
     coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - data[idx_fine];
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_fused_restrict_spmv(local_int_t size,
-                                           const local_int_t* f2cOperator,
-                                           const double* fine,
+                                           const local_int_t* __restrict__ f2cOperator,
+                                           const double* __restrict__ fine,
                                            local_int_t m,
                                            local_int_t n,
                                            local_int_t ell_width,
-                                           const local_int_t* ell_col_ind,
-                                           const double* ell_val,
-                                           const double* xf,
-                                           double* coarse,
-                                           const local_int_t* perm_fine,
-                                           const local_int_t* perm_coarse)
+                                           const local_int_t* __restrict__ ell_col_ind,
+                                           const double* __restrict__ ell_val,
+                                           const double* __restrict__ xf,
+                                           double* __restrict__ coarse,
+                                           const local_int_t* __restrict__ perm_fine,
+                                           const local_int_t* __restrict__ perm_coarse)
 {
-    local_int_t idx_coarse = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t idx_coarse = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(idx_coarse >= size)
     {
@@ -118,7 +120,7 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
 */
 int ComputeRestriction(const SparseMatrix& A, const Vector& rf)
 {
-    hipLaunchKernelGGL((kernel_restrict),
+    hipLaunchKernelGGL((kernel_restrict<128>),
                        dim3((A.mgData->rc->localLength - 1) / 128 + 1),
                        dim3(128),
                        0,
@@ -145,7 +147,7 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
     }
 #endif
 
-    hipLaunchKernelGGL((kernel_fused_restrict_spmv),
+    hipLaunchKernelGGL((kernel_fused_restrict_spmv<1024>),
                        dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
                        dim3(1024),
                        0,

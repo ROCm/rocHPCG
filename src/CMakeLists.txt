@@ -89,7 +89,7 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-fno-gpu-rdc -Wall -Wno-unused-command-line-argument")
+list(APPEND HIP_HIPCC_FLAGS "-fno-gpu-rdc -Wall -Wno-unused-command-line-argument -Wno-c99-designator")
 foreach(target ${AMDGPU_TARGETS})
   list(APPEND HIP_HIPCC_FLAGS "-amdgpu-target=${target}")
 endforeach()

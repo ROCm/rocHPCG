@@ -36,15 +36,16 @@
 
 #include <hip/hip_runtime.h>
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_prolongation(local_int_t size,
-                                    const local_int_t* f2cOperator,
-                                    const double* coarse,
-                                    double* fine,
-                                    const local_int_t* perm_fine,
-                                    const local_int_t* perm_coarse)
+                                    const local_int_t* __restrict__ f2cOperator,
+                                    const double* __restrict__ coarse,
+                                    double* __restrict__ fine,
+                                    const local_int_t* __restrict__ perm_fine,
+                                    const local_int_t* __restrict__ perm_coarse)
 {
-    local_int_t idx_coarse = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t idx_coarse = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(idx_coarse >= size)
     {
@@ -69,7 +70,7 @@ __global__ void kernel_prolongation(local_int_t size,
 */
 int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
 {
-    hipLaunchKernelGGL((kernel_prolongation),
+    hipLaunchKernelGGL((kernel_prolongation<1024>),
                        dim3((Af.mgData->rc->localLength - 1) / 1024 + 1),
                        dim3(1024),
                        0,

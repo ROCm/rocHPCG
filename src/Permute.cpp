@@ -37,16 +37,30 @@
 
 #include <hip/hip_runtime.h>
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+#define LAUNCH_PERM_COLS(blocksizex, blocksizey)                            \
+    hipLaunchKernelGGL((kernel_perm_cols<blocksizex, blocksizey>),          \
+                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
+                       dim3(blocksizex, blocksizey),                        \
+                       0,                                                   \
+                       0,                                                   \
+                       A.localNumberOfRows,                                 \
+                       A.localNumberOfColumns,                              \
+                       A.numberOfNonzerosPerRow,                            \
+                       A.perm,                                              \
+                       A.d_mtxIndL,                                         \
+                       A.d_matrixValues)
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_permute_ell_rows(local_int_t m,
                                         local_int_t p,
-                                        const local_int_t* tmp_cols,
-                                        const double* tmp_vals,
-                                        const local_int_t* perm,
-                                        local_int_t* ell_col_ind,
-                                        double* ell_val)
+                                        const local_int_t* __restrict__ tmp_cols,
+                                        const double* __restrict__ tmp_vals,
+                                        const local_int_t* __restrict__ perm,
+                                        local_int_t* __restrict__ ell_col_ind,
+                                        double* __restrict__ ell_val)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(row >= m)
     {
@@ -77,15 +91,16 @@ __device__ int get_bit(int x, int i)
     return (x >> i) & 1;
 }
 
-__attribute__((amdgpu_flat_work_group_size(128, 512)))
+template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
+__launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
 __global__ void kernel_perm_cols(local_int_t m,
                                  local_int_t n,
                                  local_int_t nonzerosPerRow,
-                                 const local_int_t* perm,
-                                 local_int_t* mtxIndL,
-                                 double* matrixValues)
+                                 const local_int_t* __restrict__ perm,
+                                 local_int_t* __restrict__ mtxIndL,
+                                 double* __restrict__ matrixValues)
 {
-    local_int_t row = hipBlockIdx_x * hipBlockDim_y + hipThreadIdx_y;
+    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
     local_int_t idx = row * nonzerosPerRow + hipThreadIdx_x;
     local_int_t key = n;
     double val = 0.0;
@@ -162,17 +177,10 @@ void PermuteColumns(SparseMatrix& A)
         dim_y >>= 1;
     }
 
-    hipLaunchKernelGGL((kernel_perm_cols),
-                       dim3((A.localNumberOfRows - 1) / dim_y + 1),
-                       dim3(dim_x, dim_y),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.localNumberOfColumns,
-                       A.numberOfNonzerosPerRow,
-                       A.perm,
-                       A.d_mtxIndL,
-                       A.d_matrixValues);
+    if     (dim_y == 32) LAUNCH_PERM_COLS(32, 32);
+    else if(dim_y == 16) LAUNCH_PERM_COLS(32, 16);
+    else if(dim_y ==  8) LAUNCH_PERM_COLS(32,  8);
+    else                 LAUNCH_PERM_COLS(32,  4);
 }
 
 void PermuteRows(SparseMatrix& A)
@@ -194,7 +202,7 @@ void PermuteRows(SparseMatrix& A)
         HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(local_int_t) * m, hipMemcpyDeviceToDevice));
         HIP_CHECK(hipMemcpy(tmp_vals, A.ell_val + offset, sizeof(double) * m, hipMemcpyDeviceToDevice));
 
-        hipLaunchKernelGGL((kernel_permute_ell_rows),
+        hipLaunchKernelGGL((kernel_permute_ell_rows<1024>),
                            dim3((m - 1) / 1024 + 1),
                            dim3(1024),
                            0,
@@ -212,13 +220,14 @@ void PermuteRows(SparseMatrix& A)
     HIP_CHECK(deviceFree(tmp_vals));
 }
 
-__attribute__((amdgpu_flat_work_group_size(1024, 1024)))
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_permute(local_int_t size,
-                               const local_int_t* perm,
-                               const double* in,
-                               double* out)
+                               const local_int_t* __restrict__ perm,
+                               const double* __restrict__ in,
+                               double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
 
     if(gid >= size)
     {
@@ -233,7 +242,7 @@ void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
     double* buffer;
     HIP_CHECK(deviceMalloc((void**)&buffer, sizeof(double) * v.localLength));
 
-    hipLaunchKernelGGL((kernel_permute),
+    hipLaunchKernelGGL((kernel_permute<1024>),
                        dim3((size - 1) / 1024 + 1),
                        dim3(1024),
                        0,

@@ -7,40 +7,28 @@ def runCompileCommand(platform, project, jobName)
         
     def command
     def getDependencies = auxiliary.getLibrary('rocPRIM', platform.jenkinsLabel,'develop')
-    
-    if(jobName.contains('hipclang'))
-    {
-        command = """
-                    #!/usr/bin/env bash
-                    set -x
-                    ${getDependencies}
-                    cd ${project.paths.project_build_prefix}
-                    CXX=/opt/rocm/bin/hipcc ${project.paths.build_command}
-                  """
+    def compiler = jobName.contains('hipclang') ? '/opt/rocm/bin/hipcc' : '/opt/rocm/bin/hcc'
 
-        platform.runCommand(this, command)
-    }
-    else
-    {
-        command = """#!/usr/bin/env bash
+    command = """
+                #!/usr/bin/env bash
                 set -x
                 ${getDependencies}
                 cd ${project.paths.project_build_prefix}
-                CXX=/opt/rocm/bin/hcc ${project.paths.build_command}
-            """
-    }
-    
+                CXX=${compiler} ${project.paths.build_command}
+              """
+
     platform.runCommand(this, command)
 }
 
 def runTestCommand (platform, project)
 {
     String sudo = auxiliary.sudo(platform.jenkinsLabel)
-    def command = """#!/usr/bin/env bash
+    def command = """
+                    #!/usr/bin/env bash
                     set -x
                     cd ${project.paths.project_build_prefix}/build/release/tests
                     ${sudo} ./rochpcg-test --gtest_output=xml --gtest_color=yes
-                """
+                  """
 
     platform.runCommand(this, command)
     junit "${project.paths.project_build_prefix}/build/release/tests/*.xml"

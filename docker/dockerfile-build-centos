@@ -23,7 +23,6 @@ RUN yum install -y \
     gtest-devel \
     gtest \
     pkgconfig \
-    rocprim \
     libcxx-devel \
     numactl-libs \
     rpm-build \

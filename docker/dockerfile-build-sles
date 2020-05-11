@@ -7,29 +7,17 @@ LABEL maintainer="rochpcg-maintainer@amd.com"
 ARG user_uid
 
 # Install dependent packages
-RUN yum install -y \
+RUN zypper -n update && zypper -n install\
     sudo \
-    rock-dkms \
-    centos-release-scl \
-    devtoolset-7 \
     ca-certificates \
     git \
-    cmake3 \
-    make \
-    clang \
-    clang-devel \
     gcc-c++ \
-    gtest-devel \
-    gtest \
-    pkgconfig \
-    rocprim \
-    libcxx-devel \
-    numactl-libs \
+    gcc-fortran \
+    make \
+    cmake \
     rpm-build \
-    deltarpm
-
-RUN echo '#!/bin/bash' | tee /etc/profile.d/devtoolset7.sh && echo \
-    'source scl_source enable devtoolset-7' >>/etc/profile.d/devtoolset7.sh
+    dpkg \
+    libcxxtools9
 
 # docker pipeline runs containers with particular uid
 # create a jenkins user with this specific uid so it can use sudo priviledges

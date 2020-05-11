@@ -6,6 +6,8 @@ LABEL maintainer="rochpcg-maintainer@amd.com"
 
 ARG user_uid
 
+ARG library_dependencies="rocprim"
+
 # Install dependent packages
 RUN zypper -n update && zypper -n install\
     sudo \
@@ -17,7 +19,8 @@ RUN zypper -n update && zypper -n install\
     cmake \
     rpm-build \
     dpkg \
-    libcxxtools9
+    libcxxtools9 \
+    ${library_dependencies}
 
 # docker pipeline runs containers with particular uid
 # create a jenkins user with this specific uid so it can use sudo priviledges

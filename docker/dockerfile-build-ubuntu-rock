@@ -6,6 +6,8 @@ LABEL maintainer="rochpcg-maintainer@amd.com"
 
 ARG user_uid
 
+ARG library_dependencies="rocblas rocsolver"
+
 # Install dependent packages
 # Dependencies:
 # * hcc-config.cmake: pkg-config
@@ -23,7 +25,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     mpi-default-bin \
     mpi-default-dev \
     libomp-dev \
-    rocprim \
+    ${library_dependencies} \
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

@@ -6,6 +6,8 @@ LABEL maintainer="rochpcg-maintainer@amd.com"
 
 ARG user_uid
 
+ARG library_dependencies="rocprim"
+
 # Install dependent packages
 RUN yum install -y \
     sudo \
@@ -25,7 +27,8 @@ RUN yum install -y \
     libcxx-devel \
     numactl-libs \
     rpm-build \
-    deltarpm
+    deltarpm \
+    ${library_dependencies}
 
 RUN echo '#!/bin/bash' | tee /etc/profile.d/devtoolset7.sh && echo \
     'source scl_source enable devtoolset-7' >>/etc/profile.d/devtoolset7.sh

@@ -6,12 +6,14 @@ def runCompileCommand(platform, project, jobName)
     project.paths.construct_build_prefix()
         
     def command
+    def getDependencies = auxiliary.getLibrary('rocPRIM', platform.jenkinsLabel,'develop')
     
     if(jobName.contains('hipclang'))
     {
         command = """
                     #!/usr/bin/env bash
                     set -x
+                    ${getDependencies}
                     cd ${project.paths.project_build_prefix}
                     CXX=/opt/rocm/bin/hipcc ${project.paths.build_command}
                   """
@@ -22,6 +24,7 @@ def runCompileCommand(platform, project, jobName)
     {
         command = """#!/usr/bin/env bash
                 set -x
+                ${getDependencies}
                 cd ${project.paths.project_build_prefix}
                 CXX=/opt/rocm/bin/hcc ${project.paths.build_command}
             """

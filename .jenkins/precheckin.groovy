@@ -10,7 +10,6 @@ def runCI =
 
     def prj = new rocProject('rocHPCG', 'PreCheckin')
     prj.paths.build_command = './install.sh -t --with-openmp=OFF --with-mpi=OFF'
-    prj.libraryDependencies = ['rocPRIM']
 
     def nodes = new dockerNodes(nodeDetails, jobName, prj)
 

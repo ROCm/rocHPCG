@@ -2,14 +2,15 @@
 ARG base_image
 
 FROM ${base_image}
-LABEL maintainer="Nico Trost"
+LABEL maintainer="rochpcg-maintainer@amd.com"
 
 ARG user_uid
+
+ARG library_dependencies="rocprim"
 
 # Install dependent packages
 RUN yum install -y \
     sudo \
-    rock-dkms \
     centos-release-scl \
     devtoolset-7 \
     ca-certificates \
@@ -19,14 +20,12 @@ RUN yum install -y \
     clang \
     clang-devel \
     gcc-c++ \
-    gtest-devel \
-    gtest \
     pkgconfig \
-    rocprim \
     libcxx-devel \
     numactl-libs \
     rpm-build \
-    deltarpm
+    deltarpm \
+    ${library_dependencies}
 
 RUN echo '#!/bin/bash' | tee /etc/profile.d/devtoolset7.sh && echo \
     'source scl_source enable devtoolset-7' >>/etc/profile.d/devtoolset7.sh
@@ -37,3 +36,14 @@ RUN echo '#!/bin/bash' | tee /etc/profile.d/devtoolset7.sh && echo \
 RUN useradd --create-home -u ${user_uid} -o -G video --shell /bin/bash jenkins && \
     echo '%video ALL=(ALL) NOPASSWD:ALL' | tee /etc/sudoers.d/sudo-nopasswd && \
     chmod 400 /etc/sudoers.d/sudo-nopasswd
+
+ARG GTEST_SRC_ROOT=/usr/local/src/gtest
+
+# Clone gtest repo
+# Build gtest and install into /usr/local
+RUN mkdir -p ${GTEST_SRC_ROOT} && cd ${GTEST_SRC_ROOT} && \
+    git clone -b release-1.8.1 --depth=1 https://github.com/google/googletest . && \
+    mkdir -p build && cd build && \
+    cmake .. && \
+    make -j $(nproc) install && \
+    rm -rf ${GTEST_SRC_ROOT}

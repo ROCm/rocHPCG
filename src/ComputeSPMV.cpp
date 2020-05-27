@@ -142,7 +142,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
 
         if(col >= 0 && col < m)
         {
-            sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(x + col), sum);
+            sum = fma(__builtin_nontemporal_load(ell_val + idx), x[col], sum);
         }
         else
         {

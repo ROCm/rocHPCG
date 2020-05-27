@@ -116,9 +116,9 @@ int ComputeWAXPBY(local_int_t n,
     assert(y.localLength >= n);
     assert(w.localLength >= n);
 
-    hipLaunchKernelGGL((kernel_waxpby<256>),
-                       dim3((n - 1) / 256 + 1),
-                       dim3(256),
+    hipLaunchKernelGGL((kernel_waxpby<512>),
+                       dim3((n - 1) / 512 + 1),
+                       dim3(512),
                        0,
                        0,
                        n,

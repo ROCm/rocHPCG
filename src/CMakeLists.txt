@@ -193,8 +193,8 @@ rocm_install_targets(TARGETS rochpcg
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 3.5.30)")
-set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 3.5.30")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 3.5.0)")
+set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 3.5.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
 
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)

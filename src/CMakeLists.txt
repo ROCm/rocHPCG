@@ -1,4 +1,4 @@
-# Modifications (c) 2019 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2020 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -89,9 +89,9 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-fno-gpu-rdc -Wall -Wno-unused-command-line-argument -Wno-c99-designator")
+list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument")
 foreach(target ${AMDGPU_TARGETS})
-  list(APPEND HIP_HIPCC_FLAGS "-amdgpu-target=${target}")
+  list(APPEND HIP_HIPCC_FLAGS "--amdgpu-target=${target}")
 endforeach()
 
 # Target executable
@@ -102,20 +102,10 @@ else()
 endif()
 
 # Target compile definitions
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_HCC__")
+list(APPEND CMAKE_CXX_FLAGS "-D__HIP_PLATFORM_HCC__")
 
 # Support only for contiguous arrays
 target_compile_definitions(rochpcg PRIVATE HPCG_CONTIGUOUS_ARRAYS)
-
-if(NOT HPCG_OPENMP)
-  target_compile_definitions(rochpcg PRIVATE HPCG_NO_OPENMP)
-endif()
-
-if(NOT HPCG_MPI)
-  target_compile_definitions(rochpcg PRIVATE HPCG_NO_MPI)
-else()
-  target_compile_definitions(rochpcg PRIVATE ${MPI_COMPILE_DEFINITIONS})
-endif()
 
 if(HPCG_DEBUG)
   target_compile_definitions(rochpcg PRIVATE HPCG_DEBUG)
@@ -145,62 +135,44 @@ if(OPT_DEFRAG)
   target_compile_definitions(rochpcg PRIVATE DEFRAG_OPT)
 endif()
 
-
-
 # Target include directories
 target_include_directories(rochpcg
                              PRIVATE
                                $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-                               $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>
-                               $<BUILD_INTERFACE:${ROCPRIM_INCLUDE_DIRS}>
-                               $<BUILD_INTERFACE:/opt/rocm/include>)
-
-if(HPCG_MPI)
-  target_include_directories(rochpcg
-                               PRIVATE
-                                 $<BUILD_INTERFACE:${MPI_CXX_INCLUDE_PATH}>
-                                 $<BUILD_INTERFACE:${LIBNUMA_INCLUDE_DIR}>)
-endif()
+                               $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>)
 
 if(BUILD_TEST)
   target_include_directories(rochpcg PRIVATE ${GTEST_INCLUDE_DIRS})
 endif()
 
-# OpenMP cmake fix for cmake <= 3.9
+# MPI
+if(HPCG_MPI)
+  target_link_libraries(rochpcg PRIVATE MPI::MPI_CXX libnuma::libnuma)
+else()
+  target_compile_definitions(rochpcg PRIVATE HPCG_NO_MPI)
+endif()
+
+# OpenMP
 if(HPCG_OPENMP)
   if(NOT TARGET OpenMP::OpenMP_CXX)
+    # cmake fix for cmake <= 3.9
     find_package(Threads REQUIRED)
     add_library(OpenMP::OpenMP_CXX IMPORTED INTERFACE)
     set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_COMPILE_OPTIONS ${OpenMP_CXX_FLAGS})
     set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_LINK_LIBRARIES ${OpenMP_CXX_FLAGS} Threads::Threads)
   endif()
+  target_link_libraries(rochpcg PRIVATE OpenMP::OpenMP_CXX)
+else()
+  target_compile_definitions(rochpcg PRIVATE HPCG_NO_OPENMP)
 endif()
 
 # Target link libraries
-if(HPCG_OPENMP)
-  target_link_libraries(rochpcg PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
-if(HPCG_MPI)
-  target_link_libraries(rochpcg PRIVATE ${MPI_CXX_LIBRARIES} ${LIBNUMA_LIBRARY})
-endif()
+target_link_libraries(rochpcg PRIVATE roc::rocprim)
 
 if(BUILD_TEST)
   target_link_libraries(rochpcg PRIVATE ${GTEST_BOTH_LIBRARIES})
 endif()
 
-foreach(target ${AMDGPU_TARGETS})
-  target_link_libraries(rochpcg PRIVATE "--amdgpu-target=${target}")
-endforeach()
-
-
-
-
-
-# Target compile options
-if(HPCG_MPI)
-  target_compile_options(rochpcg PRIVATE ${MPI_COMPILE_OPTIONS})
-endif()
 
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
@@ -221,8 +193,8 @@ rocm_install_targets(TARGETS rochpcg
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 2.5.27)")
-set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 2.5.27")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 3.5.30)")
+set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 3.5.30")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
 
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)

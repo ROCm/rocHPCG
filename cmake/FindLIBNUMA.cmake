@@ -1,4 +1,4 @@
-# Modifications (c) 2019 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2020 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -41,6 +41,13 @@ if(LIBNUMA_INCLUDE_DIR AND LIBNUMA_LIBRARY)
 else()
   set(LIBNUMA_FOUND FALSE)
 endif()
+
+if(NOT TARGET libnuma::libnuma)
+  add_library(libnuma::libnuma INTERFACE IMPORTED)
+endif()
+
+set_property(TARGET libnuma::libnuma PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LIBNUMA_INCLUDE_DIR}")
+set_property(TARGET libnuma::libnuma PROPERTY INTERFACE_LINK_LIBRARIES "${LIBNUMA_LIBRARY}")
 
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(LIBNUMA DEFAULT_MSG

@@ -89,7 +89,7 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument")
+list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument -Wno-duplicate-decl-specifier")
 foreach(target ${AMDGPU_TARGETS})
   list(APPEND HIP_HIPCC_FLAGS "--amdgpu-target=${target}")
 endforeach()
@@ -141,10 +141,6 @@ target_include_directories(rochpcg
                                $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
                                $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>)
 
-if(BUILD_TEST)
-  target_include_directories(rochpcg PRIVATE ${GTEST_INCLUDE_DIRS})
-endif()
-
 # MPI
 if(HPCG_MPI)
   target_link_libraries(rochpcg PRIVATE MPI::MPI_CXX libnuma::libnuma)
@@ -154,13 +150,6 @@ endif()
 
 # OpenMP
 if(HPCG_OPENMP)
-  if(NOT TARGET OpenMP::OpenMP_CXX)
-    # cmake fix for cmake <= 3.9
-    find_package(Threads REQUIRED)
-    add_library(OpenMP::OpenMP_CXX IMPORTED INTERFACE)
-    set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_COMPILE_OPTIONS ${OpenMP_CXX_FLAGS})
-    set_property(TARGET OpenMP::OpenMP_CXX PROPERTY INTERFACE_LINK_LIBRARIES ${OpenMP_CXX_FLAGS} Threads::Threads)
-  endif()
   target_link_libraries(rochpcg PRIVATE OpenMP::OpenMP_CXX)
 else()
   target_compile_definitions(rochpcg PRIVATE HPCG_NO_OPENMP)
@@ -170,7 +159,7 @@ endif()
 target_link_libraries(rochpcg PRIVATE roc::rocprim)
 
 if(BUILD_TEST)
-  target_link_libraries(rochpcg PRIVATE ${GTEST_BOTH_LIBRARIES})
+  target_link_libraries(rochpcg PRIVATE GTest::GTest)
 endif()
 
 

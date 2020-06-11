@@ -57,7 +57,6 @@ else()
   option(HPCG_MPI "Compile WITH MPI support." ON)
   if(NOT TARGET MPI::MPI_CXX)
     # cmake fix for cmake <= 3.9
-    find_package()
     add_library(MPI::MPI_CXX IMPORTED INTERFACE)
     set_property(TARGET MPI::MPI_CXX PROPERTY INTERFACE_COMPILE_OPTIONS "${MPI_CXX_COMPILE_OPTIONS}")
     set_property(TARGET MPI::MPI_CXX PROPERTY INTERFACE_COMPILE_DEFINITIONS "${MPI_CXX_COMPILE_DEFINITIONS}")

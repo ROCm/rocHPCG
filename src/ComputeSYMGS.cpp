@@ -296,30 +296,27 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
 {
     assert(x.localLength == A.localNumberOfColumns);
 
+    local_int_t i = 0;
+
 #ifndef HPCG_NO_MPI
     if(A.geom->size > 1)
     {
         PrepareSendBuffer(A, x);
-    }
-#endif
 
-    hipLaunchKernelGGL((kernel_symgs_interior<128>),
-                       dim3((A.sizes[0] - 1) / 128 + 1),
-                       dim3(128),
-                       0,
-                       stream_interior,
-                       A.localNumberOfRows,
-                       A.sizes[0],
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val,
-                       A.inv_diag,
-                       r.d_values,
-                       x.d_values);
+        hipLaunchKernelGGL((kernel_symgs_interior<128>),
+                           dim3((A.sizes[0] - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           stream_interior,
+                           A.localNumberOfRows,
+                           A.sizes[0],
+                           A.ell_width,
+                           A.ell_col_ind,
+                           A.ell_val,
+                           A.inv_diag,
+                           r.d_values,
+                           x.d_values);
 
-#ifndef HPCG_NO_MPI
-    if(A.geom->size > 1)
-    {
         ExchangeHaloAsync(A);
         ObtainRecvBuffer(A, x);
 
@@ -339,11 +336,13 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
                            A.perm,
                            r.d_values,
                            x.d_values);
+
+        ++i;
     }
 #endif
 
     // Solve L
-    for(local_int_t i = 1; i < A.nblocks; ++i)
+    for(; i < A.nblocks; ++i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep<128>),
                            dim3((A.sizes[i] - 1) / 128 + 1),
@@ -363,7 +362,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     }
 
     // Solve U
-    for(local_int_t i = A.ublocks; i >= 0; --i)
+    for(i = A.ublocks; i >= 0; --i)
     {
         hipLaunchKernelGGL((kernel_symgs_sweep<128>),
                            dim3((A.sizes[i] - 1) / 128 + 1),

@@ -6,7 +6,7 @@ rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented 
 * CMake (3.5 or later)
 * MPI
 * NUMA library
-* AMD [ROCm] platform (2.5 or later)
+* AMD [ROCm] platform (3.5 or later)
 * [rocPRIM][]
 * googletest (for test application only)
 

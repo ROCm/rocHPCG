@@ -1,5 +1,5 @@
 # rocHPCG
-rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented on top of AMD's Radeon Open Compute [ROCm][] runtime and toolchains. rocHPCG is created using the [HIP][] programming language and optimized for AMD's latest discrete GPUs.
+rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented on top of AMD's Radeon Open eCosystem Platform [ROCm][] runtime and toolchains. rocHPCG is created using the [HIP][] programming language and optimized for AMD's latest discrete GPUs.
 
 ## Requirements
 * Git

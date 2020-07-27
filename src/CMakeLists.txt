@@ -90,6 +90,12 @@ endforeach()
 
 # HIP flags workaround while target_compile_options does not work
 list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument -Wno-duplicate-decl-specifier")
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+list(APPEND HIP_HIPCC_FLAGS "-g")
+endif()
+
+
 foreach(target ${AMDGPU_TARGETS})
   list(APPEND HIP_HIPCC_FLAGS "--amdgpu-target=${target}")
 endforeach()

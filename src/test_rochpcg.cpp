@@ -156,6 +156,21 @@ TEST_P(parameterized_rochpcg, rochpcg)
   local_int_t ny = (local_int_t)params.ny;
   local_int_t nz = (local_int_t)params.nz;
 
+  // Do not exceed available device memory
+  hipDeviceProp_t prop;
+  hipGetDeviceProperties(&prop, device_id);
+
+  size_t total_mem = prop.totalGlobalMem >> 30;
+
+  if(nx * ny * nz >  2097152 && total_mem < 15 ||
+     nx * ny * nz > 23887872 && total_mem < 31)
+  {
+      printf("Skipping test, insufficient memory\n");
+      HPCG_Finalize();
+
+      return;
+  }
+
   EXPECT_EQ(CheckAspectRatio(0.125, nx, ny, nz, "local problem", rank==0), false);
 
   /////////////////////////

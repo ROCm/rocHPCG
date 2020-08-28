@@ -89,7 +89,7 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument -Wno-duplicate-decl-specifier")
+list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -mno-xnack -Xarch_gfx900 -mno-sram-ecc -Xarch_gfx906 -mno-sram-ecc -Xarch_gfx908 -msram-ecc")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 list(APPEND HIP_HIPCC_FLAGS "-g")

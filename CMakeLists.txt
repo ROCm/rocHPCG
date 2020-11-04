@@ -81,7 +81,7 @@ include(cmake/Dependencies.cmake)
 rocm_setup_version(VERSION 0.7.4)
 
 # AMD targets
-set(AMDGPU_TARGETS gfx900;gfx906;gfx908 CACHE STRING "List of specific machine types for library to target")
+set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List of specific machine types for library to target")
 
 # rocHPCG source directory
 add_subdirectory(src)

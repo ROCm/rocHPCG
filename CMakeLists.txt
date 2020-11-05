@@ -74,14 +74,14 @@ option(BUILD_TEST "Build rocHPCG single-node test" OFF)
 option(OPT_MEMMGMT "Build with memory management module" ON)
 option(OPT_DEFRAG "Build with memory management defragmentation" ON)
 
+# AMD targets
+set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List of specific machine types for library to target")
+
 # Dependencies
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.7.4)
-
-# AMD targets
-set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List of specific machine types for library to target")
+rocm_setup_version(VERSION 0.7.5)
 
 # rocHPCG source directory
 add_subdirectory(src)

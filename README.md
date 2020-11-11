@@ -63,6 +63,11 @@ Furthermore, it is observed that high memory occupancy performs better on AMD de
 ```
 Please note that convergence rate behaviour might change in a multi-GPU environment and need to be adjusted accordingly.
 
+Additionally, you can specify the device to be used for the application (e.g. device #1):
+```
+./rochpcg 280 280 280 1860 --dev=1
+```
+
 ## Testing rocHPCG
 For consistency tests, rocHPCG includes an extra testing application. This test application will run selected problem sizes and check for successful convergence as well as maximum number of iterations required for convergence. The purpose of those tests is to verify, that all changes made to the source will not affect convergence rate.
 The rocHPCG test application can be built and executed by the following commands:
@@ -70,8 +75,8 @@ The rocHPCG test application can be built and executed by the following commands
 # Run rocHPCG installer to build test application
 ./install -dt
 
-# Run test application, where --dev=0 specifies to use device 0 for testing
-./build/release/tests/rochpcg-test --dev=0
+# Run test application, where --device 0 specifies to use device 0 for testing
+./build/release/tests/rochpcg-test --device 0
 ```
 Please note that for successful testing, a device with at least 16GB of device memory is required.
 

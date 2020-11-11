@@ -81,7 +81,7 @@ set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List 
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.7.5)
+rocm_setup_version(VERSION 0.7.6)
 
 # rocHPCG source directory
 add_subdirectory(src)

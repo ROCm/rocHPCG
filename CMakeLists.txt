@@ -74,8 +74,16 @@ option(BUILD_TEST "Build rocHPCG single-node test" OFF)
 option(OPT_MEMMGMT "Build with memory management module" ON)
 option(OPT_DEFRAG "Build with memory management defragmentation" ON)
 
-# AMD targets
-set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List of specific machine types for library to target")
+# Detect compiler support for target ID
+set(TARGET_ID_COMMAND bash "-c" "${CMAKE_CXX_COMPILER} --help | grep mcode-object-version" )
+execute_process (COMMAND ${TARGET_ID_COMMAND} OUTPUT_VARIABLE TARGET_ID_SUPPORT )
+
+# Use target ID syntax if supported for AMDGPU_TARGETS
+if(TARGET_ID_SUPPORT)
+  set(AMDGPU_TARGETS gfx900:xnack-;gfx906:xnack-;gfx908:xnack- CACHE STRING "List of specific machine types for library to target")
+else()
+  set(AMDGPU_TARGETS gfx900;gfx906;gfx908 CACHE STRING "List of specific machine types for library to target")
+endif()
 
 # Dependencies
 include(cmake/Dependencies.cmake)

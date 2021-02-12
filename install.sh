@@ -14,6 +14,7 @@ function display_help()
   echo "    [-i|--install] install after build"
   echo "    [-d|--dependencies] install dependencies"
   echo "    [-r|--reference] reference mode"
+  echo "    [-l|--relocatable] support relocatable ROCm"
   echo "    [-g|--debug] -DCMAKE_BUILD_TYPE=Debug (default: Release)"
   echo "    [-t]--test] build single GPU test"
   echo "    [--with-mpi] compile with MPI support (default: enabled)"
@@ -33,7 +34,7 @@ supported_distro( )
   fi
 
   case "${ID}" in
-    ubuntu|centos|rhel|fedora|sles)
+    ubuntu|centos|rhel|fedora|sles|opensuse-leap)
         true
         ;;
     *)  printf "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES\n"
@@ -148,107 +149,13 @@ install_packages( )
 
       ;;
 
-    sles)
+    sles|opensuse-leap)
 #     elevate_if_not_root zypper -y update
       install_zypper_packages "${library_dependencies_sles[@]}"
 
        ;;
     *)
       echo "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES"
-      exit 2
-      ;;
-  esac
-}
-
-check_apt_packages( )
-{
-  package_dependencies=("$@")
-  for package in "${package_dependencies[@]}"; do
-    dpkg-query -W $package > /dev/null
-    if [ $? -eq 1 ]; then
-      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
-      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
-      exit 2
-    fi
-  done
-}
-
-check_yum_packages( )
-{
-  package_dependencies=("$@")
-  for package in "${package_dependencies[@]}"; do
-    rpm -q $package > /dev/null
-    if [ $? -eq 1 ]; then
-      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
-      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
-      exit 2
-    fi
-  done
-}
-
-check_dnf_packages( )
-{
-  package_dependencies=("$@")
-  for package in "${package_dependencies[@]}"; do
-    rpm -q $package > /dev/null
-    if [ $? -eq 1 ]; then
-      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
-      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
-      exit 2
-    fi
-  done
-}
-
-check_zypper_packages( )
-{
-  package_dependencies=("$@")
-  for package in "${package_dependencies[@]}"; do
-    rpm -q $package > /dev/null
-    if [ $? -eq 1 ]; then
-      printf "\033[31mRequired package \033[33m${package}\033[31m is not installed.\033[0m\n"
-      printf "\033[31mPlease install required package or disable corresponding HPCG build option.\033[0m\n"
-      exit 2
-    fi
-  done
-}
-
-check_packages( )
-{
-  if [ -z ${ID+foo} ]; then
-    printf "check_packages(): \$ID must be set\n"
-    exit 2
-  fi
-
-  package_dependency=("$@")
-
-  if [[ "$package_dependency" == mpi ]]; then
-    local build_dependencies_ubuntu=( "libopenmpi-dev" )
-    local build_dependencies_centos=( "openmpi-devel" )
-    local build_dependencies_fedora=( "openmpi-devel" )
-    local build_dependencies_sles=( "mpich" "mpich-devel" )
-  fi
-  if [[ "$package_dependency" == omp ]]; then
-    local build_dependencies_ubuntu=( "libomp-dev" )
-    local build_dependencies_centos=( "libgomp" )
-    local build_dependencies_fedora=( "libgomp" )
-    local build_dependencies_sles=( "libgomp1" )
-  fi
-
-  case "${ID}" in
-    ubuntu)
-      check_apt_packages "${build_dependencies_ubuntu[@]}"
-      ;;
-    centos|rhel)
-      check_yum_packages "${build_dependencies_centos[@]}"
-      ;;
-    fedora)
-      check_dnf_packages "${build_dependencies_fedora[@]}"
-      ;;
-    sles)
-      check_zypper_packages "${build_dependencies_sles[@]}"
-      ;;
-    *)
-      echo "This script is currently supported on Ubuntu, CentOS, RHEL and Fedora"
       exit 2
       ;;
   esac
@@ -292,6 +199,8 @@ with_mpi=ON
 with_omp=ON
 with_memmgmt=ON
 with_memdefrag=ON
+rocm_path=/opt/rocm
+build_relocatable=false
 
 # #################################################
 # Parameter parsing
@@ -300,7 +209,7 @@ with_memdefrag=ON
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,relocatable,debug,test,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrlgt -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -327,6 +236,9 @@ while true; do
         shift ;;
     -r|--reference)
         build_reference=true
+        shift ;;
+    -l|--relocatable)
+        build_relocatable=true
         shift ;;
     -g|--debug)
         build_release=false
@@ -375,40 +287,40 @@ case "${ID}" in
   ;;
 esac
 
-# #################################################
-# check dependencies
-# #################################################
-shopt -s nocasematch
-# check for mpi
-if [[ "${with_mpi}" == on || "${with_mpi}" == true || "${with_mpi}" == 1 || "${with_mpi}" == enabled ]]; then
-  check_packages "mpi"
-fi
-
-# check for openmp
-if [[ "${with_omp}" == on || "${with_omp}" == true || "${with_omp}" == 1 || "${with_omp}" == enabled ]]; then
-  check_packages "omp"
-fi
-shopt -u nocasematch
+# If user provides custom ${rocm_path} path
+export PATH=${rocm_path}/bin:${rocm_path}/hip/bin:${rocm_path}/llvm/bin:${PATH}
 
 # #################################################
 # dependencies
 # #################################################
 if [[ "${install_dependencies}" == true ]]; then
-
   install_packages
+fi
 
+if [[ "${build_relocatable}" == true ]]; then
+    if ! [ -z ${ROCM_PATH+x} ]; then
+        rocm_path=${ROCM_PATH}
+    fi
+
+    rocm_rpath=" -Wl,--enable-new-dtags -Wl,--rpath,/opt/rocm/lib:/opt/rocm/lib64"
+    if ! [ -z ${ROCM_RPATH+x} ]; then
+        rocm_rpath=" -Wl,--enable-new-dtags -Wl,--rpath,${ROCM_RPATH}"
+    fi
 fi
 
 # We append customary rocm path; if user provides custom rocm path in ${path}, our
 # hard-coded path has lesser priority
-export PATH=${PATH}:/opt/rocm/bin
+if [[ "${build_relocatable}" == true ]]; then
+    export PATH=${rocm_path}/bin:${PATH}
+else
+    export PATH=${PATH}:/opt/rocm/bin
+fi
 
 pushd .
   # #################################################
   # configure & build
   # #################################################
-  cmake_common_options="-DHPCG_MPI=${with_mpi} -DHPCG_OPENMP=${with_omp}"
-  cmake_common_options="${cmake_common_options} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
+  cmake_common_options="-DHPCG_MPI=${with_mpi} -DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
 
   # build type
   if [[ "${build_release}" == true ]]; then
@@ -430,7 +342,23 @@ pushd .
   fi
 
   # Build library with AMD toolchain because of existense of device kernels
-  ${cmake_executable} ${cmake_common_options} -DCMAKE_INSTALL_PREFIX=${install_prefix} ../..
+  if [[ "${build_relocatable}" == true ]]; then
+    ${cmake_executable} ${cmake_common_options} \
+      -DCPACK_SET_DESTDIR=OFF \
+      -DCMAKE_INSTALL_PREFIX=${install_prefix} \
+      -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path} \
+      -DCMAKE_SHARED_LINKER_FLAGS="${rocm_rpath}" \
+      -DCMAKE_PREFIX_PATH="${rocm_path} ${rocm_path}/hcc ${rocm_path}/hip" \
+      -DCMAKE_MODULE_PATH="${rocm_path}/hip/cmake" \
+      -DROCM_DISABLE_LDCONFIG=ON \
+      -DROCM_PATH="${rocm_path}" ../..
+  else
+    ${cmake_executable} ${cmake_common_options} \
+      -DCPACK_SET_DESTDIR=OFF \
+      -DCMAKE_INSTALL_PREFIX=${install_prefix} \
+      -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path} \
+      -DROCM_PATH="${rocm_path}" ../..
+  fi
   check_exit_code
 
   if [[ "${build_test}" == false ]]; then

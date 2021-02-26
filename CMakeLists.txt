@@ -94,7 +94,7 @@ endif()
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.7.6)
+rocm_setup_version(VERSION 0.7.7)
 
 # rocHPCG source directory
 add_subdirectory(src)

@@ -61,7 +61,11 @@
 
 
 // Use TICK and TOCK to time a code section in MATLAB-like fashion
+#ifndef HPCG_NO_MPI
+#define TICK()  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
+#else
 #define TICK()  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
+#endif
 #define TOCK(t) hipDeviceSynchronize(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
 
 /*!

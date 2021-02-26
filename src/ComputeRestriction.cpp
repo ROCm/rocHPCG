@@ -81,8 +81,7 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
         return;
     }
 
-    local_int_t idx_f2c  = __builtin_nontemporal_load(f2cOperator + idx_coarse);
-    local_int_t idx_fine = __builtin_nontemporal_load(perm_fine + idx_f2c);
+    local_int_t idx_fine = perm_fine[__builtin_nontemporal_load(f2cOperator + idx_coarse)];
 
     double sum = 0.0;
 
@@ -91,9 +90,9 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
         local_int_t idx = p * m + idx_fine;
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
-        if(col >= 0 && col < n)
+        if(col >= 0 && col < m)
         {
-            sum = fma(__builtin_nontemporal_load(ell_val + idx), __ldg(xf + col), sum);
+            sum = fma(__builtin_nontemporal_load(ell_val + idx), xf[col], sum);
         }
         else
         {
@@ -101,9 +100,52 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
         }
     }
 
-    local_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
-    double val_fine = __builtin_nontemporal_load(fine + idx_fine);
-    __builtin_nontemporal_store(val_fine - sum, coarse + idx_perm);
+    __builtin_nontemporal_store(__builtin_nontemporal_load(fine + idx_fine) - sum, coarse + perm_coarse[idx_coarse]);
+}
+
+template <unsigned int BLOCKSIZE>
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_fused_restrict_spmv_halo(local_int_t m,
+                                                local_int_t n,
+                                                const local_int_t* __restrict__ c2fOperator,
+                                                const double* __restrict__ fine,
+                                                local_int_t halo_width,
+                                                const local_int_t* __restrict__ halo_row_ind,
+                                                const local_int_t* __restrict__ halo_col_ind,
+                                                const double* __restrict__ halo_val,
+                                                const double* __restrict__ xf,
+                                                double* __restrict__ coarse,
+                                                const local_int_t* __restrict__ perm_coarse)
+{
+    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+
+    if(row >= m)
+    {
+        return;
+    }
+
+    local_int_t idx_coarse = c2fOperator[halo_row_ind[row]];
+
+    // Check if halo row contributes to coarse vector, else discard it
+    if(idx_coarse == -1)
+    {
+        return;
+    }
+
+    double sum = 0.0;
+
+    for(local_int_t p = 0; p < halo_width; ++p)
+    {
+        local_int_t idx = p * m + row;
+        local_int_t col = halo_col_ind[idx];
+
+        if(col >= 0 && col < n)
+        {
+            sum = fma(halo_val[idx], xf[col], sum);
+        }
+    }
+
+    coarse[perm_coarse[idx_coarse]] -= sum;
 }
 
 /*!
@@ -142,8 +184,6 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
     if(A.geom->size > 1)
     {
         PrepareSendBuffer(A, xf);
-        ExchangeHaloAsync(A);
-        ObtainRecvBuffer(A, xf);
     }
 #endif
 
@@ -151,7 +191,7 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
                        dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
                        dim3(1024),
                        0,
-                       0,
+                       stream_interior,
                        A.mgData->rc->localLength,
                        A.mgData->d_f2cOperator,
                        rf.d_values,
@@ -164,6 +204,30 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
                        A.mgData->rc->d_values,
                        A.perm,
                        A.Ac->perm);
+
+#ifndef HPCG_NO_MPI
+    if(A.geom->size > 1)
+    {
+        ExchangeHaloAsync(A);
+        ObtainRecvBuffer(A, xf);
+
+        hipLaunchKernelGGL((kernel_fused_restrict_spmv_halo<128>),
+                           dim3((A.halo_rows - 1) / 128 + 1),
+                           dim3(128),
+                           0,
+                           0,
+                           A.halo_rows,
+                           A.localNumberOfColumns,
+                           A.mgData->d_c2fOperator,
+                           A.ell_width,
+                           A.halo_row_ind,
+                           A.halo_col_ind,
+                           A.halo_val,
+                           xf.d_values,
+                           A.mgData->rc->d_values,
+                           A.Ac->perm);
+    }
+#endif
 
     return 0;
 }

@@ -60,7 +60,8 @@ __global__ void kernel_f2c_operator(local_int_t nxc,
                                     global_int_t nxf,
                                     global_int_t nyf,
                                     global_int_t nzf,
-                                    local_int_t* f2cOperator)
+                                    local_int_t* f2cOperator,
+                                    local_int_t* c2fOperator)
 {
     // Local index in x, y and z direction
     local_int_t ixc = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
@@ -81,6 +82,7 @@ __global__ void kernel_f2c_operator(local_int_t nxc,
     local_int_t currentFineRow = izf * nxf * nyf + iyf * nxf + ixf;
 
     f2cOperator[currentCoarseRow] = currentFineRow;
+    c2fOperator[currentFineRow]   = currentCoarseRow;
 }
 
 /*!
@@ -118,9 +120,14 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
     // Throw an exception of the number of rows is less than zero (can happen if "int" overflows)
     assert(localNumberOfRows > 0);
 
-    // f2c Operator
+    // f2c & c2f Operator
     local_int_t* d_f2cOperator;
+    local_int_t* d_c2fOperator;
+
     HIP_CHECK(deviceMalloc((void**)&d_f2cOperator, sizeof(local_int_t) * localNumberOfRows));
+    HIP_CHECK(deviceMalloc((void**)&d_c2fOperator, sizeof(local_int_t) * nxf * nyf * nzf));
+
+    HIP_CHECK(hipMemset(d_c2fOperator, -1, sizeof(local_int_t) * nxf * nyf * nzf));
 
     dim3 f2c_blocks((nxc - 1) / 2 + 1,
                     (nyc - 1) / 2 + 1,
@@ -138,7 +145,8 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
                        nxf,
                        nyf,
                        nzf,
-                       d_f2cOperator);
+                       d_f2cOperator,
+                       d_c2fOperator);
 
     // Construct the geometry and linear system
     Geometry * geomc = new Geometry;
@@ -174,7 +182,7 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
 
     Af.Ac = Ac;
     MGData* mgData = new MGData;
-    InitializeMGData(d_f2cOperator, rc, xc, Axf, *mgData);
+    InitializeMGData(d_f2cOperator, d_c2fOperator, rc, xc, Axf, *mgData);
     Af.mgData = mgData;
 
     return;

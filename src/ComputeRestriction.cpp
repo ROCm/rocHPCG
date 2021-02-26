@@ -108,7 +108,6 @@ __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_fused_restrict_spmv_halo(local_int_t m,
                                                 local_int_t n,
                                                 const local_int_t* __restrict__ c2fOperator,
-                                                const double* __restrict__ fine,
                                                 local_int_t halo_width,
                                                 const local_int_t* __restrict__ halo_row_ind,
                                                 const local_int_t* __restrict__ halo_col_ind,

@@ -226,7 +226,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
         if(&y != A.mgData->Axf)
         {
-            kernel_spmv_halo<1024><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
+            kernel_spmv_halo<128><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
                 A.halo_rows,
                 A.localNumberOfColumns,
                 A.ell_width,

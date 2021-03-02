@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -51,19 +51,19 @@
 
 #include <hip/hip_runtime.h>
 
-#define LAUNCH_SPMV_ELL(blocksize) hipLaunchKernelGGL((kernel_spmv_ell<blocksize>),                     \
-                                                      dim3((A.localNumberOfRows - 1) / blocksize + 1),  \
-                                                      dim3(blocksize),                                  \
-                                                      0,                                                \
-                                                      stream_interior,                                  \
-                                                      A.localNumberOfRows,                              \
-                                                      A.nblocks,                                        \
-                                                      A.localNumberOfRows / A.nblocks,                  \
-                                                      A.ell_width,                                      \
-                                                      A.ell_col_ind,                                    \
-                                                      A.ell_val,                                        \
-                                                      x.d_values,                                       \
-                                                      y.d_values)
+#define LAUNCH_SPMV_ELL(blocksize, width)                                                \
+    {                                                                                    \
+        dim3 blocks(A.nblocks, (A.localNumberOfRows - 1) / (A.nblocks * blocksize) + 1); \
+        dim3 threads(blocksize);                                                         \
+                                                                                         \
+        kernel_spmv_ell<blocksize, width><<<blocks, threads, 0, stream_interior>>>(      \
+            A.localNumberOfRows,                                                         \
+            A.localNumberOfRows / A.nblocks,                                             \
+            A.ell_col_ind,                                                               \
+            A.ell_val,                                                                   \
+            x.d_values,                                                                  \
+            y.d_values);                                                                 \
+    }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
@@ -78,7 +78,7 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
                                        const double* __restrict__ x,
                                        double* __restrict__ y)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -108,25 +108,23 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-template <unsigned int BLOCKSIZE>
+template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell(local_int_t m,
-                                int nblocks,
                                 local_int_t rows_per_block,
-                                local_int_t ell_width,
-                                const local_int_t* __restrict__ ell_col_ind,
-                                const double* __restrict__ ell_val,
-                                const double* __restrict__ x,
-                                double* __restrict__ y)
+                                const local_int_t* ell_col_ind,
+                                const double* ell_val,
+                                const double* x,
+                                double* y)
 {
-    // Applies for chunks of hipBlockDim_x * nblocks
-    local_int_t color_block_offset = BLOCKSIZE * (hipBlockIdx_x / nblocks);
+    // Applies for chunks of BLOCKSIZE * nblocks
+    local_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
 
-    // Applies for chunks of hipBlockDim_x and restarts for each color_block_offset
-    local_int_t thread_block_offset = (hipBlockIdx_x & (nblocks - 1)) * rows_per_block;
+    // Applies for chunks of BLOCKSIZE and restarts for each color_block_offset
+    local_int_t thread_block_offset = blockIdx.x * rows_per_block;
 
     // Row entry point
-    local_int_t row = color_block_offset + thread_block_offset + hipThreadIdx_x;
+    local_int_t row = color_block_offset + thread_block_offset + threadIdx.x;
 
     if(row >= m)
     {
@@ -134,20 +132,19 @@ __global__ void kernel_spmv_ell(local_int_t m,
     }
 
     double sum = 0.0;
+    local_int_t idx = row;
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+#pragma unroll
+    for(local_int_t p = 0; p < WIDTH; ++p)
     {
-        local_int_t idx = p * m + row;
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < m)
         {
             sum = fma(__builtin_nontemporal_load(ell_val + idx), x[col], sum);
         }
-        else
-        {
-            break;
-        }
+
+        idx += m;
     }
 
     __builtin_nontemporal_store(sum, y + row);
@@ -165,7 +162,7 @@ __global__ void kernel_spmv_halo(local_int_t m,
                                  const double* __restrict__ x,
                                  double* __restrict__ y)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -218,21 +215,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
     if(&y != A.mgData->Axf)
     {
-        // Number of rows per block
-        local_int_t rows_per_block = A.localNumberOfRows / A.nblocks;
-
-        // Determine blocksize
-        unsigned int blocksize = 512;
-
-        while(rows_per_block & (blocksize - 1))
-        {
-            blocksize >>= 1;
-        }
-
-        if     (blocksize == 512) LAUNCH_SPMV_ELL(512);
-        else if(blocksize == 256) LAUNCH_SPMV_ELL(256);
-        else if(blocksize == 128) LAUNCH_SPMV_ELL(128);
-        else                      LAUNCH_SPMV_ELL(64);
+        if(A.ell_width == 27) LAUNCH_SPMV_ELL(1024, 27);
     }
 
 #ifndef HPCG_NO_MPI
@@ -243,41 +226,36 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
         if(&y != A.mgData->Axf)
         {
-            hipLaunchKernelGGL((kernel_spmv_halo<128>),
-                               dim3((A.halo_rows - 1) / 128 + 1),
-                               dim3(128),
-                               0,
-                               0,
-                               A.halo_rows,
-                               A.localNumberOfColumns,
-                               A.ell_width,
-                               A.halo_row_ind,
-                               A.halo_col_ind,
-                               A.halo_val,
-                               A.perm,
-                               x.d_values,
-                               y.d_values);
+            kernel_spmv_halo<1024><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
+                A.halo_rows,
+                A.localNumberOfColumns,
+                A.ell_width,
+                A.halo_row_ind,
+                A.halo_col_ind,
+                A.halo_val,
+                A.perm,
+                x.d_values,
+                y.d_values);
         }
     }
 #endif
 
     if(&y == A.mgData->Axf)
     {
-        hipLaunchKernelGGL((kernel_spmv_ell_coarse<1024>),
-                           dim3((A.mgData->rc->localLength - 1) / 1024 + 1),
-                           dim3(1024),
-                           0,
-                           0,
-                           A.mgData->rc->localLength,
-                           A.localNumberOfRows,
-                           A.localNumberOfColumns,
-                           A.ell_width,
-                           A.ell_col_ind,
-                           A.ell_val,
-                           A.perm,
-                           A.mgData->d_f2cOperator,
-                           x.d_values,
-                           y.d_values);
+        dim3 blocks((A.mgData->rc->localLength - 1) / 1024 + 1);
+        dim3 threads(1024);
+
+        kernel_spmv_ell_coarse<1024><<<blocks, threads>>>(
+            A.mgData->rc->localLength,
+            A.localNumberOfRows,
+            A.localNumberOfColumns,
+            A.ell_width,
+            A.ell_col_ind,
+            A.ell_val,
+            A.perm,
+            A.mgData->d_f2cOperator,
+            x.d_values,
+            y.d_values);
     }
 
     return 0;

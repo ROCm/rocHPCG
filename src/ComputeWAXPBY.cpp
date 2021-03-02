@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -60,12 +60,12 @@ template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_waxpby(local_int_t size,
                               double alpha,
-                              const double* __restrict__ x,
+                              const double* x,
                               double beta,
-                              const double* __restrict__ y,
-                              double* __restrict__ w)
+                              const double* y,
+                              double* w)
 {
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if(gid >= size)
     {
@@ -116,89 +116,77 @@ int ComputeWAXPBY(local_int_t n,
     assert(y.localLength >= n);
     assert(w.localLength >= n);
 
-    hipLaunchKernelGGL((kernel_waxpby<512>),
-                       dim3((n - 1) / 512 + 1),
-                       dim3(512),
-                       0,
-                       0,
-                       n,
-                       alpha,
-                       x.d_values,
-                       beta,
-                       y.d_values,
-                       w.d_values);
+    dim3 blocks((n - 1) / 1024 + 1);
+    dim3 threads(1024);
+
+    kernel_waxpby<1024><<<blocks, threads>>>(n,
+                                             alpha,
+                                             x.d_values,
+                                             beta,
+                                             y.d_values,
+                                             w.d_values);
 
     return 0;
-}
-
-template <unsigned int BLOCKSIZE>
-__device__ void reduce_sum(local_int_t tid, double* data)
-{
-    __syncthreads();
-
-    if(BLOCKSIZE > 512) { if(tid < 512 && tid + 512 < BLOCKSIZE) { data[tid] += data[tid + 512]; } __syncthreads(); }
-    if(BLOCKSIZE > 256) { if(tid < 256 && tid + 256 < BLOCKSIZE) { data[tid] += data[tid + 256]; } __syncthreads(); }
-    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] += data[tid + 128]; } __syncthreads(); }
-    if(BLOCKSIZE >  64) { if(tid <  64 && tid +  64 < BLOCKSIZE) { data[tid] += data[tid +  64]; } __syncthreads(); }
-    if(BLOCKSIZE >  32) { if(tid <  32 && tid +  32 < BLOCKSIZE) { data[tid] += data[tid +  32]; } __syncthreads(); }
-    if(BLOCKSIZE >  16) { if(tid <  16 && tid +  16 < BLOCKSIZE) { data[tid] += data[tid +  16]; } __syncthreads(); }
-    if(BLOCKSIZE >   8) { if(tid <   8 && tid +   8 < BLOCKSIZE) { data[tid] += data[tid +   8]; } __syncthreads(); }
-    if(BLOCKSIZE >   4) { if(tid <   4 && tid +   4 < BLOCKSIZE) { data[tid] += data[tid +   4]; } __syncthreads(); }
-    if(BLOCKSIZE >   2) { if(tid <   2 && tid +   2 < BLOCKSIZE) { data[tid] += data[tid +   2]; } __syncthreads(); }
-    if(BLOCKSIZE >   1) { if(tid <   1 && tid +   1 < BLOCKSIZE) { data[tid] += data[tid +   1]; } __syncthreads(); }
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
                                               double alpha,
-                                              const double* __restrict__ x,
-                                              double* __restrict__ y,
-                                              double* __restrict__ workspace)
+                                              const double* x,
+                                              double* y,
+                                              double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * hipBlockDim_x + tid;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    local_int_t inc = gridDim.x * blockDim.x;
 
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
+    sdata[threadIdx.x] = 0.0;
 
-    for(local_int_t idx = gid; idx < size; idx += hipGridDim_x * hipBlockDim_x)
+    for(local_int_t idx = gid; idx < size; idx += inc)
     {
         double val = fma(alpha, x[idx], y[idx]);
 
         y[idx] = val;
-        sdata[tid] = fma(val, val, sdata[tid]);
+        sdata[threadIdx.x] = fma(val, val, sdata[threadIdx.x]);
     }
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
+    __syncthreads();
 
-    if(tid == 0)
+    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
+    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
+    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
+    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
+    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
+    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
+    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    if(threadIdx.x == 0)
     {
-        workspace[hipBlockIdx_x] = sdata[0];
+        workspace[blockIdx.x] = sdata[0] + sdata[1];
     }
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_fused_waxpby_dot_part2(local_int_t size, double* __restrict__ workspace)
+__global__ void kernel_fused_waxpby_dot_part2(double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
-
-    for(local_int_t idx = tid; idx < size; idx += BLOCKSIZE)
-    {
-        sdata[tid] += workspace[idx];
-    }
+    sdata[threadIdx.x] = workspace[threadIdx.x];
 
     __syncthreads();
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
+    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
+    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
+    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
+    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
+    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
+    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
+    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
 
-    if(tid == 0)
+    if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0];
+        workspace[0] = sdata[0] + sdata[1];
     }
 }
 
@@ -214,26 +202,8 @@ int ComputeFusedWAXPBYDot(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-#define WAXPBY_DOT_DIM 256
-    hipLaunchKernelGGL((kernel_fused_waxpby_dot_part1<WAXPBY_DOT_DIM>),
-                       dim3(WAXPBY_DOT_DIM),
-                       dim3(WAXPBY_DOT_DIM),
-                       0,
-                       0,
-                       n,
-                       alpha,
-                       x.d_values,
-                       y.d_values,
-                       tmp);
-
-    hipLaunchKernelGGL((kernel_fused_waxpby_dot_part2<WAXPBY_DOT_DIM>),
-                       dim3(1),
-                       dim3(WAXPBY_DOT_DIM),
-                       0,
-                       0,
-                       WAXPBY_DOT_DIM,
-                       tmp);
-#undef WAXPBY_DOT_DIM
+    kernel_fused_waxpby_dot_part1<256><<<256, 256>>>(n, alpha, x.d_values, y.d_values, tmp);
+    kernel_fused_waxpby_dot_part2<256><<<1, 256>>>(tmp);
 
     double local_result;
     HIP_CHECK(hipMemcpy(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost));

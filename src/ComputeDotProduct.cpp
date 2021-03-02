@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -57,31 +57,11 @@
 #include <hip/hip_runtime.h>
 
 template <unsigned int BLOCKSIZE>
-__device__ void reduce_sum(local_int_t tid, double* data)
-{
-    __syncthreads();
-
-    if(BLOCKSIZE > 512) { if(tid < 512 && tid + 512 < BLOCKSIZE) { data[tid] += data[tid + 512]; } __syncthreads(); }
-    if(BLOCKSIZE > 256) { if(tid < 256 && tid + 256 < BLOCKSIZE) { data[tid] += data[tid + 256]; } __syncthreads(); }
-    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] += data[tid + 128]; } __syncthreads(); }
-    if(BLOCKSIZE >  64) { if(tid <  64 && tid +  64 < BLOCKSIZE) { data[tid] += data[tid +  64]; } __syncthreads(); }
-    if(BLOCKSIZE >  32) { if(tid <  32 && tid +  32 < BLOCKSIZE) { data[tid] += data[tid +  32]; } __syncthreads(); }
-    if(BLOCKSIZE >  16) { if(tid <  16 && tid +  16 < BLOCKSIZE) { data[tid] += data[tid +  16]; } __syncthreads(); }
-    if(BLOCKSIZE >   8) { if(tid <   8 && tid +   8 < BLOCKSIZE) { data[tid] += data[tid +   8]; } __syncthreads(); }
-    if(BLOCKSIZE >   4) { if(tid <   4 && tid +   4 < BLOCKSIZE) { data[tid] += data[tid +   4]; } __syncthreads(); }
-    if(BLOCKSIZE >   2) { if(tid <   2 && tid +   2 < BLOCKSIZE) { data[tid] += data[tid +   2]; } __syncthreads(); }
-    if(BLOCKSIZE >   1) { if(tid <   1 && tid +   1 < BLOCKSIZE) { data[tid] += data[tid +   1]; } __syncthreads(); }
-}
-
-template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot1_part1(local_int_t n,
-                                  const double* x,
-                                  double* workspace)
+__global__ void kernel_dot1_part1(local_int_t n, const double* x, double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
-    local_int_t inc = hipGridDim_x * BLOCKSIZE;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    local_int_t inc = gridDim.x * BLOCKSIZE;
 
     double sum = 0.0;
     for(local_int_t idx = gid; idx < n; idx += inc)
@@ -91,13 +71,23 @@ __global__ void kernel_dot1_part1(local_int_t n,
     }
 
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = sum;
+    sdata[threadIdx.x] = sum;
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
+    __syncthreads();
 
-    if(tid == 0)
+    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
+    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
+    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
+    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
+    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
+    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
+    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
+    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
+    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    if(threadIdx.x == 0)
     {
-        workspace[hipBlockIdx_x] = sdata[0];
+        workspace[blockIdx.x] = sdata[0] + sdata[1];
     }
 }
 
@@ -108,9 +98,8 @@ __global__ void kernel_dot2_part1(local_int_t n,
                                   const double* y,
                                   double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
-    local_int_t inc = hipGridDim_x * BLOCKSIZE;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    local_int_t inc = gridDim.x * BLOCKSIZE;
 
     double sum = 0.0;
     for(local_int_t idx = gid; idx < n; idx += inc)
@@ -119,28 +108,46 @@ __global__ void kernel_dot2_part1(local_int_t n,
     }
 
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = sum;
+    sdata[threadIdx.x] = sum;
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
+    __syncthreads();
 
-    if(tid == 0)
+    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
+    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
+    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
+    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
+    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
+    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
+    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    if(threadIdx.x == 0)
     {
-        workspace[hipBlockIdx_x] = sdata[0];
+        workspace[blockIdx.x] = sdata[0] + sdata[1];
     }
 }
 
 template <unsigned int BLOCKSIZE>
-__launch_bounds__(256)
+__launch_bounds__(BLOCKSIZE)
 __global__ void kernel_dot_part2(double* workspace)
 {
     __shared__ double sdata[BLOCKSIZE];
-    sdata[hipThreadIdx_x] = workspace[hipThreadIdx_x];
+    sdata[threadIdx.x] = workspace[threadIdx.x];
 
-    reduce_sum<BLOCKSIZE>(hipThreadIdx_x, sdata);
+    __syncthreads();
 
-    if(hipThreadIdx_x == 0)
+    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
+    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
+    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
+    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
+    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
+    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
+    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
+    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
+    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0];
+        workspace[0] = sdata[0] + sdata[1];
     }
 }
 
@@ -173,41 +180,16 @@ int ComputeDotProduct(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-#define DOT_DIM 256
-    dim3 dot_blocks(DOT_DIM);
-    dim3 dot_threads(DOT_DIM);
-
     if(x.d_values == y.d_values)
     {
-        hipLaunchKernelGGL((kernel_dot1_part1<DOT_DIM>),
-                           dot_blocks,
-                           dot_threads,
-                           0,
-                           0,
-                           n,
-                           x.d_values,
-                           tmp);
+        kernel_dot1_part1<1024><<<1024, 1024>>>(n, x.d_values, tmp);
+        kernel_dot_part2<1024><<<1, 1024>>>(tmp);
     }
     else
     {
-        hipLaunchKernelGGL((kernel_dot2_part1<DOT_DIM>),
-                           dot_blocks,
-                           dot_threads,
-                           0,
-                           0,
-                           n,
-                           x.d_values,
-                           y.d_values,
-                           tmp);
+        kernel_dot2_part1<256><<<256, 256>>>(n, x.d_values, y.d_values, tmp);
+        kernel_dot_part2<256><<<1, 256>>>(tmp);
     }
-
-    hipLaunchKernelGGL((kernel_dot_part2<DOT_DIM>),
-                       dim3(1),
-                       dot_threads,
-                       0,
-                       0,
-                       tmp);
-#undef DOT_DIM
 
     double local_result;
     HIP_CHECK(hipMemcpy(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost));

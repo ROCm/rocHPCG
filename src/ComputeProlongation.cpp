@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -45,16 +45,17 @@ __global__ void kernel_prolongation(local_int_t size,
                                     const local_int_t* __restrict__ perm_fine,
                                     const local_int_t* __restrict__ perm_coarse)
 {
-    local_int_t idx_coarse = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t idx_coarse = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(idx_coarse >= size)
     {
         return;
     }
 
-    local_int_t idx_fine = f2cOperator[idx_coarse];
+    local_int_t idx_fine = __builtin_nontemporal_load(f2cOperator + idx_coarse);
+    local_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
 
-    fine[perm_fine[idx_fine]] += coarse[perm_coarse[idx_coarse]];
+    fine[perm_fine[idx_fine]] += coarse[idx_perm];
 }
 
 /*!
@@ -70,17 +71,15 @@ __global__ void kernel_prolongation(local_int_t size,
 */
 int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
 {
-    hipLaunchKernelGGL((kernel_prolongation<1024>),
-                       dim3((Af.mgData->rc->localLength - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       Af.mgData->rc->localLength,
-                       Af.mgData->d_f2cOperator,
-                       Af.mgData->xc->d_values,
-                       xf.d_values,
-                       Af.perm,
-                       Af.Ac->perm);
+    dim3 blocks((Af.mgData->rc->localLength - 1) / 128 + 1);
+    dim3 threads(128);
+
+    kernel_prolongation<128><<<blocks, threads>>>(Af.mgData->rc->localLength,
+                                                  Af.mgData->d_f2cOperator,
+                                                  Af.mgData->xc->d_values,
+                                                  xf.d_values,
+                                                  Af.perm,
+                                                  Af.Ac->perm);
 
     return 0;
 }

@@ -345,7 +345,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
         ExchangeHaloAsync(A);
         ObtainRecvBuffer(A, x);
 
-        kernel_symgs_halo<1024><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
+        kernel_symgs_halo<128><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
             A.halo_rows,
             A.localNumberOfColumns,
             A.sizes[0],

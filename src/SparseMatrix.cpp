@@ -37,29 +37,31 @@
 #include <hip/hip_runtime.h>
 #include <rocprim/rocprim.hpp>
 
-#define LAUNCH_TO_ELL_COL(blocksizex, blocksizey)                           \
-    hipLaunchKernelGGL((kernel_to_ell_col<blocksizex, blocksizey>),         \
-                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
-                       dim3(blocksizex, blocksizey),                        \
-                       0,                                                   \
-                       0,                                                   \
-                       A.localNumberOfRows,                                 \
-                       A.ell_width,                                         \
-                       A.d_mtxIndL,                                         \
-                       A.ell_col_ind,                                       \
-                       d_halo_rows,                                         \
-                       A.halo_row_ind)
+#define LAUNCH_TO_ELL_COL(blocksizex, blocksizey)                       \
+    {                                                                   \
+        dim3 blocks((A.localNumberOfRows - 1) / blocksizey + 1);        \
+        dim3 threads(blocksizex, blocksizey);                           \
+                                                                        \
+        kernel_to_ell_col<blocksizex, blocksizey><<<blocks, threads>>>( \
+            A.localNumberOfRows,                                        \
+            A.ell_width,                                                \
+            A.d_mtxIndL,                                                \
+            A.ell_col_ind,                                              \
+            d_halo_rows,                                                \
+            A.halo_row_ind);                                            \
+    }
 
-#define LAUNCH_TO_ELL_VAL(blocksizex, blocksizey)                           \
-    hipLaunchKernelGGL((kernel_to_ell_val<blocksizex, blocksizey>),         \
-                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
-                       dim3(blocksizex, blocksizey),                        \
-                       0,                                                   \
-                       0,                                                   \
-                       A.localNumberOfRows,                                 \
-                       A.numberOfNonzerosPerRow,                            \
-                       A.d_matrixValues,                                    \
-                       A.ell_val)
+#define LAUNCH_TO_ELL_VAL(blocksizex, blocksizey)                       \
+    {                                                                   \
+        dim3 blocks((A.localNumberOfRows - 1) / blocksizey + 1);        \
+        dim3 threads(blocksizex, blocksizey);                           \
+                                                                        \
+        kernel_to_ell_val<blocksizex, blocksizey><<<blocks, threads>>>( \
+            A.localNumberOfRows,                                        \
+            A.numberOfNonzerosPerRow,                                   \
+            A.d_matrixValues,                                           \
+            A.ell_val);                                                 \
+    }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
@@ -70,7 +72,7 @@ __global__ void kernel_copy_diagonal(local_int_t m,
                                      const double* __restrict__ ell_val,
                                      double* __restrict__ diagonal)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -99,17 +101,13 @@ __global__ void kernel_copy_diagonal(local_int_t m,
 
 void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
 {
-    hipLaunchKernelGGL((kernel_copy_diagonal<1024>),
-                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.localNumberOfColumns,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val,
-                       diagonal.d_values);
+    kernel_copy_diagonal<1024><<<(A.localNumberOfRows - 1) / 1024 + 1, 1024>>>(
+        A.localNumberOfRows,
+        A.localNumberOfColumns,
+        A.ell_width,
+        A.ell_col_ind,
+        A.ell_val,
+        diagonal.d_values);
 }
 
 template <unsigned int BLOCKSIZE>
@@ -122,7 +120,7 @@ __global__ void kernel_replace_diagonal(local_int_t m,
                                         double* __restrict__ ell_val,
                                         double* __restrict__ inv_diag)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -155,18 +153,14 @@ __global__ void kernel_replace_diagonal(local_int_t m,
 
 void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
 {
-    hipLaunchKernelGGL((kernel_replace_diagonal<1024>),
-                       dim3((A.localNumberOfRows - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       A.localNumberOfRows,
-                       A.localNumberOfColumns,
-                       diagonal.d_values,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val,
-                       A.inv_diag);
+    kernel_replace_diagonal<1024><<<(A.localNumberOfRows - 1) / 1024 + 1, 1024>>>(
+        A.localNumberOfRows,
+        A.localNumberOfColumns,
+        diagonal.d_values,
+        A.ell_width,
+        A.ell_col_ind,
+        A.ell_val,
+        A.inv_diag);
 }
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
@@ -178,7 +172,7 @@ __global__ void kernel_to_ell_col(local_int_t m,
                                   local_int_t* __restrict__ halo_rows,
                                   local_int_t* __restrict__ halo_row_ind)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
+    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
 #ifndef HPCG_NO_MPI
     __shared__ bool sdata[BLOCKSIZEY];
@@ -192,8 +186,8 @@ __global__ void kernel_to_ell_col(local_int_t m,
         return;
     }
 
-    local_int_t col = __ldg(mtxIndL + row * nonzerosPerRow + hipThreadIdx_x);
-    ell_col_ind[hipThreadIdx_x * m + row] = col;
+    local_int_t col = __ldg(mtxIndL + row * nonzerosPerRow + threadIdx.x);
+    ell_col_ind[threadIdx.x * m + row] = col;
 
 #ifndef HPCG_NO_MPI
     if(col >= m)
@@ -203,7 +197,7 @@ __global__ void kernel_to_ell_col(local_int_t m,
 
     __syncthreads();
 
-    if(hipThreadIdx_x == 0)
+    if(threadIdx.x == 0)
     {
         if(sdata[threadIdx.y] == true)
         {
@@ -220,15 +214,15 @@ __global__ void kernel_to_ell_val(local_int_t m,
                                   const double* __restrict__ matrixValues,
                                   double* __restrict__ ell_val)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
+    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     if(row >= m)
     {
         return;
     }
 
-    local_int_t idx = hipThreadIdx_x * m + row;
-    ell_val[idx] = matrixValues[row * nnz_per_row + hipThreadIdx_x];
+    local_int_t idx = threadIdx.x * m + row;
+    ell_val[idx] = matrixValues[row * nnz_per_row + threadIdx.x];
 }
 
 template <unsigned int BLOCKSIZE>
@@ -243,7 +237,7 @@ __global__ void kernel_to_halo(local_int_t halo_rows,
                                local_int_t* __restrict__ halo_col_ind,
                                double* __restrict__ halo_val)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= halo_rows)
     {
@@ -300,10 +294,10 @@ void ConvertToELL(SparseMatrix& A)
         blocksize >>= 1;
     }
 
-    if     (blocksize == 32) LAUNCH_TO_ELL_VAL(27, 32);
-    else if(blocksize == 16) LAUNCH_TO_ELL_VAL(27, 16);
-    else if(blocksize ==  8) LAUNCH_TO_ELL_VAL(27,  8);
-    else                     LAUNCH_TO_ELL_VAL(27,  4);
+    if     (blocksize == 32) LAUNCH_TO_ELL_VAL(27, 32)
+    else if(blocksize == 16) LAUNCH_TO_ELL_VAL(27, 16)
+    else if(blocksize ==  8) LAUNCH_TO_ELL_VAL(27,  8)
+    else                     LAUNCH_TO_ELL_VAL(27,  4)
 
     // We can re-use mtxIndG array for the ELL column indices
     A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_matrixValues);
@@ -321,10 +315,10 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
 #endif
 
-    if     (blocksize == 32) LAUNCH_TO_ELL_COL(27, 32);
-    else if(blocksize == 16) LAUNCH_TO_ELL_COL(27, 16);
-    else if(blocksize ==  8) LAUNCH_TO_ELL_COL(27,  8);
-    else                     LAUNCH_TO_ELL_COL(27,  4);
+    if     (blocksize == 32) LAUNCH_TO_ELL_COL(27, 32)
+    else if(blocksize == 16) LAUNCH_TO_ELL_COL(27, 16)
+    else if(blocksize ==  8) LAUNCH_TO_ELL_COL(27,  8)
+    else                     LAUNCH_TO_ELL_COL(27,  4)
 
     // Free old matrix indices
     HIP_CHECK(deviceFree(A.d_mtxIndL));
@@ -351,20 +345,16 @@ void ConvertToELL(SparseMatrix& A)
                                        A.halo_rows));
     HIP_CHECK(deviceFree(rocprim_buffer));
 
-    hipLaunchKernelGGL((kernel_to_halo<128>),
-                       dim3((A.halo_rows - 1) / 128 + 1),
-                       dim3(128),
-                       0,
-                       0,
-                       A.halo_rows,
-                       A.localNumberOfRows,
-                       A.localNumberOfColumns,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val,
-                       A.halo_row_ind,
-                       A.halo_col_ind,
-                       A.halo_val);
+    kernel_to_halo<128><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
+        A.halo_rows,
+        A.localNumberOfRows,
+        A.localNumberOfColumns,
+        A.ell_width,
+        A.ell_col_ind,
+        A.ell_val,
+        A.halo_row_ind,
+        A.halo_col_ind,
+        A.halo_val);
 #endif
 }
 
@@ -377,7 +367,7 @@ __global__ void kernel_extract_diag_index(local_int_t m,
                                           local_int_t* __restrict__ diag_idx,
                                           double* __restrict__ inv_diag)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -407,15 +397,11 @@ void ExtractDiagonal(SparseMatrix& A)
     HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * m));
 
     // Extract diagonal entries
-    hipLaunchKernelGGL((kernel_extract_diag_index<1024>),
-                       dim3((m - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       m,
-                       A.ell_width,
-                       A.ell_col_ind,
-                       A.ell_val,
-                       A.diag_idx,
-                       A.inv_diag);
+    kernel_extract_diag_index<1024><<<(m - 1) / 1024 + 1, 1024>>>(
+        m,
+        A.ell_width,
+        A.ell_col_ind,
+        A.ell_val,
+        A.diag_idx,
+        A.inv_diag);
 }

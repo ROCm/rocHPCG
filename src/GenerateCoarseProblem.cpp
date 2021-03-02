@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -64,9 +64,9 @@ __global__ void kernel_f2c_operator(local_int_t nxc,
                                     local_int_t* c2fOperator)
 {
     // Local index in x, y and z direction
-    local_int_t ixc = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-    local_int_t iyc = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
-    local_int_t izc = hipBlockIdx_z * hipBlockDim_z + hipThreadIdx_z;
+    local_int_t ixc = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t iyc = blockIdx.y * blockDim.y + threadIdx.y;
+    local_int_t izc = blockIdx.z * blockDim.z + threadIdx.z;
 
     // Do not run out of bounds
     if(izc >= nzc || iyc >= nyc || ixc >= nxc)
@@ -134,19 +134,14 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
                     (nzc - 1) / 2 + 1);
     dim3 f2c_threads(2, 2, 2);
 
-    hipLaunchKernelGGL((kernel_f2c_operator),
-                       f2c_blocks,
-                       f2c_threads,
-                       0,
-                       0,
-                       nxc,
-                       nyc,
-                       nzc,
-                       nxf,
-                       nyf,
-                       nzf,
-                       d_f2cOperator,
-                       d_c2fOperator);
+    kernel_f2c_operator<<<f2c_blocks, f2c_threads>>>(nxc,
+                                                     nyc,
+                                                     nzc,
+                                                     nxf,
+                                                     nyf,
+                                                     nzf,
+                                                     d_f2cOperator,
+                                                     d_c2fOperator);
 
     // Construct the geometry and linear system
     Geometry * geomc = new Geometry;

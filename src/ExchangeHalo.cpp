@@ -146,7 +146,7 @@ __global__ void kernel_gather(local_int_t size,
                               const local_int_t* __restrict__ perm,
                               double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {

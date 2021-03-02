@@ -1,4 +1,4 @@
-# Modifications (c) 2019-2020 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -44,7 +44,6 @@ set(rochpcg_hip_source
   ExchangeHalo.cpp
   GenerateCoarseProblem.cpp
   GenerateProblem.cpp
-  init.cpp
   MultiColoring.cpp
   Permute.cpp
   SetupHalo.cpp
@@ -68,6 +67,7 @@ set(rochpcg_source
   ComputeSYMGS_ref.cpp
   ComputeWAXPBY_ref.cpp
   GenerateGeometry.cpp
+  init.cpp
   Memory.cpp
   MixedBaseCounter.cpp
   OptimizeProblem.cpp

@@ -37,18 +37,19 @@
 
 #include <hip/hip_runtime.h>
 
-#define LAUNCH_PERM_COLS(blocksizex, blocksizey)                            \
-    hipLaunchKernelGGL((kernel_perm_cols<blocksizex, blocksizey>),          \
-                       dim3((A.localNumberOfRows - 1) / blocksizey + 1),    \
-                       dim3(blocksizex, blocksizey),                        \
-                       0,                                                   \
-                       0,                                                   \
-                       A.localNumberOfRows,                                 \
-                       A.localNumberOfColumns,                              \
-                       A.numberOfNonzerosPerRow,                            \
-                       A.perm,                                              \
-                       A.d_mtxIndL,                                         \
-                       A.d_matrixValues)
+#define LAUNCH_PERM_COLS(blocksizex, blocksizey)                       \
+    {                                                                  \
+        dim3 blocks((A.localNumberOfRows - 1) / blocksizey + 1);       \
+        dim3 threads(blocksizex, blocksizey);                          \
+                                                                       \
+        kernel_perm_cols<blocksizex, blocksizey><<<blocks, threads>>>( \
+            A.localNumberOfRows,                                       \
+            A.localNumberOfColumns,                                    \
+            A.numberOfNonzerosPerRow,                                  \
+            A.perm,                                                    \
+            A.d_mtxIndL,                                               \
+            A.d_matrixValues);                                         \
+    }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
@@ -60,7 +61,7 @@ __global__ void kernel_permute_ell_rows(local_int_t m,
                                         local_int_t* __restrict__ ell_col_ind,
                                         double* __restrict__ ell_val)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -100,12 +101,12 @@ __global__ void kernel_perm_cols(local_int_t m,
                                  local_int_t* __restrict__ mtxIndL,
                                  double* __restrict__ matrixValues)
 {
-    local_int_t row = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
-    local_int_t idx = row * nonzerosPerRow + hipThreadIdx_x;
+    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    local_int_t idx = row * nonzerosPerRow + threadIdx.x;
     local_int_t key = n;
     double val = 0.0;
 
-    if(hipThreadIdx_x < nonzerosPerRow && row < m)
+    if(threadIdx.x < nonzerosPerRow && row < m)
     {
         local_int_t col = mtxIndL[idx];
         val = matrixValues[idx];
@@ -120,27 +121,27 @@ __global__ void kernel_perm_cols(local_int_t m,
         }
     }
 
-    swap(key, val, 1, get_bit(hipThreadIdx_x, 1) ^ get_bit(hipThreadIdx_x, 0));
+    swap(key, val, 1, get_bit(threadIdx.x, 1) ^ get_bit(threadIdx.x, 0));
 
-    swap(key, val, 2, get_bit(hipThreadIdx_x, 2) ^ get_bit(hipThreadIdx_x, 1));
-    swap(key, val, 1, get_bit(hipThreadIdx_x, 2) ^ get_bit(hipThreadIdx_x, 0));
+    swap(key, val, 2, get_bit(threadIdx.x, 2) ^ get_bit(threadIdx.x, 1));
+    swap(key, val, 1, get_bit(threadIdx.x, 2) ^ get_bit(threadIdx.x, 0));
 
-    swap(key, val, 4, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 2));
-    swap(key, val, 2, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 1));
-    swap(key, val, 1, get_bit(hipThreadIdx_x, 3) ^ get_bit(hipThreadIdx_x, 0));
+    swap(key, val, 4, get_bit(threadIdx.x, 3) ^ get_bit(threadIdx.x, 2));
+    swap(key, val, 2, get_bit(threadIdx.x, 3) ^ get_bit(threadIdx.x, 1));
+    swap(key, val, 1, get_bit(threadIdx.x, 3) ^ get_bit(threadIdx.x, 0));
 
-    swap(key, val, 8, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 3));
-    swap(key, val, 4, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 2));
-    swap(key, val, 2, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 1));
-    swap(key, val, 1, get_bit(hipThreadIdx_x, 4) ^ get_bit(hipThreadIdx_x, 0));
+    swap(key, val, 8, get_bit(threadIdx.x, 4) ^ get_bit(threadIdx.x, 3));
+    swap(key, val, 4, get_bit(threadIdx.x, 4) ^ get_bit(threadIdx.x, 2));
+    swap(key, val, 2, get_bit(threadIdx.x, 4) ^ get_bit(threadIdx.x, 1));
+    swap(key, val, 1, get_bit(threadIdx.x, 4) ^ get_bit(threadIdx.x, 0));
 
-    swap(key, val, 16, get_bit(hipThreadIdx_x, 4));
-    swap(key, val,  8, get_bit(hipThreadIdx_x, 3));
-    swap(key, val,  4, get_bit(hipThreadIdx_x, 2));
-    swap(key, val,  2, get_bit(hipThreadIdx_x, 1));
-    swap(key, val,  1, get_bit(hipThreadIdx_x, 0));
+    swap(key, val, 16, get_bit(threadIdx.x, 4));
+    swap(key, val,  8, get_bit(threadIdx.x, 3));
+    swap(key, val,  4, get_bit(threadIdx.x, 2));
+    swap(key, val,  2, get_bit(threadIdx.x, 1));
+    swap(key, val,  1, get_bit(threadIdx.x, 0));
 
-    if(hipThreadIdx_x < nonzerosPerRow && row < m)
+    if(threadIdx.x < nonzerosPerRow && row < m)
     {
         mtxIndL[idx] = (key == n) ? -1 : key;
         matrixValues[idx] = val;
@@ -177,10 +178,10 @@ void PermuteColumns(SparseMatrix& A)
         dim_y >>= 1;
     }
 
-    if     (dim_y == 32) LAUNCH_PERM_COLS(32, 32);
-    else if(dim_y == 16) LAUNCH_PERM_COLS(32, 16);
-    else if(dim_y ==  8) LAUNCH_PERM_COLS(32,  8);
-    else                 LAUNCH_PERM_COLS(32,  4);
+    if     (dim_y == 32) LAUNCH_PERM_COLS(32, 32)
+    else if(dim_y == 16) LAUNCH_PERM_COLS(32, 16)
+    else if(dim_y ==  8) LAUNCH_PERM_COLS(32,  8)
+    else                 LAUNCH_PERM_COLS(32,  4)
 }
 
 void PermuteRows(SparseMatrix& A)
@@ -202,18 +203,14 @@ void PermuteRows(SparseMatrix& A)
         HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(local_int_t) * m, hipMemcpyDeviceToDevice));
         HIP_CHECK(hipMemcpy(tmp_vals, A.ell_val + offset, sizeof(double) * m, hipMemcpyDeviceToDevice));
 
-        hipLaunchKernelGGL((kernel_permute_ell_rows<1024>),
-                           dim3((m - 1) / 1024 + 1),
-                           dim3(1024),
-                           0,
-                           0,
-                           m,
-                           p,
-                           tmp_cols,
-                           tmp_vals,
-                           A.perm,
-                           A.ell_col_ind,
-                           A.ell_val);
+        kernel_permute_ell_rows<1024><<<(m - 1) / 1024 + 1, 1024>>>(
+            m,
+            p,
+            tmp_cols,
+            tmp_vals,
+            A.perm,
+            A.ell_col_ind,
+            A.ell_val);
     }
 
     HIP_CHECK(deviceFree(tmp_cols));
@@ -227,7 +224,7 @@ __global__ void kernel_permute(local_int_t size,
                                const double* __restrict__ in,
                                double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -242,15 +239,7 @@ void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
     double* buffer;
     HIP_CHECK(deviceMalloc((void**)&buffer, sizeof(double) * v.localLength));
 
-    hipLaunchKernelGGL((kernel_permute<1024>),
-                       dim3((size - 1) / 1024 + 1),
-                       dim3(1024),
-                       0,
-                       0,
-                       size,
-                       perm,
-                       v.d_values,
-                       buffer);
+    kernel_permute<1024><<<(size - 1) / 1024 + 1, 1024>>>(size, perm, v.d_values, buffer);
 
     HIP_CHECK(deviceFree(v.d_values));
     v.d_values = buffer;

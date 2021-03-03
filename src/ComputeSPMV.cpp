@@ -65,6 +65,22 @@
             y.d_values);                                                                 \
     }
 
+#define LAUNCH_SPMV_HALO(blocksize, width)                       \
+    {                                                            \
+        dim3 blocks((A.halo_rows - 1) / blocksize + 1);          \
+        dim3 threads(blocksize);                                 \
+                                                                 \
+        kernel_spmv_halo<blocksize, width><<<blocks, threads>>>( \
+            A.halo_rows,                                         \
+            A.localNumberOfColumns,                              \
+            A.halo_row_ind,                                      \
+            A.halo_col_ind,                                      \
+            A.halo_val,                                          \
+            A.perm,                                              \
+            x.d_values,                                          \
+            y.d_values);                                         \
+    }
+
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell_coarse(local_int_t size,
@@ -150,17 +166,16 @@ __global__ void kernel_spmv_ell(local_int_t m,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-template <unsigned int BLOCKSIZE>
+template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_halo(local_int_t m,
                                  local_int_t n,
-                                 local_int_t halo_width,
-                                 const local_int_t* __restrict__ halo_row_ind,
-                                 const local_int_t* __restrict__ halo_col_ind,
-                                 const double* __restrict__ halo_val,
-                                 const local_int_t* __restrict__ perm,
-                                 const double* __restrict__ x,
-                                 double* __restrict__ y)
+                                 const local_int_t* halo_row_ind,
+                                 const local_int_t* halo_col_ind,
+                                 const double* halo_val,
+                                 const local_int_t* perm,
+                                 const double* x,
+                                 double* y)
 {
     local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -171,15 +186,19 @@ __global__ void kernel_spmv_halo(local_int_t m,
 
     double sum = 0.0;
 
-    for(local_int_t p = 0; p < halo_width; ++p)
+    local_int_t idx = row;
+
+#pragma unroll
+    for(local_int_t p = 0; p < WIDTH; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = halo_col_ind[idx];
+        local_int_t col = __builtin_nontemporal_load(halo_col_ind + idx);
 
         if(col >= 0 && col < n)
         {
-            sum = fma(halo_val[idx], x[col], sum);
+            sum = fma(__builtin_nontemporal_load(halo_val + idx), x[col], sum);
         }
+
+        idx += m;
     }
 
     y[perm[halo_row_ind[row]]] += sum;
@@ -226,16 +245,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
         if(&y != A.mgData->Axf)
         {
-            kernel_spmv_halo<128><<<(A.halo_rows - 1) / 128 + 1, 128>>>(
-                A.halo_rows,
-                A.localNumberOfColumns,
-                A.ell_width,
-                A.halo_row_ind,
-                A.halo_col_ind,
-                A.halo_val,
-                A.perm,
-                x.d_values,
-                y.d_values);
+            if(A.ell_width == 27) LAUNCH_SPMV_HALO(1024, 27);
         }
     }
 #endif

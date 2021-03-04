@@ -146,7 +146,7 @@ TEST_P(parameterized_rochpcg, rochpcg)
   size_t total_mem = prop.totalGlobalMem >> 30;
 
   if(dim[0] * dim[1] * dim[2] >  2097152 && total_mem < 15 ||
-     dim[0] * dim[1] * dim[2] > 23887872 && total_mem < 31 ||
+     dim[0] * dim[1] * dim[2] > 21952000 && total_mem < 31 ||
      dim[0] * dim[1] * dim[2] > 86016000 && total_mem < 63)
   {
       printf("*** WARNING *** Skipping test due to insufficient memory\n");

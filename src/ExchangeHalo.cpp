@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -146,7 +146,7 @@ __global__ void kernel_gather(local_int_t size,
                               const local_int_t* __restrict__ perm,
                               double* __restrict__ out)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -159,16 +159,14 @@ __global__ void kernel_gather(local_int_t size,
 void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
 {
     // Prepare send buffer
-    hipLaunchKernelGGL((kernel_gather<128>),
-                       dim3((A.totalToBeSent - 1) / 128 + 1),
-                       dim3(128),
-                       0,
-                       0,
-                       A.totalToBeSent,
-                       x.d_values,
-                       A.d_elementsToSend,
-                       A.perm,
-                       A.d_send_buffer);
+    dim3 blocks((A.totalToBeSent - 1) / 128 + 1);
+    dim3 threads(128);
+
+    kernel_gather<128><<<blocks, threads>>>(A.totalToBeSent,
+                                            x.d_values,
+                                            A.d_elementsToSend,
+                                            A.perm,
+                                            A.d_send_buffer);
 
     // Copy send buffer to host
     HIP_CHECK(hipMemcpyAsync(A.send_buffer,

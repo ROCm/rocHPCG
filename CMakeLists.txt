@@ -1,4 +1,4 @@
-# Modifications (c) 2019 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -94,7 +94,7 @@ endif()
 include(cmake/Dependencies.cmake)
 
 # Setup version
-rocm_setup_version(VERSION 0.7.6)
+rocm_setup_version(VERSION 0.7.8)
 
 # rocHPCG source directory
 add_subdirectory(src)

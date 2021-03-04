@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -55,30 +55,32 @@
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
 
-#define LAUNCH_GENERATE_PROBLEM(blocksizex, blocksizey)                                     \
-    hipLaunchKernelGGL((kernel_generate_problem<blocksizex, blocksizey>),                   \
-                       dim3((localNumberOfRows - 1) / blocksizey + 1),                      \
-                       dim3(blocksizex, blocksizey),                                        \
-                       sizeof(bool) * blocksizey + sizeof(int) * blocksizex * blocksizey,   \
-                       0,                                                                   \
-                       localNumberOfRows,                                                   \
-                       nx, ny, nz, nx * ny,                                                 \
-                       gnx, gny, gnz, gnx * gny,                                            \
-                       gix0, giy0, giz0,                                                    \
-                       numberOfNonzerosPerRow,                                              \
-                       A.d_nonzerosInRow,                                                   \
-                       A.d_mtxIndG,                                                         \
-                       A.d_matrixValues,                                                    \
-                       A.d_matrixDiagonal,                                                  \
-                       A.d_localToGlobalMap,                                                \
-                       A.d_rowHash,                                                         \
-                       (b != NULL) ? b->d_values : NULL)
+#define LAUNCH_GENERATE_PROBLEM(blocksizex, blocksizey)                                  \
+    {                                                                                    \
+        dim3 blocks((localNumberOfRows - 1) / blocksizey + 1);                           \
+        dim3 threads(blocksizex, blocksizey);                                            \
+        size_t smem = sizeof(bool) * blocksizey + sizeof(int) * blocksizex * blocksizey; \
+                                                                                         \
+        kernel_generate_problem<blocksizex, blocksizey><<<blocks, threads, smem>>>(      \
+           localNumberOfRows,                                                            \
+           nx, ny, nz, nx * ny,                                                          \
+           gnx, gny, gnz, gnx * gny,                                                     \
+           gix0, giy0, giz0,                                                             \
+           numberOfNonzerosPerRow,                                                       \
+           A.d_nonzerosInRow,                                                            \
+           A.d_mtxIndG,                                                                  \
+           A.d_matrixValues,                                                             \
+           A.d_matrixDiagonal,                                                           \
+           A.d_localToGlobalMap,                                                         \
+           A.d_rowHash,                                                                  \
+           (b != NULL) ? b->d_values : NULL);                                            \
+    }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_set_one(local_int_t size, double* __restrict__ array)
 {
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -117,7 +119,7 @@ __global__ void kernel_generate_problem(local_int_t m,
                                         double* __restrict__ b)
 {
     // Current local row
-    local_int_t currentLocalRow = hipBlockIdx_x * BLOCKSIZEY + hipThreadIdx_y;
+    local_int_t currentLocalRow = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     extern __shared__ char sdata[];
 
@@ -130,12 +132,12 @@ __global__ void kernel_generate_problem(local_int_t m,
     int* column_offset = reinterpret_cast<int*>(sdata + sizeof(bool) * BLOCKSIZEY);
 
     // Offset into current local row
-    column_offset += hipThreadIdx_y * BLOCKSIZEX;
+    column_offset += threadIdx.y * BLOCKSIZEX;
 
     // Initialize interior vertex marker
-    if(hipThreadIdx_x == 0)
+    if(threadIdx.x == 0)
     {
-        interior_vertex[hipThreadIdx_y] = true;
+        interior_vertex[threadIdx.y] = true;
     }
 
     // Sync interior vertex initialization
@@ -162,9 +164,9 @@ __global__ void kernel_generate_problem(local_int_t m,
 
     // Obtain neighboring offsets in x, y and z direction relative to the
     // current vertex and compute the resulting neighboring coordinates
-    global_int_t nb_giz = giz + hipThreadIdx_x / 9 - 1;
-    global_int_t nb_giy = giy + (hipThreadIdx_x % 9) / 3 - 1;
-    global_int_t nb_gix = gix + (hipThreadIdx_x % 3) - 1;
+    global_int_t nb_giz = giz + threadIdx.x / 9 - 1;
+    global_int_t nb_giy = giy + (threadIdx.x % 9) / 3 - 1;
+    global_int_t nb_gix = gix + (threadIdx.x % 3) - 1;
 
     // Compute current global column for neighboring vertex
     global_int_t curcol = nb_giz * gnx_gny + nb_giy * gnx + nb_gix;
@@ -183,31 +185,31 @@ __global__ void kernel_generate_problem(local_int_t m,
     {
         // If no neighbor exists for one of the offsets, we need to re-compute
         // the indexing for the column entry accesses
-        interior_vertex[hipThreadIdx_y] = false;
+        interior_vertex[threadIdx.y] = false;
     }
 
     // Re-compute index into matrix, by marking if current offset is
     // a neighbor or not
-    column_offset[hipThreadIdx_x] = interior ? 1 : 0;
+    column_offset[threadIdx.x] = interior ? 1 : 0;
 
     // Wait for threads to finish
     __syncthreads();
 
     // Do we have an interior vertex?
-    bool full_interior = interior_vertex[hipThreadIdx_y];
+    bool full_interior = interior_vertex[threadIdx.y];
 
     // Compute inclusive sum to obtain new matrix index offsets
     int tmp;
-    if(hipThreadIdx_x >=  1 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  1]; __syncthreads();
-    if(hipThreadIdx_x >=  1 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-    if(hipThreadIdx_x >=  2 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  2]; __syncthreads();
-    if(hipThreadIdx_x >=  2 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-    if(hipThreadIdx_x >=  4 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  4]; __syncthreads();
-    if(hipThreadIdx_x >=  4 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-    if(hipThreadIdx_x >=  8 && full_interior == false) tmp = column_offset[hipThreadIdx_x -  8]; __syncthreads();
-    if(hipThreadIdx_x >=  8 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
-    if(hipThreadIdx_x >= 16 && full_interior == false) tmp = column_offset[hipThreadIdx_x - 16]; __syncthreads();
-    if(hipThreadIdx_x >= 16 && full_interior == false) column_offset[hipThreadIdx_x] += tmp;     __syncthreads();
+    if(threadIdx.x >=  1 && full_interior == false) tmp = column_offset[threadIdx.x -  1]; __syncthreads();
+    if(threadIdx.x >=  1 && full_interior == false) column_offset[threadIdx.x] += tmp;     __syncthreads();
+    if(threadIdx.x >=  2 && full_interior == false) tmp = column_offset[threadIdx.x -  2]; __syncthreads();
+    if(threadIdx.x >=  2 && full_interior == false) column_offset[threadIdx.x] += tmp;     __syncthreads();
+    if(threadIdx.x >=  4 && full_interior == false) tmp = column_offset[threadIdx.x -  4]; __syncthreads();
+    if(threadIdx.x >=  4 && full_interior == false) column_offset[threadIdx.x] += tmp;     __syncthreads();
+    if(threadIdx.x >=  8 && full_interior == false) tmp = column_offset[threadIdx.x -  8]; __syncthreads();
+    if(threadIdx.x >=  8 && full_interior == false) column_offset[threadIdx.x] += tmp;     __syncthreads();
+    if(threadIdx.x >= 16 && full_interior == false) tmp = column_offset[threadIdx.x - 16]; __syncthreads();
+    if(threadIdx.x >= 16 && full_interior == false) column_offset[threadIdx.x] += tmp;     __syncthreads();
 
     // Do we have interior or boundary vertex, e.g. do we have a neighbor for each
     // direction?
@@ -216,13 +218,13 @@ __global__ void kernel_generate_problem(local_int_t m,
         // Interior vertex
 
         // Index into matrix
-        local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + hipThreadIdx_x;
+        local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + threadIdx.x;
 
         // Diagonal entry is threated differently
         if(curcol == currentGlobalRow)
         {
             // Store diagonal entry index
-            __builtin_nontemporal_store(hipThreadIdx_x, matrixDiagonal + currentLocalRow);
+            __builtin_nontemporal_store(threadIdx.x, matrixDiagonal + currentLocalRow);
 
             // Diagonal matrix values are 26
             __builtin_nontemporal_store(26.0, matrixValues + idx);
@@ -248,7 +250,7 @@ __global__ void kernel_generate_problem(local_int_t m,
         {
             // Obtain current threads index into matrix from above inclusive scan
             // (convert from 1-based to 0-based indexing)
-            int offset = column_offset[hipThreadIdx_x] - 1;
+            int offset = column_offset[threadIdx.x] - 1;
 
             // Index into matrix
             local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + offset;
@@ -274,14 +276,14 @@ __global__ void kernel_generate_problem(local_int_t m,
 
         // First thread writes number of neighboring vertices, including the
         // identity vertex
-        if(hipThreadIdx_x == 0)
+        if(threadIdx.x == 0)
         {
             numberOfNonzerosInRow = column_offset[BLOCKSIZEX - 1];
         }
     }
 
     // For each row, initialize vector arrays and number of vertices
-    if(hipThreadIdx_x == 0)
+    if(threadIdx.x == 0)
     {
         __builtin_nontemporal_store(numberOfNonzerosInRow, nonzerosInRow + currentLocalRow);
 
@@ -324,9 +326,9 @@ __global__ void kernel_local_nnz_part1(local_int_t size,
                                        const char* __restrict__ nonzerosInRow,
                                        local_int_t* __restrict__ workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
-    local_int_t inc = hipGridDim_x * BLOCKSIZE;
+    local_int_t tid = threadIdx.x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + tid;
+    local_int_t inc = gridDim.x * BLOCKSIZE;
 
     __shared__ local_int_t sdata[BLOCKSIZE];
     sdata[tid] = 0;
@@ -340,27 +342,20 @@ __global__ void kernel_local_nnz_part1(local_int_t size,
 
     if(tid == 0)
     {
-        workspace[hipBlockIdx_x] = sdata[0];
+        workspace[blockIdx.x] = sdata[0];
     }
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_local_nnz_part2(local_int_t size, local_int_t* __restrict__ workspace)
+__global__ void kernel_local_nnz_part2(local_int_t* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-
     __shared__ local_int_t sdata[BLOCKSIZE];
-    sdata[tid] = 0;
+    sdata[threadIdx.x] += workspace[threadIdx.x];
 
-    for(local_int_t idx = tid; idx < size; idx += BLOCKSIZE)
-    {
-        sdata[tid] += workspace[idx];
-    }
+    reduce_sum<BLOCKSIZE>(threadIdx.x, sdata);
 
-    reduce_sum<BLOCKSIZE>(tid, sdata);
-
-    if(tid == 0)
+    if(threadIdx.x == 0)
     {
         workspace[0] = sdata[0];
     }
@@ -437,10 +432,10 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     }
 
     // Generate problem
-    if     (blocksize == 32) LAUNCH_GENERATE_PROBLEM(27, 32);
-    else if(blocksize == 16) LAUNCH_GENERATE_PROBLEM(27, 16);
-    else if(blocksize ==  8) LAUNCH_GENERATE_PROBLEM(27, 8);
-    else                     LAUNCH_GENERATE_PROBLEM(27, 4);
+    if     (blocksize == 32) LAUNCH_GENERATE_PROBLEM(27, 32)
+    else if(blocksize == 16) LAUNCH_GENERATE_PROBLEM(27, 16)
+    else if(blocksize ==  8) LAUNCH_GENERATE_PROBLEM(27, 8)
+    else                     LAUNCH_GENERATE_PROBLEM(27, 4)
 
     // Initialize x vector, if not NULL
     if(x != NULL)
@@ -451,34 +446,16 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     // Initialize exact solution, if not NULL
     if(xexact != NULL)
     {
-        hipLaunchKernelGGL((kernel_set_one<1024>),
-                           dim3((localNumberOfRows - 1) / 1024 + 1),
-                           dim3(1024),
-                           0,
-                           0,
-                           localNumberOfRows,
-                           xexact->d_values);
+        kernel_set_one<1024><<<(localNumberOfRows - 1) / 1024 + 1, 1024>>>(
+            localNumberOfRows,
+            xexact->d_values);
     }
 
     local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
 
     // Compute number of local non-zero entries using two step reduction
-    hipLaunchKernelGGL((kernel_local_nnz_part1<256>),
-                       dim3(256),
-                       dim3(256),
-                       0,
-                       0,
-                       localNumberOfRows,
-                       A.d_nonzerosInRow,
-                       tmp);
-
-    hipLaunchKernelGGL((kernel_local_nnz_part2<256>),
-                       dim3(1),
-                       dim3(256),
-                       0,
-                       0,
-                       256,
-                       tmp);
+    kernel_local_nnz_part1<256><<<256, 256>>>(localNumberOfRows, A.d_nonzerosInRow, tmp);
+    kernel_local_nnz_part2<256><<<1, 256>>>(tmp);
 
     // Copy number of local non-zero entries to host
     local_int_t localNumberOfNonzeros;

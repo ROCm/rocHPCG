@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -71,7 +71,7 @@ __global__ void kernel_scale_vector_values(local_int_t m,
                                            double* __restrict__ exaggeratedDiagA,
                                            double* __restrict__ b)
 {
-    local_int_t i = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+    local_int_t i = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(i >= m)
     {
@@ -124,15 +124,11 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
 
   // Modify the matrix diagonal to greatly exaggerate diagonal values.
   // CG should converge in about 10 iterations for this problem, regardless of problem size
-  hipLaunchKernelGGL((kernel_scale_vector_values<1024>),
-                     dim3((A.localNumberOfRows - 1) / 1024 + 1),
-                     dim3(1024),
-                     0,
-                     0,
-                     A.localNumberOfRows,
-                     A.d_localToGlobalMap,
-                     exaggeratedDiagA.d_values,
-                     b.d_values);
+  kernel_scale_vector_values<1024><<<(A.localNumberOfRows - 1) / 1024 + 1, 1024>>>(
+      A.localNumberOfRows,
+      A.d_localToGlobalMap,
+      exaggeratedDiagA.d_values,
+      b.d_values);
 
   HIPReplaceMatrixDiagonal(A, exaggeratedDiagA);
 

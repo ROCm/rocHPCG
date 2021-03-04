@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -77,9 +77,9 @@ __global__ void kernel_residual_part1(local_int_t n,
                                       const double* __restrict__ v2,
                                       double* __restrict__ workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-    local_int_t gid = hipBlockIdx_x * BLOCKSIZE + tid;
-    local_int_t inc = hipGridDim_x * BLOCKSIZE;
+    local_int_t tid = threadIdx.x;
+    local_int_t gid = blockIdx.x * BLOCKSIZE + tid;
+    local_int_t inc = gridDim.x * BLOCKSIZE;
 
     __shared__ double sdata[BLOCKSIZE];
     sdata[tid] = 0.0;
@@ -93,29 +93,22 @@ __global__ void kernel_residual_part1(local_int_t n,
 
     if(tid == 0)
     {
-        workspace[hipBlockIdx_x] = sdata[0];
+        workspace[blockIdx.x] = sdata[0];
     }
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_residual_part2(local_int_t n, double* __restrict__ workspace)
+__global__ void kernel_residual_part2(double* workspace)
 {
-    local_int_t tid = hipThreadIdx_x;
-
     __shared__ double sdata[BLOCKSIZE];
-    sdata[tid] = 0.0;
-
-    for(local_int_t idx = tid; idx < n; idx += BLOCKSIZE)
-    {
-        sdata[tid] = max(sdata[tid], workspace[idx]);
-    }
+    sdata[threadIdx.x] = workspace[threadIdx.x];
 
     __syncthreads();
 
-    reduce_max<BLOCKSIZE>(tid, sdata);
+    reduce_max<BLOCKSIZE>(threadIdx.x, sdata);
 
-    if(tid == 0)
+    if(threadIdx.x == 0)
     {
         workspace[0] = sdata[0];
     }
@@ -125,25 +118,8 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
 {
     double* tmp = reinterpret_cast<double*>(workspace);
 
-#define RES_DIM 256
-    hipLaunchKernelGGL((kernel_residual_part1<RES_DIM>),
-                       dim3(RES_DIM),
-                       dim3(RES_DIM),
-                       0,
-                       0,
-                       n,
-                       v1.d_values,
-                       v2.d_values,
-                       tmp);
-
-    hipLaunchKernelGGL((kernel_residual_part2<RES_DIM>),
-                       dim3(1),
-                       dim3(RES_DIM),
-                       0,
-                       0,
-                       RES_DIM,
-                       tmp);
-#undef RES_DIM
+    kernel_residual_part1<256><<<256, 256>>>(n, v1.d_values, v2.d_values, tmp);
+    kernel_residual_part2<256><<<1, 256>>>(tmp);
 
     double local_residual;
     HIP_CHECK(hipMemcpy(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost));

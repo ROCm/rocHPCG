@@ -6,7 +6,7 @@ rocHPCG is a benchmark based on the [HPCG][] benchmark application, implemented 
 * CMake (3.5 or later)
 * MPI
 * NUMA library
-* AMD [ROCm] platform (3.5 or later)
+* AMD [ROCm] platform (4.0 or later)
 * [rocPRIM][]
 * googletest (for test application only)
 
@@ -27,6 +27,7 @@ cd rocHPCG
 #    -i|--install      - install after build
 #    -d|--dependencies - install dependencies
 #    -r|--reference    - reference mode
+#    -l|--relocatable  - support relocatable ROCm
 #    -g|--debug        - -DCMAKE_BUILD_TYPE=Debug (default: Release)
 #    -t|--test         - build HPCG test application for single GPU
 #    --with-mpi        - compile with MPI support (default: enabled)
@@ -67,18 +68,6 @@ Additionally, you can specify the device to be used for the application (e.g. de
 ```
 ./rochpcg 280 280 280 1860 --dev=1
 ```
-
-## Testing rocHPCG
-For consistency tests, rocHPCG includes an extra testing application. This test application will run selected problem sizes and check for successful convergence as well as maximum number of iterations required for convergence. The purpose of those tests is to verify, that all changes made to the source will not affect convergence rate.
-The rocHPCG test application can be built and executed by the following commands:
-```
-# Run rocHPCG installer to build test application
-./install -dt
-
-# Run test application, where --device 0 specifies to use device 0 for testing
-./build/release/tests/rochpcg-test --device 0
-```
-Please note that for successful testing, a device with at least 16GB of device memory is required.
 
 ## Support
 Please use [the issue tracker][] for bugs and feature requests.

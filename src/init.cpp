@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -61,7 +61,7 @@ const char* NULLDEVICE="/dev/null";
 
 #include <fstream>
 #include <iostream>
-#include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
 
 #include "utils.hpp"
 #include "hpcg.hpp"
@@ -202,9 +202,6 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 
   // Set device
   HIP_CHECK(hipSetDevice(params.device));
-
-  // Warm up
-  hipLaunchKernelGGL((kernel_warmup), dim3(1), dim3(1), 0, 0);
 
   // Create streams
   HIP_CHECK(hipStreamCreate(&stream_interior));

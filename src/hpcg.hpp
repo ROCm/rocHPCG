@@ -69,6 +69,8 @@ struct HPCG_Params_STRUCT {
   local_int_t zl; //!< nz for processors in the z dimension with value less than pz
   local_int_t zu; //!< nz for processors in the z dimension with value greater than pz
   int device; //!< HIP device
+  bool verify; //!< Do reference verification
+  double tol; //!< Exit tolerance if verification is skipped
 };
 /*!
   HPCG_Params is a shorthand for HPCG_Params_STRUCT

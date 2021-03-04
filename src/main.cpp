@@ -200,35 +200,57 @@ int main(int argc, char * argv[]) {
 
   if(rank == 0) printf("\nSetup Phase took %0.2lf sec\n", times[9]);
 
-  // Copy assembled GPU data to host for reference computations
-  if(rank == 0) printf("\nCopying GPU assembled data to host for reference computations\n");
-
-  CopyProblemToHost(A, &b, &x, &xexact);
-  CopyHaloToHost(A);
-
-  curLevelMatrix = &A;
-  for(int level = 1; level < numberOfMgLevels; ++level)
+  if(params.verify)
   {
-    CopyCoarseProblemToHost(*curLevelMatrix);
-    curLevelMatrix = curLevelMatrix->Ac;
+    // Copy assembled GPU data to host for reference computations
+    if(rank == 0) printf("\nCopying GPU assembled data to host for reference computations\n");
+
+    CopyProblemToHost(A, &b, &x, &xexact);
+    CopyHaloToHost(A);
+
+    curLevelMatrix = &A;
+    for(int level = 1; level < numberOfMgLevels; ++level)
+    {
+      CopyCoarseProblemToHost(*curLevelMatrix);
+      curLevelMatrix = curLevelMatrix->Ac;
+    }
+
+    if(rank == 0) printf("\nChecking assembled data ...\n");
+
+    curLevelMatrix = &A;
+    Vector * curb = &b;
+    Vector * curx = &x;
+    Vector * curxexact = &xexact;
+    for (int level = 0; level< numberOfMgLevels; ++level) {
+       CheckProblem(*curLevelMatrix, curb, curx, curxexact);
+       curLevelMatrix = curLevelMatrix->Ac; // Make the nextcoarse grid the next level
+       curb = 0; // No vectors after the top level
+       curx = 0;
+       curxexact = 0;
+    }
   }
+    else
+    {
+    HIP_CHECK(deviceFree(A.d_nonzerosInRow));
+    HIP_CHECK(deviceFree(A.d_matrixDiagonal));
 
-  if(rank == 0) printf("\nChecking assembled data ...\n");
-
-  curLevelMatrix = &A;
-  Vector * curb = &b;
-  Vector * curx = &x;
-  Vector * curxexact = &xexact;
-  for (int level = 0; level< numberOfMgLevels; ++level) {
-     CheckProblem(*curLevelMatrix, curb, curx, curxexact);
-     curLevelMatrix = curLevelMatrix->Ac; // Make the nextcoarse grid the next level
-     curb = 0; // No vectors after the top level
-     curx = 0;
-     curxexact = 0;
+    curLevelMatrix = &A;
+    for(int level = 1; level < numberOfMgLevels; ++level)
+    {
+      if(curLevelMatrix->mgData != NULL)
+      {
+        deviceFree(curLevelMatrix->Ac->d_nonzerosInRow);
+        deviceFree(curLevelMatrix->Ac->d_matrixDiagonal);
+        curLevelMatrix = curLevelMatrix->Ac;
+      }
+    }
   }
 
   CGData data;
-  InitializeSparseCGData(A, data);
+  if(params.verify)
+  {
+    InitializeSparseCGData(A, data);
+  }
 
 
 
@@ -242,22 +264,28 @@ int main(int argc, char * argv[]) {
   local_int_t ncol = A.localNumberOfColumns;
 
   Vector x_overlap, b_computed;
-  InitializeVector(x_overlap, ncol); // Overlapped copy of x vector
-  InitializeVector(b_computed, nrow); // Computed RHS vector
+  if(params.verify)
+  {
+    InitializeVector(x_overlap, ncol); // Overlapped copy of x vector
+    InitializeVector(b_computed, nrow); // Computed RHS vector
 
 
-  // Record execution time of reference SpMV and MG kernels for reporting times
-  // First load vector with random values
-  FillRandomVector(x_overlap);
+    // Record execution time of reference SpMV and MG kernels for reporting times
+    // First load vector with random values
+    FillRandomVector(x_overlap);
+  }
 
   int numberOfCalls = 10;
   if (quickPath) numberOfCalls = 1; //QuickPath means we do on one call of each block of repetitive code
   double t_begin = mytimer();
-  for (int i=0; i< numberOfCalls; ++i) {
-    ierr = ComputeSPMV_ref(A, x_overlap, b_computed); // b_computed = A*x_overlap
-    if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
-    ierr = ComputeMG_ref(A, b_computed, x_overlap); // b_computed = Minv*y_overlap
-    if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
+  if(params.verify)
+  {
+    for (int i=0; i< numberOfCalls; ++i) {
+      ierr = ComputeSPMV_ref(A, x_overlap, b_computed); // b_computed = A*x_overlap
+      if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
+      ierr = ComputeMG_ref(A, b_computed, x_overlap); // b_computed = Minv*y_overlap
+      if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
+    }
   }
   times[8] = (mytimer() - t_begin)/((double) numberOfCalls);  // Total time divided by number of calls.
 #ifdef HPCG_DEBUG
@@ -286,14 +314,22 @@ int main(int argc, char * argv[]) {
   std::vector< double > ref_times(9,0.0);
   double tolerance = 0.0; // Set tolerance to zero to make all runs do maxIters iterations
   int err_count = 0;
-  for (int i=0; i< numberOfCalls; ++i) {
-    ZeroVector(x);
-    ierr = CG_ref( A, data, b, x, refMaxIters, tolerance, niters, normr, normr0, &ref_times[0], true, true);
-    if (ierr) ++err_count; // count the number of errors in CG
-    totalNiters_ref += niters;
+  double refTolerance;
+  if(params.verify)
+  {
+    for (int i=0; i< numberOfCalls; ++i) {
+      ZeroVector(x);
+      ierr = CG_ref( A, data, b, x, refMaxIters, tolerance, niters, normr, normr0, &ref_times[0], true, true);
+      if (ierr) ++err_count; // count the number of errors in CG
+      totalNiters_ref += niters;
+    }
+    if (rank == 0 && err_count) HPCG_fout << err_count << " error(s) in call(s) to reference CG." << endl;
+    refTolerance = normr / normr0;
   }
-  if (rank == 0 && err_count) HPCG_fout << err_count << " error(s) in call(s) to reference CG." << endl;
-  double refTolerance = normr / normr0;
+  else
+  {
+    refTolerance = params.tol;
+  }
 
   // Call user-tunable set up function.
   double t7 = mytimer();
@@ -321,10 +357,16 @@ int main(int argc, char * argv[]) {
 #endif
   TestCGData testcg_data;
   testcg_data.count_pass = testcg_data.count_fail = 0;
-  TestCG(A, data, b, x, testcg_data);
+  if(params.verify)
+  {
+    TestCG(A, data, b, x, testcg_data);
+  }
 
   TestSymmetryData testsymmetry_data;
-  TestSymmetry(A, b, xexact, testsymmetry_data);
+  if(params.verify)
+  {
+    TestSymmetry(A, b, xexact, testsymmetry_data);
+  }
 
 #ifdef HPCG_DEBUG
   if (rank==0) HPCG_fout << "Total validation (TestCG and TestSymmetry) execution time in main (sec) = " << mytimer() - t1 << endl;
@@ -479,18 +521,25 @@ int main(int argc, char * argv[]) {
   ReportResults(A, numberOfMgLevels, numberOfCgSets, refMaxIters, optMaxIters, &times[0], testcg_data, testsymmetry_data, testnorms_data, global_failure, quickPath);
 
   // Clean up
-  DeleteMatrix(A); // This delete will recursively delete all coarse grid data
-  DeleteCGData(data);
-  HIPDeleteCGData(data);
-  DeleteVector(x);
-  DeleteVector(b);
-  DeleteVector(xexact);
-  HIPDeleteVector(x);
-  HIPDeleteVector(b);
-  HIPDeleteVector(xexact);
-  DeleteVector(x_overlap);
-  DeleteVector(b_computed);
-  delete [] testnorms_data.values;
+  if(params.verify)
+  {
+    DeleteMatrix(A); // This delete will recursively delete all coarse grid data
+    DeleteCGData(data);
+    HIPDeleteCGData(data);
+    DeleteVector(x);
+    DeleteVector(b);
+    DeleteVector(xexact);
+    HIPDeleteVector(x);
+    HIPDeleteVector(b);
+    HIPDeleteVector(xexact);
+    DeleteVector(x_overlap);
+    DeleteVector(b_computed);
+    delete [] testnorms_data.values;
+  }
+  else
+  {
+    printf("\n*** WARNING *** THIS IS NOT A VALID RUN ***\n");
+  }
 
   HPCG_Finalize();
 

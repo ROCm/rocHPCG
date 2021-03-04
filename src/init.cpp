@@ -109,6 +109,8 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   char ** argv = *argv_p;
   char fname[80];
   int i, j, *iparams;
+  bool verify = true;
+  double fparam = 0.0;
   char cparams[][8] = {"--nx=", "--ny=", "--nz=", "--rt=", "--pz=", "--zl=", "--zu=", "--npx=", "--npy=", "--npz=", "--dev="};
   time_t rawtime;
   tm * ptm;
@@ -126,10 +128,15 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 
   /* for some MPI environments, command line arguments may get complicated so we need a prefix */
   for (i = 1; i <= argc && argv[i]; ++i)
+  {
     for (j = 0; j < nparams; ++j)
       if (startswith(argv[i], cparams[j]))
         if (sscanf(argv[i]+strlen(cparams[j]), "%d", iparams+j) != 1)
           iparams[j] = 0;
+    if(startswith(argv[i], "--tol="))
+      if(sscanf(argv[i]+strlen("--tol="), "%lf", &fparam))
+        verify = false;
+  }
 
   // Check if --rt was specified on the command line
   int * rt  = iparams+3;  // Assume runtime was not specified and will be read from the hpcg.dat file
@@ -171,6 +178,8 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   params.npz = iparams[9];
 
   params.device = iparams[10];
+  params.verify = verify;
+  params.tol    = fparam;
 
 #ifndef HPCG_NO_MPI
   MPI_Comm_rank( MPI_COMM_WORLD, &params.comm_rank );

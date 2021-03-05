@@ -310,8 +310,8 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
     // localToGlobalMap
     size += ((sizeof(global_int_t) * m - 1) / align + 1) * align;
 
-    // matrixDiagonal, rowHash
-    size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 2;
+    // matrixDiagonal, rowHash, c2fOperator
+    size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 3;
 
 #ifndef HPCG_NO_MPI
     // Determine two largest dimensions
@@ -366,8 +366,8 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
         // localToGlobalMap
         size += ((sizeof(global_int_t) * m - 1) / align + 1) * align;
 
-        // matrixDiagonal, rowHash, f2cOperator
-        size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 3;
+        // matrixDiagonal, rowHash, f2cOperator, c2fOperator
+        size += ((sizeof(local_int_t) * m - 1) / align + 1) * align * 4;
 
         // rc, xc
         size += ((sizeof(double) * m - 1) / align + 1) * align * 2;

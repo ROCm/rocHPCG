@@ -17,7 +17,7 @@ function display_help()
   echo "    [-g|--debug] -DCMAKE_BUILD_TYPE=Debug (default: Release)"
   echo "    [-t|--test] build single GPU test"
   echo "    [--with-rocm=<dir>] Path to ROCm install (default: /opt/rocm)"
-  echo "    [--with-mpi=<dir>] Path to external MPI install (Default: clone+build OpenMPI v4.0.5 in deps/)"
+  echo "    [--with-mpi=<dir>] Path to external MPI install (Default: clone+build OpenMPI v4.1.0 in deps/)"
   echo "    [--with-openmp] compile with OpenMP support (default: enabled)"
   echo "    [--with-memmgmt] compile with smart memory management (default: enabled)"
   echo "    [--with-memdefrag] compile with memory defragmentation (defaut: enabled)"

@@ -30,7 +30,7 @@ cd rocHPCG
 #    -g|--debug        - -DCMAKE_BUILD_TYPE=Debug (default: Release)
 #    -t|--test         - build single GPU test
 #    --with-rocm=<dir> - Path to ROCm install (default: /opt/rocm)
-#    --with-mpi=<dir>  - Path to external MPI install (Default: clone+build OpenMPI v4.0.5 in deps/)
+#    --with-mpi=<dir>  - Path to external MPI install (Default: clone+build OpenMPI v4.1.0 in deps/)
 #    --with-openmp     - compile with OpenMP support (default: enabled)
 #    --with-memmgmt    - compile with smart memory management (default: enabled)
 #    --with-memdefrag  - compile with memory defragmentation (defaut: enabled)
@@ -44,7 +44,7 @@ You can build rocHPCG using your own MPI installation by specifying the director
 ```
 ./install.sh -di --with-mpi=/my/mpiroot/
 ```
-Alternatively, when you do not pass a specific directory, OpenMPI v4.0.5 with UCX will be cloned and built within `rocHPCG/deps` directory.
+Alternatively, when you do not pass a specific directory, OpenMPI v4.1.0 with UCX will be cloned and built within `rocHPCG/deps` directory.
 If you want to disable MPI, you need to run
 ```
 ./install.sh -di --with-mpi=off

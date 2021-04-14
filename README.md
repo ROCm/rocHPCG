@@ -36,6 +36,8 @@ cd rocHPCG
 #    --with-memdefrag  - compile with memory defragmentation (defaut: enabled)
 ./install.sh -di
 ```
+By default, [UCX] v1.10.0 and [OpenMPI] v4.1.0 will be cloned and build in `rocHPCG/deps`.
+After build and install, the `rochpcg` executable is placed in `build/release/rochpcg-install`.
 
 #### MPI
 You can build rocHPCG using your own MPI installation by specifying the directory, e.g.
@@ -96,5 +98,7 @@ The [license file][] can be found in the main repository.
 [ROCm]: https://github.com/RadeonOpenCompute/ROCm
 [HIP]: https://github.com/GPUOpen-ProfessionalCompute-Tools/HIP/
 [rocPRIM]: https://github.com/ROCmSoftwarePlatform/rocPRIM
+[OpenMPI]: https://github.com/open-mpi/ompi
+[UCX]: https://github.com/openucx/ucx
 [the issue tracker]: https://github.com/ROCmSoftwarePlatform/rocHPCG/issues
 [license file]: https://github.com/ROCmSoftwarePlatform/rocHPCG

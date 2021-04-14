@@ -89,13 +89,15 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-Wno-unused-command-line-argument -Wno-duplicate-decl-specifier")
+list(APPEND HIP_HIPCC_FLAGS "-O3 -march=native -Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -ffp-contract=fast -ffast-math -funsafe-math-optimizations")
+list(APPEND CMAKE_HOST_FLAGS "-O3;-march=native")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 list(APPEND HIP_HIPCC_FLAGS "-g")
+list(APPEND CMAKE_HOST_FLAGS "-g")
 endif()
 
-
+# AMD targets
 foreach(target ${AMDGPU_TARGETS})
   list(APPEND HIP_HIPCC_FLAGS "--amdgpu-target=${target}")
 endforeach()
@@ -107,8 +109,7 @@ else()
   hip_add_executable(rochpcg ${rochpcg_source} main.cpp ${rochpcg_hip_source})
 endif()
 
-# Target compile definitions
-list(APPEND CMAKE_CXX_FLAGS "-D__HIP_PLATFORM_HCC__")
+target_compile_options(rochpcg PRIVATE ${CMAKE_HOST_FLAGS})
 
 # Support only for contiguous arrays
 target_compile_definitions(rochpcg PRIVATE HPCG_CONTIGUOUS_ARRAYS)
@@ -147,6 +148,9 @@ target_include_directories(rochpcg
                                $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
                                $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>)
 
+# HIP
+target_link_libraries(rochpcg PRIVATE hip::host)
+
 # MPI
 if(HPCG_MPI)
   target_link_libraries(rochpcg PRIVATE MPI::MPI_CXX libnuma::libnuma)
@@ -181,15 +185,14 @@ set_target_properties(rochpcg PROPERTIES DEBUG_POSTFIX "-d")
 
 # Install targets
 rocm_install_targets(TARGETS rochpcg
-                     PREFIX rochpcg
-)
+                     PREFIX rochpcg)
 
 # Symbolic links
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 3.5.0)")
-set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 3.5.0")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 4.1.0)")
+set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 4.1.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
 
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)
@@ -204,5 +207,4 @@ set(package_name rochpcg)
 rocm_create_package(
   NAME ${package_name}
   DESCRIPTION "Radeon Open Compute HPCG application"
-  MAINTAINER "rocHPCG Maintainer <rochpcg-maintainer@amd.com>"
-)
+  MAINTAINER "rocHPCG Maintainer <rochpcg-maintainer@amd.com>")

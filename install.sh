@@ -14,10 +14,10 @@ function display_help()
   echo "    [-i|--install] install after build"
   echo "    [-d|--dependencies] install dependencies"
   echo "    [-r|--reference] reference mode"
-  echo "    [-l|--relocatable] support relocatable ROCm"
   echo "    [-g|--debug] -DCMAKE_BUILD_TYPE=Debug (default: Release)"
-  echo "    [-t]--test] build single GPU test"
-  echo "    [--with-mpi] compile with MPI support (default: enabled)"
+  echo "    [-t|--test] build single GPU test"
+  echo "    [--with-rocm=<dir>] Path to ROCm install (default: /opt/rocm)"
+  echo "    [--with-mpi=<dir>] Path to external MPI install (Default: clone+build OpenMPI v4.1.0 in deps/)"
   echo "    [--with-openmp] compile with OpenMP support (default: enabled)"
   echo "    [--with-memmgmt] compile with smart memory management (default: enabled)"
   echo "    [--with-memdefrag] compile with memory defragmentation (defaut: enabled)"
@@ -123,10 +123,17 @@ install_packages( )
   fi
 
   # dependencies needed for executable to build
-  local library_dependencies_ubuntu=( "make" "rocm-dev" "pkg-config" "libnuma1" "rocprim" "cmake" "libnuma-dev" )
-  local library_dependencies_centos=( "epel-release" "make" "cmake3" "rocm-dev" "gcc-c++" "rpm-build" "numactl-libs" "rocprim" )
-  local library_dependencies_fedora=( "make" "cmake" "rocm-dev" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "rocprim" )
-  local library_dependencies_sles=( "make" "cmake" "rocm-dev" "gcc-c++" "libcxxtools9" "rpm-build" "libnuma-devel" "rocprim" )
+  local library_dependencies_ubuntu=( "make" "pkg-config" "libnuma1" "cmake" "libnuma-dev" "autoconf" "libtool" "automake" "m4" "flex" )
+  local library_dependencies_centos=( "epel-release" "make" "cmake3" "gcc-c++" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
+  local library_dependencies_fedora=( "make" "cmake" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
+  local library_dependencies_sles=( "make" "cmake" "gcc-c++" "libcxxtools9" "rpm-build" "libnuma-devel" "autoconf" "libtool" "automake" "m4" "flex" )
+
+  if [[ "${with_rocm}" == /opt/rocm ]]; then
+    library_dependencies_ubuntu+=("rocm-dev" "rocprim")
+    library_dependencies_centos+=("rocm-dev" "rocprim")
+    library_dependencies_fedora+=("rocm-dev" "rocprim")
+    library_dependencies_sles+=("rocm-dev" "rocprim")
+  fi
 
   case "${ID}" in
     ubuntu)
@@ -159,6 +166,27 @@ install_packages( )
       exit 2
       ;;
   esac
+}
+
+# Clone and build OpenMPI+UCX in rochpcg/openmpi
+install_openmpi( )
+{
+  if [ ! -d "./deps/ucx" ]; then
+    mkdir -p deps && cd deps
+    git clone --branch v1.10.0 https://github.com/openucx/ucx.git ucx
+    cd ucx; ./autogen.sh; ./autogen.sh #why do we have to run this twice?
+    mkdir build; cd build
+    ../contrib/configure-opt --prefix=${PWD}/../ --with-rocm=${with_rocm} --without-knem --without-cuda --without-java
+    make -j$(nproc); make install; cd ../../..
+  fi
+
+  if [ ! -d "./deps/openmpi" ]; then
+    mkdir -p deps && cd deps
+    git clone --branch v4.1.0 https://github.com/open-mpi/ompi.git openmpi
+    cd openmpi; ./autogen.pl; mkdir build; cd build
+    ../configure --prefix=${PWD}/../ --with-ucx=${PWD}/../../ucx --without-verbs
+    make -j$(nproc); make install; cd ../../..
+  fi
 }
 
 # #################################################
@@ -195,12 +223,11 @@ install_prefix=rochpcg-install
 build_release=true
 build_reference=false
 build_test=false
-with_mpi=ON
+with_rocm=/opt/rocm
+with_mpi=deps/openmpi
 with_omp=ON
 with_memmgmt=ON
 with_memdefrag=ON
-rocm_path=/opt/rocm
-build_relocatable=false
 
 # #################################################
 # Parameter parsing
@@ -209,7 +236,7 @@ build_relocatable=false
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,relocatable,debug,test,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrlgt -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-rocm:,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -237,15 +264,15 @@ while true; do
     -r|--reference)
         build_reference=true
         shift ;;
-    -l|--relocatable)
-        build_relocatable=true
-        shift ;;
     -g|--debug)
         build_release=false
         shift ;;
     -t|--test)
         build_test=true
         shift ;;
+    --with-rocm)
+        with_rocm=${2}
+        shift 2 ;;
     --with-mpi)
         with_mpi=${2}
         shift 2 ;;
@@ -287,9 +314,6 @@ case "${ID}" in
   ;;
 esac
 
-# If user provides custom ${rocm_path} path
-export PATH=${rocm_path}/bin:${rocm_path}/hip/bin:${rocm_path}/llvm/bin:${PATH}
-
 # #################################################
 # dependencies
 # #################################################
@@ -297,30 +321,33 @@ if [[ "${install_dependencies}" == true ]]; then
   install_packages
 fi
 
-if [[ "${build_relocatable}" == true ]]; then
-    if ! [ -z ${ROCM_PATH+x} ]; then
-        rocm_path=${ROCM_PATH}
-    fi
-
-    rocm_rpath=" -Wl,--enable-new-dtags -Wl,--rpath,/opt/rocm/lib:/opt/rocm/lib64"
-    if ! [ -z ${ROCM_RPATH+x} ]; then
-        rocm_rpath=" -Wl,--enable-new-dtags -Wl,--rpath,${ROCM_RPATH}"
-    fi
-fi
-
 # We append customary rocm path; if user provides custom rocm path in ${path}, our
 # hard-coded path has lesser priority
-if [[ "${build_relocatable}" == true ]]; then
-    export PATH=${rocm_path}/bin:${PATH}
-else
-    export PATH=${PATH}:/opt/rocm/bin
-fi
+export ROCM_PATH=${with_rocm}
+export PATH=${PATH}:${ROCM_PATH}/bin
 
 pushd .
+
+  # #################################################
+  # MPI
+  # #################################################
+  if [[ "${with_mpi}" == deps/openmpi ]]; then
+    install_openmpi
+  fi
+
   # #################################################
   # configure & build
   # #################################################
-  cmake_common_options="-DHPCG_MPI=${with_mpi} -DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
+  cmake_common_options="-DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
+
+  shopt -s nocasematch
+  # mpi
+  if [[ "${with_mpi}" == off || "${with_mpi}" == false || "${with_mpi}" == 0 || "${with_mpi}" == disabled ]]; then
+    cmake_common_options="${cmake_common_options} -DHPCG_MPI=OFF"
+  else
+    cmake_common_options="${cmake_common_options} -DHPCG_MPI_DIR=${with_mpi}"
+  fi
+  shopt -u nocasematch
 
   # build type
   if [[ "${build_release}" == true ]]; then
@@ -342,23 +369,11 @@ pushd .
   fi
 
   # Build library with AMD toolchain because of existense of device kernels
-  if [[ "${build_relocatable}" == true ]]; then
-    ${cmake_executable} ${cmake_common_options} \
-      -DCPACK_SET_DESTDIR=OFF \
-      -DCMAKE_INSTALL_PREFIX=${install_prefix} \
-      -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path} \
-      -DCMAKE_SHARED_LINKER_FLAGS="${rocm_rpath}" \
-      -DCMAKE_PREFIX_PATH="${rocm_path} ${rocm_path}/hcc ${rocm_path}/hip" \
-      -DCMAKE_MODULE_PATH="${rocm_path}/hip/cmake" \
-      -DROCM_DISABLE_LDCONFIG=ON \
-      -DROCM_PATH="${rocm_path}" ../..
-  else
-    ${cmake_executable} ${cmake_common_options} \
-      -DCPACK_SET_DESTDIR=OFF \
-      -DCMAKE_INSTALL_PREFIX=${install_prefix} \
-      -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path} \
-      -DROCM_PATH="${rocm_path}" ../..
-  fi
+  ${cmake_executable} ${cmake_common_options} \
+    -DCPACK_SET_DESTDIR=OFF \
+    -DCMAKE_INSTALL_PREFIX=${install_prefix} \
+    -DCPACK_PACKAGING_INSTALL_PREFIX=${with_rocm} \
+    -DROCM_PATH="${with_rocm}" ../..
   check_exit_code
 
   if [[ "${build_test}" == false ]]; then

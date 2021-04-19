@@ -51,16 +51,10 @@ else()
   option(HPCG_MPI "Compile WITH MPI support." ON)
 endif()
 
-# Find HIP package
-find_package(HIP REQUIRED)
-
 # gtest
 if(BUILD_TEST)
   find_package(GTest REQUIRED)
 endif()
-
-# rocprim
-find_package(rocprim REQUIRED)
 
 # libnuma if MPI is enabled
 if(HPCG_MPI)

@@ -394,7 +394,7 @@ pushd .
 
       case "${ID}" in
         ubuntu)
-          elevate_if_not_root dpkg -i rochpcg-*.deb
+          elevate_if_not_root dpkg -i rochpcg[-\_]*.deb
         ;;
         centos|rhel)
           elevate_if_not_root yum -y localinstall rochpcg-*.rpm

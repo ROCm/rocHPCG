@@ -93,6 +93,7 @@ else()
   endif()
 endif()
 set(AMDGPU_TARGETS "${DEFAULT_AMDGPU_TARGETS}" CACHE STRING "List of specific machine types for library to target")
+message("AMDGPU_TARGETS: ${AMDGPU_TARGETS}")
 
 # Find HIP package
 find_package(HIP REQUIRED)

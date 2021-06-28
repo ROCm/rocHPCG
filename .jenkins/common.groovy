@@ -22,16 +22,15 @@ def runCompileCommand(platform, project, jobName)
 
 def runTestCommand (platform, project)
 {
-    String sudo = auxiliary.sudo(platform.jenkinsLabel)
     def command = """
                     #!/usr/bin/env bash
                     set -x
-                    cd ${project.paths.project_build_prefix}/build/release/tests
-                    ${sudo} ./rochpcg-test --gtest_output=xml --gtest_color=yes
+                    cd ${project.paths.project_build_prefix}
+                    rtest.py -t psdb -i ${project.paths.project_build_prefix}/build/release/tests
                   """
 
     platform.runCommand(this, command)
-    junit "${project.paths.project_build_prefix}/build/release/tests/*.xml"
+    junit "${project.paths.project_build_prefix}/output.xml"
 }
 
 return this

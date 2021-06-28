@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE testset SYSTEM "/usr/local/share/rtest.dtd">
+<testset>
+    <fileversion>0.1</fileversion>
+    <test sets="psdb,osdb">
+        <always>
+            <run name="quick-pre-checkin">rochpcg-test --gtest_output=xml:output.xml --gtest_color=yes</run>
+        </always>
+    </test>
+</testset>

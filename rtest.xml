@@ -2,9 +2,12 @@
 <!DOCTYPE testset SYSTEM "/usr/local/share/rtest.dtd">
 <testset>
     <fileversion>0.1</fileversion>
+    <var name="COMMAND">rochpcg-test --gtest_output=xml:output.xml --gtest_color=yes</var>
+    <var name="GTEST_FILTER">*</var>
     <test sets="psdb,osdb">
-        <always>
-            <run name="quick-pre-checkin">rochpcg-test --gtest_output=xml:output.xml --gtest_color=yes</run>
-        </always>
+        <run name="all">{COMMAND}</run>
+    </test>
+    <test sets="custom">
+        <run name="custom_filter">{COMMAND} --gtest_filter={GTEST_FILTER}</run>
     </test>
 </testset>

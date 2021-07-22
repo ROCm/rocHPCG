@@ -178,7 +178,7 @@ void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
 #endif
 }
 
-void ExchangeHaloAsync(const SparseMatrix& A)
+void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
 {
     int num_neighbors = A.numberOfSendNeighbors;
     int MPI_MY_TAG = 99;

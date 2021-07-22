@@ -49,7 +49,7 @@
 void ExchangeHalo(const SparseMatrix & A, Vector & x);
 
 void PrepareSendBuffer(const SparseMatrix& A, const Vector& x);
-void ExchangeHaloAsync(const SparseMatrix& A);
+void ExchangeHaloAsync(const SparseMatrix& A, Vector& x);
 void ObtainRecvBuffer(const SparseMatrix& A, Vector& x);
 
 #endif // EXCHANGEHALO_HPP

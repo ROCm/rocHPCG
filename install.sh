@@ -18,6 +18,7 @@ function display_help()
   echo "    [-t|--test] build single GPU test"
   echo "    [--with-rocm=<dir>] Path to ROCm install (default: /opt/rocm)"
   echo "    [--with-mpi=<dir>] Path to external MPI install (Default: clone+build OpenMPI v4.1.0 in deps/)"
+  echo "    [--gpu-aware-mpi] MPI library supports GPU-aware communication (Default: false)"
   echo "    [--with-openmp] compile with OpenMP support (default: enabled)"
   echo "    [--with-memmgmt] compile with smart memory management (default: enabled)"
   echo "    [--with-memdefrag] compile with memory defragmentation (defaut: enabled)"
@@ -225,6 +226,7 @@ build_reference=false
 build_test=false
 with_rocm=/opt/rocm
 with_mpi=deps/openmpi
+gpu_aware_mpi=OFF
 with_omp=ON
 with_memmgmt=ON
 with_memdefrag=ON
@@ -236,7 +238,7 @@ with_memdefrag=ON
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-rocm:,with-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-rocm:,with-mpi:,gpu-aware-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -275,6 +277,9 @@ while true; do
         shift 2 ;;
     --with-mpi)
         with_mpi=${2}
+        shift 2 ;;
+    --gpu-aware-mpi)
+        gpu_aware_mpi=${2}
         shift 2 ;;
     --with-openmp)
         with_omp=${2}
@@ -341,6 +346,10 @@ pushd .
   cmake_common_options="-DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
 
   shopt -s nocasematch
+  # gpu aware mpi
+  if [[ "${gpu_aware_mpi}" == on || "${gpu_aware_mpi}" == true || "${gpu_aware_mpi}" == 1 || "${gpu_aware_mpi}" == enabled ]]; then
+    cmake_common_options="${cmake_common_options} -DGPU_AWARE_MPI=ON"
+  fi
   # mpi
   if [[ "${with_mpi}" == off || "${with_mpi}" == false || "${with_mpi}" == 0 || "${with_mpi}" == disabled ]]; then
     cmake_common_options="${cmake_common_options} -DHPCG_MPI=OFF"

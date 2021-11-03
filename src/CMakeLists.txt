@@ -89,7 +89,7 @@ foreach(i ${rochpcg_hip_source})
 endforeach()
 
 # HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-O3 -march=native -Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -ffp-contract=fast -ffast-math -funsafe-math-optimizations")
+list(APPEND HIP_HIPCC_FLAGS "-std=c++14 -O3 -march=native -Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -ffp-contract=fast -ffast-math -funsafe-math-optimizations")
 list(APPEND CMAKE_HOST_FLAGS "-O3;-march=native")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")

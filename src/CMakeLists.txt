@@ -175,7 +175,7 @@ endif()
 
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
-set_property(rochpcg PROPERTY HIP_ARCHITECTURES ${AMDGPU_TARGETS})
+set_property(TARGET rochpcg PROPERTY HIP_ARCHITECTURES ${AMDGPU_TARGETS})
 if(BUILD_TEST)
   set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
   set_target_properties(rochpcg PROPERTIES OUTPUT_NAME "rochpcg-test")

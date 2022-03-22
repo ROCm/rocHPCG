@@ -175,9 +175,13 @@ endif()
 
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
+set_property(TARGET rochpcg PROPERTY HIP_ARCHITECTURES ${AMDGPU_TARGETS})
 if(BUILD_TEST)
   set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
   set_target_properties(rochpcg PROPERTIES OUTPUT_NAME "rochpcg-test")
+  rocm_package_setup_component(clients)
+  rocm_package_setup_client_component(tests)
+  rocm_install(TARGETS rochpcg COMPONENT tests)
 else()
   set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endif()
@@ -191,8 +195,7 @@ rocm_install_targets(TARGETS rochpcg
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "rocm-dev (>= 4.1.0)")
-set(CPACK_RPM_PACKAGE_REQUIRES "rocm-dev >= 4.1.0")
+rocm_package_add_dependencies(DEPENDS "rocm-dev >= 4.1.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
 
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)

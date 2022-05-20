@@ -373,7 +373,7 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
 
         if(A.ell_width == 27) LAUNCH_SYMGS_INTERIOR(1024, 27);
 
-        ExchangeHaloAsync(A);
+        ExchangeHaloAsync(A, x);
         ObtainRecvBuffer(A, x);
 
         if(A.ell_width == 27) LAUNCH_SYMGS_HALO(256, 27);

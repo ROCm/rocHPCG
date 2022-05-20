@@ -168,15 +168,17 @@ void PrepareSendBuffer(const SparseMatrix& A, const Vector& x)
                                             A.perm,
                                             A.d_send_buffer);
 
+#ifndef GPU_AWARE_MPI
     // Copy send buffer to host
     HIP_CHECK(hipMemcpyAsync(A.send_buffer,
                              A.d_send_buffer,
                              sizeof(double) * A.totalToBeSent,
                              hipMemcpyDeviceToHost,
                              stream_halo));
+#endif
 }
 
-void ExchangeHaloAsync(const SparseMatrix& A)
+void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
 {
     int num_neighbors = A.numberOfSendNeighbors;
     int MPI_MY_TAG = 99;
@@ -184,11 +186,18 @@ void ExchangeHaloAsync(const SparseMatrix& A)
     // Post async boundary receives
     local_int_t offset = 0;
 
+    // Receive buffer
+#ifdef GPU_AWARE_MPI
+    double* recv_buffer = x.d_values + A.localNumberOfRows;
+#else
+    double* recv_buffer = A.recv_buffer;
+#endif
+
     for(int n = 0; n < num_neighbors; ++n)
     {
         local_int_t nrecv = A.receiveLength[n];
 
-        MPI_Irecv(A.recv_buffer + offset,
+        MPI_Irecv(recv_buffer + offset,
                   nrecv,
                   MPI_DOUBLE,
                   A.neighbors[n],
@@ -205,11 +214,18 @@ void ExchangeHaloAsync(const SparseMatrix& A)
     // Post async boundary sends
     offset = 0;
 
+    // Send buffer
+#ifdef GPU_AWARE_MPI
+    double* send_buffer = A.d_send_buffer;
+#else
+    double* send_buffer = A.send_buffer;
+#endif
+
     for(int n = 0; n < num_neighbors; ++n)
     {
         local_int_t nsend = A.sendLength[n];
 
-        MPI_Isend(A.send_buffer + offset,
+        MPI_Isend(send_buffer + offset,
                   nsend,
                   MPI_DOUBLE,
                   A.neighbors[n],
@@ -229,12 +245,14 @@ void ObtainRecvBuffer(const SparseMatrix& A, Vector& x)
     EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.recv_request, MPI_STATUSES_IGNORE));
     EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.send_request, MPI_STATUSES_IGNORE));
 
+#ifndef GPU_AWARE_MPI
     // Update boundary values
     HIP_CHECK(hipMemcpyAsync(x.d_values + A.localNumberOfRows,
                              A.recv_buffer,
                              sizeof(double) * A.totalToBeSent,
                              hipMemcpyHostToDevice,
                              stream_halo));
+#endif
 }
 #endif
 // ifndef HPCG_NO_MPI

@@ -240,7 +240,7 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 #ifndef HPCG_NO_MPI
     if(A.geom->size > 1)
     {
-        ExchangeHaloAsync(A);
+        ExchangeHaloAsync(A, x);
         ObtainRecvBuffer(A, x);
 
         if(&y != A.mgData->Axf)

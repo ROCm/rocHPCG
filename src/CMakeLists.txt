@@ -141,6 +141,9 @@ endif()
 if(OPT_DEFRAG)
   target_compile_definitions(rochpcg PRIVATE DEFRAG_OPT)
 endif()
+if(GPU_AWARE_MPI)
+  target_compile_definitions(rochpcg PRIVATE GPU_AWARE_MPI)
+endif()
 
 # Target include directories
 target_include_directories(rochpcg

@@ -67,6 +67,7 @@ option(BUILD_TEST "Build rocHPCG single-node test" OFF)
 # Optimization options
 option(OPT_MEMMGMT "Build with memory management module" ON)
 option(OPT_DEFRAG "Build with memory management defragmentation" ON)
+option(GPU_AWARE_MPI "Enable use of GPU-Aware MPI functionality" OFF)
 
 # Dependencies
 include(cmake/Dependencies.cmake)
@@ -85,7 +86,7 @@ find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
 
 # Setup version
-rocm_setup_version(VERSION 0.7.14)
+rocm_setup_version(VERSION 0.8.0)
 
 # rocHPCG source directory
 add_subdirectory(src)

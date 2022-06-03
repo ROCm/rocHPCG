@@ -477,7 +477,10 @@ int main(int argc, char * argv[]) {
            total_runtime);
   }
 
-  for (int i=0; i< numberOfCgSets; ++i) {
+  // Only run as long as requested. Conversely, if card performance increases this
+  // will ensure test runs at least as long as requested.
+  while ( total_runtime > times[0] ) 
+  {
     HIPZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;

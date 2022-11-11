@@ -49,6 +49,11 @@ if (NOT MPI_FOUND)
   endif()
 else()
   option(HPCG_MPI "Compile WITH MPI support." ON)
+  if(NOT MPI_CXX_INCLUDE_DIRS)
+    # On some system with MPI compiler wrappers, MPI_CXX_INCLUDE_DIRS is not
+    # correctly populated.
+    set(MPI_CXX_INCLUDE_DIRS ${MPI_HOME}/include)
+  endif() 
 endif()
 
 # gtest

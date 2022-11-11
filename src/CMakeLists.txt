@@ -145,11 +145,21 @@ if(GPU_AWARE_MPI)
   target_compile_definitions(rochpcg PRIVATE GPU_AWARE_MPI)
 endif()
 
+if(MPI_FOUND)
+    # The user asked for MPI support     
+    if(NOT MPI_CXX_INCLUDE_DIRS)
+        # On some system with MPI compiler wrappers, MPI_CXX_INCLUDE_DIRS is not
+        # correctly populated.
+        set(MPI_CXX_INCLUDE_DIRS ${MPI_HOME}/include)
+    endif()
+endif()
+
 # Target include directories
 target_include_directories(rochpcg
-                             PRIVATE
-                               $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-                               $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>)
+                                PRIVATE
+                                $<BUILD_INTERFACE:${MPI_CXX_INCLUDE_DIRS}>
+                                $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+                                $<BUILD_INTERFACE:${HIP_INCLUDE_DIRS}>)
 
 # HIP
 target_link_libraries(rochpcg PRIVATE hip::host)

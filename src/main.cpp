@@ -468,43 +468,63 @@ int main(int argc, char * argv[]) {
 
   optMaxIters = optNiters;
   double optTolerance = 0.0;  // Force optMaxIters iterations
-  TestNormsData testnorms_data;
-  testnorms_data.samples = numberOfCgSets;
-  testnorms_data.values = new double[numberOfCgSets];
+  std::vector<double> scaled_residual;
+  scaled_residual.reserve(numberOfCgSets);
+  int actualCgSets = 0;
 
   if(rank == 0)
   {
     opt_times[7] = times[7];
     opt_times[9] = times[9];
 
-    printf("Performing %d CG sets in %0.1lf seconds ...\n",
+    printf("Performing (at least) %d CG sets in %0.1lf seconds ...\n",
            numberOfCgSets,
            total_runtime);
   }
 
-  for (int i=0; i< numberOfCgSets; ++i) {
+  while(total_runtime - times[0] > 0.0 || actualCgSets < numberOfCgSets)
+  {
     HIPZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true, false);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
-    if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
+    if (rank==0) HPCG_fout << "Call [" << actualCgSets << "] Scaled Residual [" << normr/normr0 << "]" << endl;
 
-    if(rank == 0 && i < numberOfCgSets)
+    if(rank == 0)
     {
-        double gflops = ComputeTotalGFlops(A, numberOfMgLevels, i + 1, refMaxIters, optMaxIters, &times[0]);
+        if(actualCgSets == numberOfCgSets)
+        {
+            printf("-- Performing additional CG sets, to match time requirement of %0.1lf seconds ...\n", total_runtime);
+        }
+
+        double gflops = ComputeTotalGFlops(A, numberOfMgLevels, actualCgSets + 1, refMaxIters, optMaxIters, &times[0]);
         char c = '%';
 
         printf("CG set %0d / %0d    %7.4lf GFlop/s     (%7.4lf GFlop/s per process)    %d%c    %0.1lf sec left\n",
-               i + 1,
+               actualCgSets + 1,
                numberOfCgSets,
                gflops,
                gflops / A.geom->size,
-               (int)((double)(i + 1) / numberOfCgSets * 100.0),
+               (int)((double)(actualCgSets + 1) / numberOfCgSets * 100.0),
                c,
                total_runtime - times[0] > 0.0 ? total_runtime - times[0] : 0.0);
     }
 
-    testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
+    scaled_residual.push_back(normr/normr0); // Record scaled residual from this run
+
+    ++actualCgSets;
   }
+
+  // Fill in scaled residuals from all runs
+  TestNormsData testnorms_data;
+  testnorms_data.samples = actualCgSets;
+  testnorms_data.values = new double[actualCgSets];
+
+  for(int i = 0; i < actualCgSets; ++i)
+  {
+    testnorms_data.values[i] = scaled_residual[i];
+  }
+
+  scaled_residual.clear();
 
   // Compute difference between known exact solution and computed solution
   // All processors are needed here.
@@ -523,7 +543,7 @@ int main(int argc, char * argv[]) {
   ////////////////////
 
   // Report results to YAML file
-  ReportResults(A, numberOfMgLevels, numberOfCgSets, refMaxIters, optMaxIters, &times[0], testcg_data, testsymmetry_data, testnorms_data, global_failure, quickPath);
+  ReportResults(A, numberOfMgLevels, actualCgSets, refMaxIters, optMaxIters, &times[0], testcg_data, testsymmetry_data, testnorms_data, global_failure, quickPath);
 
   // Clean up
   if(params.verify)

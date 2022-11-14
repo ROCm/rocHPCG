@@ -86,7 +86,7 @@ find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
 
 # Setup version
-rocm_setup_version(VERSION 0.8.2)
+rocm_setup_version(VERSION 0.8.3)
 
 # rocHPCG source directory
 add_subdirectory(src)

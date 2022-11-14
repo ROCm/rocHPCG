@@ -130,12 +130,17 @@ int main(int argc, char * argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-  hipDeviceProp_t prop;
-  hipGetDeviceProperties(&prop, params.device);
-  printf("Using HIP device (%d): %s (%lu MB global memory)\n",
-         params.device,
-         prop.name,
-         (prop.totalGlobalMem >> 20));
+  // Only master rank prints out device
+  if(rank == 0)
+  {
+    hipDeviceProp_t prop;
+    hipGetDeviceProperties(&prop, params.device);
+
+    printf("Using HIP device (%d): %s (%lu MB global memory)\n",
+           params.device,
+           prop.name,
+           (prop.totalGlobalMem >> 20));
+  }
 
 #ifdef HPCG_DETAILED_DEBUG
   if (size < 100 && rank==0) HPCG_fout << "Process "<<rank<<" of "<<size<<" is alive with " << params.numThreads << " threads." <<endl;

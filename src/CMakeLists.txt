@@ -154,6 +154,12 @@ target_include_directories(rochpcg
 # HIP
 target_link_libraries(rochpcg PRIVATE hip::host)
 
+# Roctx
+if(OPT_ROCTX)
+  target_compile_definitions(rochpcg PRIVATE OPT_ROCTX)
+  target_link_libraries(rochpcg PRIVATE "${ROCM_PATH}/lib/libroctx64.so")
+endif()
+
 # MPI
 if(HPCG_MPI)
   target_link_libraries(rochpcg PRIVATE MPI::MPI_CXX libnuma::libnuma)
@@ -174,6 +180,8 @@ target_link_libraries(rochpcg PRIVATE roc::rocprim)
 if(BUILD_TEST)
   target_link_libraries(rochpcg PRIVATE GTest::GTest)
 endif()
+
+
 
 
 # Target properties

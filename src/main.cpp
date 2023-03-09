@@ -64,6 +64,11 @@ using std::endl;
 #include <vector>
 #include <hip/hip_runtime_api.h>
 
+#ifdef OPT_ROCTX
+#include <roctracer/roctx.h>
+#endif
+
+
 #include "hpcg.hpp"
 
 #include "CheckAspectRatio.hpp"
@@ -184,7 +189,11 @@ int main(int argc, char * argv[]) {
   // Use this array for collecting timing information
   std::vector< double > times(10,0.0);
 
+
   double setup_time = mytimer();
+#ifdef OPT_ROCTX
+  roctxRangePush("Setup");
+#endif
 
   SparseMatrix A;
   InitializeSparseMatrix(A, geom);
@@ -199,7 +208,9 @@ int main(int argc, char * argv[]) {
     GenerateCoarseProblem(*curLevelMatrix);
     curLevelMatrix = curLevelMatrix->Ac; // Make the just-constructed coarse grid the next level
   }
-
+#ifdef OPT_ROCTX
+  roctxRangePop(); // end of setup
+#endif
   setup_time = mytimer() - setup_time; // Capture total time of setup
   times[9] = setup_time; // Save it for reporting
 
@@ -338,7 +349,13 @@ int main(int argc, char * argv[]) {
 
   // Call user-tunable set up function.
   double t7 = mytimer();
+#ifdef OPT_ROCTX
+  roctxRangePush("Optimize");
+#endif
   OptimizeProblem(A, data, b, x, xexact);
+#ifdef OPT_ROCTX
+  roctxRangePop();
+#endif
   t7 = mytimer() - t7;
   times[7] = t7;
 #ifdef HPCG_DEBUG

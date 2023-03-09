@@ -22,6 +22,7 @@ function display_help()
   echo "    [--with-openmp] compile with OpenMP support (default: enabled)"
   echo "    [--with-memmgmt] compile with smart memory management (default: enabled)"
   echo "    [--with-memdefrag] compile with memory defragmentation (defaut: enabled)"
+  echo "    [--with-roctx] enable rocTX markers (default: false)"
 }
 
 # This function is helpful for dockerfiles that do not have sudo installed, but the default user is root
@@ -230,6 +231,7 @@ gpu_aware_mpi=OFF
 with_omp=ON
 with_memmgmt=ON
 with_memdefrag=ON
+with_roctx=false
 
 # #################################################
 # Parameter parsing
@@ -238,7 +240,7 @@ with_memdefrag=ON
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-rocm:,with-mpi:,gpu-aware-mpi:,with-openmp:,with-memmgmt:,with-memdefrag: --options hidrgt -- "$@")
+  GETOPT_PARSE=$(getopt --name "${0}" --longoptions help,install,dependencies,reference,debug,test,with-rocm:,with-mpi:,gpu-aware-mpi:,with-openmp:,with-memmgmt:,with-memdefrag:,with-roctx --options hidrgt -- "$@")
 else
   echo "Need a new version of getopt"
   exit 1
@@ -290,6 +292,9 @@ while true; do
     --with-memdefrag)
         with_memdefrag=${2}
         shift 2 ;;
+    --with-roctx)
+	with_roctx=true
+	shift ;;
     --) shift ; break ;;
     *)  echo "Unexpected command line parameter received; aborting";
         exit 1
@@ -343,7 +348,7 @@ pushd .
   # #################################################
   # configure & build
   # #################################################
-  cmake_common_options="-DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag}"
+  cmake_common_options="-DHPCG_OPENMP=${with_omp} -DOPT_MEMMGMT=${with_memmgmt} -DOPT_DEFRAG=${with_memdefrag} -DOPT_ROCTX=${with_roctx}"
 
   shopt -s nocasematch
   # gpu aware mpi

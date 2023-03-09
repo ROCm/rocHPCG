@@ -50,6 +50,10 @@
 
 #include <cmath>
 
+#ifdef OPT_ROCTX
+#include <roctracer/roctx.h>
+#endif
+
 #include "hpcg.hpp"
 
 #include "CG.hpp"
@@ -61,12 +65,21 @@
 
 
 // Use TICK and TOCK to time a code section in MATLAB-like fashion
+#ifdef OPT_ROCTX // add roctx in TICK/TOCK
 #ifndef HPCG_NO_MPI
-#define TICK()  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
+#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
 #else
-#define TICK()  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
+#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
+#endif
+#define TOCK(t) hipDeviceSynchronize(); roctxRangePop(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
+#else // don't include markers
+#ifndef HPCG_NO_MPI
+#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
+#else
+#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
 #endif
 #define TOCK(t) hipDeviceSynchronize(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
+#endif
 
 /*!
   Routine to compute an approximate solution to Ax = b
@@ -91,7 +104,9 @@
 int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr, double & normr0,
     double * times, bool doPreconditioning, bool verbose) {
-
+#ifdef OPT_ROCTX
+  roctxRangePush("Total Time");
+#endif
   double t_begin = mytimer();  // Start timing right away
   normr = 0.0;
   double rtz = 0.0, oldrtz = 0.0, alpha = 0.0, beta = 0.0, pAp = 0.0;
@@ -116,9 +131,9 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #endif
   // p is of length ncols, copy x to p for sparse MV operation
   HIPCopyVector(x, p);
-  TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
-  TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
-  TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+  TICK("SpMV"); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+  TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
+  TICK("DDOT"); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
@@ -131,7 +146,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   // Start iterations
 
   for (int k=1; k<=max_iter && normr/normr0 > tolerance; k++ ) {
-    TICK();
+    TICK("MG");
     if (doPreconditioning)
       ComputeMG(A, r, z); // Apply preconditioner
     else
@@ -139,25 +154,25 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     TOCK(t5); // Preconditioner apply time
 
     if (k == 1) {
-      TICK(); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
-      TICK(); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
+      TICK("DDOT"); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
     } else {
       oldrtz = rtz;
-      TICK(); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK("DDOT"); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
       beta = rtz/oldrtz;
-      TICK(); ComputeWAXPBY (nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
+      TICK("WAXPBY"); ComputeWAXPBY (nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
     }
 
-    TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
-    TICK(); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
+    TICK("SpMV"); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+    TICK("DDOT"); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
     alpha = rtz/pAp;
 #ifndef HPCG_REFERENCE
-    TICK(); ComputeFusedWAXPBYDot(nrow, -alpha, Ap, r, normr, t4);
+    TICK("WAXPBY"); ComputeFusedWAXPBYDot(nrow, -alpha, Ap, r, normr, t4);
             ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized); TOCK(t2); // x = x + alpha*p
 #else
-    TICK(); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
+    TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
             ComputeWAXPBY(nrow, 1.0, r, -alpha, Ap, r, A.isWaxpbyOptimized);  TOCK(t2);// r = r - alpha*Ap
-    TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+    TICK("DDOT"); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
 #endif
     normr = sqrt(normr);
 #ifdef HPCG_DEBUG
@@ -177,6 +192,9 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 //#ifndef HPCG_NO_MPI
 //  times[6] += t6; // exchange halo time
 //#endif
+#ifdef OPT_ROCTX
+  roctxRangePop(); // Total Time
+#endif
   times[0] += mytimer() - t_begin;  // Total time. All done...
   return 0;
 }

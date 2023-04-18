@@ -1,0 +1,27 @@
+
+This directory contains a copy of hpcg for the purpose of developing a port of hpcg using OpenMP target offload with the LLVM ROCm compiler. 
+
+We are looking at different device memory management schemes. 
+
+Initially a suboptimal scheme will using target map clauses on each target region .
+
+To build 
+
+cd git/libs/rocHPCG/omptarget/hpcg
+mkdir build; cd build
+../configure MPI_LLVM_OMP_TARGET
+make -j4
+
+This run script will use openmp and the ROCM gpurun tool.
+
+LLVM=${LLVM:-/usr/lib/aomp}
+MPI=${MPI:-$HOME/local/openmpi}
+HPCG_BIN_DIR=${HPCG_BIN_DIR:-$HOME/git/libs/rocHPCG/omptarget/hpcg/build/bin}
+# use the hpcg.dat in directory $HPCG_BIN_DIR
+cd $HPCG_BIN_DIR
+echo ======== input file:  $PWD/hpcg.dat ===========
+cat  $HPCG_BIN_DIR/hpcg.dat
+echo =======================================================
+echo $MPI/bin/mpirun -np 8 --mca btl_openib_warn_no_device_params_found 0 $LLVM/bin/gpurun $HPCG_BIN_DIR/xhpcg  
+$MPI/bin/mpirun -np 8 --mca btl_openib_warn_no_device_params_found 0 $LLVM/bin/gpurun $HPCG_BIN_DIR/xhpcg  
+

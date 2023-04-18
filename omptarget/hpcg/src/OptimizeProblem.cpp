@@ -94,8 +94,8 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
   // translate `colors' into a permutation
   for (local_int_t i=0; i<nrow; ++i) // for each color `c'
     colors[i] = counters[colors[i]]++;
-  printf("===== DONE OptimizeProblem\n");
 #endif
+
   return 0;
 }
 

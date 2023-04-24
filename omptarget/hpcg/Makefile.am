@@ -12,7 +12,8 @@ src/ComputeMG.hpp src/ComputeMG_ref.cpp src/ComputeMG_ref.hpp \
 src/ComputeOptimalShapeXYZ.cpp src/ComputeOptimalShapeXYZ.hpp \
 src/ComputeProlongation_ref.cpp src/ComputeProlongation_ref.hpp \
 src/ComputeResidual.cpp src/ComputeResidual.hpp src/ComputeRestriction_ref.cpp \
-src/ComputeRestriction_ref.hpp src/ComputeSPMV.cpp src/ComputeSPMV.hpp \
+src/ComputeRestriction_ref.hpp src/ComputeRestriction.cpp \
+src/ComputeRestriction.hpp src/ComputeSPMV.cpp src/ComputeSPMV.hpp \
 src/ComputeSPMV_ref.cpp src/ComputeSPMV_ref.hpp src/ComputeSYMGS.cpp \
 src/ComputeSYMGS.hpp src/ComputeSYMGS_ref.cpp src/ComputeSYMGS_ref.hpp \
 src/ComputeWAXPBY.cpp src/ComputeWAXPBY.hpp src/ComputeWAXPBY_ref.cpp \

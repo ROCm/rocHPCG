@@ -117,6 +117,8 @@ int main(int argc, char * argv[]) {
   double t1 = mytimer();
 #endif
 
+  printf("===> SETUP\n");
+
   // Construct the geometry and linear system
   Geometry * geom = new Geometry;
   GenerateGeometry(size, rank, params.numThreads, params.pz, params.zl, params.zu, nx, ny, nz, params.npx, params.npy, params.npz, geom);
@@ -126,7 +128,7 @@ int main(int argc, char * argv[]) {
     return ierr;
 
   // Use this array for collecting timing information
-  std::vector< double > times(10,0.0);
+  std::vector< double > times(10, 0.0);
 
   double setup_time = mytimer();
 
@@ -138,7 +140,7 @@ int main(int argc, char * argv[]) {
   SetupHalo(A);
   int numberOfMgLevels = 4; // Number of levels including first
   SparseMatrix * curLevelMatrix = &A;
-  for (int level = 1; level< numberOfMgLevels; ++level) {
+  for (int level = 1; level < numberOfMgLevels; ++level) {
     GenerateCoarseProblem(*curLevelMatrix);
     curLevelMatrix = curLevelMatrix->Ac; // Make the just-constructed coarse grid the next level
   }
@@ -150,7 +152,7 @@ int main(int argc, char * argv[]) {
   Vector * curb = &b;
   Vector * curx = &x;
   Vector * curxexact = &xexact;
-  for (int level = 0; level< numberOfMgLevels; ++level) {
+  for (int level = 0; level < numberOfMgLevels; ++level) {
      CheckProblem(*curLevelMatrix, curb, curx, curxexact);
      curLevelMatrix = curLevelMatrix->Ac; // Make the nextcoarse grid the next level
      curb = 0; // No vectors after the top level
@@ -167,6 +169,8 @@ int main(int argc, char * argv[]) {
   ////////////////////////////////////
   // Reference SpMV+MG Timing Phase //
   ////////////////////////////////////
+
+  printf("===> Reference SpMV+MG Timing Phase\n");
 
   // Call Reference SpMV and MG. Compute Optimization time as ratio of times in these routines
 
@@ -199,6 +203,8 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Reference CG Timing Phase //
   ///////////////////////////////
+
+  printf("===> Reference CG Timing Phase\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -242,6 +248,7 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////
+  printf("Validation Testing Phase\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -264,6 +271,7 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Optimized CG Setup Phase //
   //////////////////////////////
+  printf("Optimized CG Setup Phase\n");
 
   niters = 0;
   normr = 0.0;
@@ -310,6 +318,7 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Optimized CG Timing Phase //
   ///////////////////////////////
+  printf("Optimized CG Timing Phase\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
@@ -332,12 +341,17 @@ int main(int argc, char * argv[]) {
   testnorms_data.samples = numberOfCgSets;
   testnorms_data.values = new double[numberOfCgSets];
 
+  printf("numberOfCgSets = %d\n", numberOfCgSets);
+  printf("optMaxIters = %d\n", optMaxIters);
+
   for (int i=0; i< numberOfCgSets; ++i) {
     ZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
+    printf("CG call %d is Done!\n", i);
+    if (i == 2) break;
   }
 
   // Compute difference between known exact solution and computed solution
@@ -355,6 +369,7 @@ int main(int argc, char * argv[]) {
   ////////////////////
   // Report Results //
   ////////////////////
+  printf("Report Results\n");
 
   // Report results to YAML file
   ReportResults(A, numberOfMgLevels, numberOfCgSets, refMaxIters, optMaxIters, &times[0], testcg_data, testsymmetry_data, testnorms_data, global_failure, quickPath);

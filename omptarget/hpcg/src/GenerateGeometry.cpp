@@ -59,6 +59,7 @@ void GenerateGeometry(int size, int rank, int numThreads,
   int * partz_ids = 0;
   local_int_t * partz_nz = 0;
   int npartz = 0;
+  printf("===> GenerateGeometry: pz = %d\n", pz);
   if (pz==0) { // No variation in nz sizes
     npartz = 1;
     partz_ids = new int[1];
@@ -167,3 +168,8 @@ void GenerateGeometry(int size, int rank, int numThreads,
 
   return;
 }
+
+// void MapGeometryToDevice(Geometry * geom) {
+//   #pragma omp target enter data map(to: geom[:1])
+//   #pragma omp target enter data map(to: geom->partz_ids[:1], geom->partz_ids[:1])
+// }

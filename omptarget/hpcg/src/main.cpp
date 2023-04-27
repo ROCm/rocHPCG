@@ -344,6 +344,8 @@ int main(int argc, char * argv[]) {
   printf("numberOfCgSets = %d\n", numberOfCgSets);
   printf("optMaxIters = %d\n", optMaxIters);
 
+  // TODO: Map Matrix A to the device:
+
   for (int i=0; i< numberOfCgSets; ++i) {
     ZeroVector(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
@@ -351,8 +353,10 @@ int main(int argc, char * argv[]) {
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
     printf("CG call %d is Done!\n", i);
-    if (i == 2) break;
+    // if (i == 2) break;
   }
+
+  // TODO: Clean-up device mappings:
 
   // Compute difference between known exact solution and computed solution
   // All processors are needed here.

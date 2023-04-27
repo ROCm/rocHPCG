@@ -12,12 +12,9 @@
 // ***************************************************
 //@HEADER
 
-#ifndef COMPUTESPMV_HPP
-#define COMPUTESPMV_HPP
+#ifndef COMPUTEPROLONGATION_HPP
+#define COMPUTEPROLONGATION_HPP
 #include "Vector.hpp"
 #include "SparseMatrix.hpp"
-
-int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y);
-int ComputeSPMV_FromComputeMG( const SparseMatrix & A, Vector & x, Vector & y);
-
-#endif  // COMPUTESPMV_HPP
+int ComputeProlongation(const SparseMatrix & Af, Vector & xf);
+#endif // COMPUTEPROLONGATION_HPP

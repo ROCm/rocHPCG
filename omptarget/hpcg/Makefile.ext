@@ -38,6 +38,7 @@ HPCG_DEPS = src/CG.o \
 	    src/ComputeWAXPBY_ref.o \
 	    src/ComputeMG_ref.o \
 	    src/ComputeMG.o \
+		src/ComputeProlongation.o \
 	    src/ComputeProlongation_ref.o \
 		src/ComputeRestriction.o \
 	    src/ComputeRestriction_ref.o \
@@ -164,6 +165,9 @@ src/ComputeMG_ref.o: HPCG_SRC_PATH/src/ComputeMG_ref.cpp HPCG_SRC_PATH/src/Compu
 	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
 
 src/ComputeMG.o: HPCG_SRC_PATH/src/ComputeMG.cpp HPCG_SRC_PATH/src/ComputeMG.hpp $(PRIMARY_HEADERS)
+	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
+
+src/ComputeProlongation.o: HPCG_SRC_PATH/src/ComputeProlongation.cpp HPCG_SRC_PATH/src/ComputeProlongation.hpp $(PRIMARY_HEADERS)
 	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
 
 src/ComputeProlongation_ref.o: HPCG_SRC_PATH/src/ComputeProlongation_ref.cpp HPCG_SRC_PATH/src/ComputeProlongation_ref.hpp $(PRIMARY_HEADERS)

@@ -38,8 +38,56 @@
   @see ComputeSPMV_ref
 */
 int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
-
-  // This line and the next two lines should be removed and your version of ComputeSPMV should be used.
   A.isSpmvOptimized = false;
   return ComputeSPMV_ref(A, x, y);
+}
+
+int ComputeSPMV_FromComputeMG( const SparseMatrix & A, Vector & x, Vector & y) {
+  assert(x.localLength>=A.localNumberOfColumns); // Test vector lengths
+  assert(y.localLength>=A.localNumberOfRows);
+
+#ifndef HPCG_NO_MPI
+    ExchangeHalo(A, x);
+#endif
+  // const double * const xv = x.values;
+  // double * const yv = y.values;
+  const local_int_t nrow = A.localNumberOfRows;
+
+// #ifndef HPCG_NO_OPENMP
+//   #pragma omp target
+// #endif
+//   {
+//     printf("Addresses:\n");
+//     printf("  A %p\n", &A);
+//     printf("  A.mgData %p\n", A.mgData);
+//     printf("  A.mgData.Axf %p\n", A.mgData->Axf);
+//     printf("  A.mgData.Axf.values[1] %p\n", &A.mgData->Axf->values[1]);
+//     printf("  A.matrixValues[1] %p\n", &A.matrixValues[1]);
+//     printf("  A.matrixValues[1][1] %p\n", &A.matrixValues[1][1]);
+//     printf("  A.mtxIndL[1] %p\n", &A.mtxIndL[1]);
+//     printf("  A.mtxIndL[1][1] %p\n", &A.mtxIndL[1][1]);
+//     printf("  A.nonzerosInRow[1] %p\n", &A.nonzerosInRow[1]);
+//     printf("  x.values[1] %p\n", &x.values[1]);
+//   }
+
+  // Reads matrixValues and writes to Axf.
+
+#ifndef HPCG_NO_OPENMP
+  #pragma omp target teams distribute parallel for
+#endif
+  for (local_int_t i = 0; i < nrow; i++)  {
+    double sum = 0.0;
+    const double * const cur_vals = A.matrixValues[i];
+    const local_int_t * const cur_inds = A.mtxIndL[i];
+    const int cur_nnz = A.nonzerosInRow[i];
+
+    for (int j = 0; j < cur_nnz; j++) {
+      // sum += cur_vals[j] * xv[cur_inds[j]];
+      sum += cur_vals[j] * x.values[cur_inds[j]];
+    }
+    // Used to be yv:
+    A.mgData->Axf->values[i] = sum;
+  }
+
+  return 0;
 }

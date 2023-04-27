@@ -11,6 +11,7 @@ src/ComputeDotProduct_ref.cpp src/ComputeDotProduct_ref.hpp src/ComputeMG.cpp \
 src/ComputeMG.hpp src/ComputeMG_ref.cpp src/ComputeMG_ref.hpp \
 src/ComputeOptimalShapeXYZ.cpp src/ComputeOptimalShapeXYZ.hpp \
 src/ComputeProlongation_ref.cpp src/ComputeProlongation_ref.hpp \
+src/ComputeProlongation.cpp src/ComputeProlongation.hpp \
 src/ComputeResidual.cpp src/ComputeResidual.hpp src/ComputeRestriction_ref.cpp \
 src/ComputeRestriction_ref.hpp src/ComputeRestriction.cpp \
 src/ComputeRestriction.hpp src/ComputeSPMV.cpp src/ComputeSPMV.hpp \

@@ -59,7 +59,7 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
   const double * const rv = r.values;
   double * const xv = x.values;
 
-  printf("===> SYMG: nrow = %d\n", nrow);
+  // printf("===> SYMG: nrow = %d\n", nrow);
 
   // #pragma omp target enter data map(to: A[:1])
   // #pragma omp target enter data map(to: A.matrixValues[:nrow])
@@ -79,14 +79,14 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
     const double * const currentValues = A.matrixValues[i];
     const local_int_t * const currentColIndices = A.mtxIndL[i];
     const int currentNumberOfNonzeros = A.nonzerosInRow[i];
-    const double  currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
+    const double currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
     double sum = rv[i]; // RHS value
 
     for (int j = 0; j < currentNumberOfNonzeros; j++) {
       local_int_t curCol = currentColIndices[j];
       sum -= currentValues[j] * xv[curCol];
     }
-    sum += xv[i]*currentDiagonal; // Remove diagonal contribution from previous loop
+    sum += xv[i] * currentDiagonal; // Remove diagonal contribution from previous loop
 
     xv[i] = sum/currentDiagonal;
   }
@@ -97,14 +97,14 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
     const double * const currentValues = A.matrixValues[i];
     const local_int_t * const currentColIndices = A.mtxIndL[i];
     const int currentNumberOfNonzeros = A.nonzerosInRow[i];
-    const double  currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
+    const double currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
     double sum = rv[i]; // RHS value
 
     for (int j = 0; j < currentNumberOfNonzeros; j++) {
       local_int_t curCol = currentColIndices[j];
-      sum -= currentValues[j]*xv[curCol];
+      sum -= currentValues[j] * xv[curCol];
     }
-    sum += xv[i]*currentDiagonal; // Remove diagonal contribution from previous loop
+    sum += xv[i] * currentDiagonal; // Remove diagonal contribution from previous loop
 
     xv[i] = sum/currentDiagonal;
   }

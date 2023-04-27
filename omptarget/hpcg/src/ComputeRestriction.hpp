@@ -12,12 +12,9 @@
 // ***************************************************
 //@HEADER
 
-#ifndef COMPUTESPMV_HPP
-#define COMPUTESPMV_HPP
+#ifndef COMPUTERESTRICTION_HPP
+#define COMPUTERESTRICTION_HPP
 #include "Vector.hpp"
 #include "SparseMatrix.hpp"
-
-int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y);
-int ComputeSPMV_FromComputeMG( const SparseMatrix & A, Vector & x, Vector & y);
-
-#endif  // COMPUTESPMV_HPP
+int ComputeRestriction(const SparseMatrix & A, const Vector & rf);
+#endif // COMPUTERESTRICTION_HPP

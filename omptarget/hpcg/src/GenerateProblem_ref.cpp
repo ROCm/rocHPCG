@@ -117,9 +117,9 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
   mtxIndG[0] = new global_int_t[localNumberOfRows * numberOfNonzerosPerRow];
 
   for (local_int_t i=1; i< localNumberOfRows; ++i) {
-  mtxIndL[i] = mtxIndL[0] + i * numberOfNonzerosPerRow;
-  matrixValues[i] = matrixValues[0] + i * numberOfNonzerosPerRow;
-  mtxIndG[i] = mtxIndG[0] + i * numberOfNonzerosPerRow;
+    mtxIndL[i] = mtxIndL[0] + i * numberOfNonzerosPerRow;
+    matrixValues[i] = matrixValues[0] + i * numberOfNonzerosPerRow;
+    mtxIndG[i] = mtxIndG[0] + i * numberOfNonzerosPerRow;
   }
 #endif
 

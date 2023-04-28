@@ -41,26 +41,28 @@
 */
 int ComputeWAXPBY(const local_int_t n, const double alpha, const Vector & x,
     const double beta, const Vector & y, Vector & w, bool & isOptimized) {
-  isOptimized = false;
-  return ComputeWAXPBY_ref(n, alpha, x, beta, y, w);
+  // isOptimized = false;
+  // return ComputeWAXPBY_ref(n, alpha, x, beta, y, w);
 
-//   assert(x.localLength>=n); // Test vector lengths
-//   assert(y.localLength>=n);
+  assert(x.localLength >= n); // Test vector lengths
+  assert(y.localLength >= n);
 
-//   if (alpha==1.0) {
-// #ifndef HPCG_NO_OPENMP
-//     #pragma omp target teams distribute parallel for
-// #endif
-//     for (local_int_t i = 0; i < n; i++) w.values[i] = x.values[i] + beta * y.values[i];
-//   } else if (beta==1.0) {
-// #ifndef HPCG_NO_OPENMP
-//     #pragma omp target teams distribute parallel for
-// #endif
-//     for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + y.values[i];
-//   } else  {
-// #ifndef HPCG_NO_OPENMP
-//     #pragma omp target teams distribute parallel for
-// #endif
-//     for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + beta * y.values[i];
-//   }
+  if (alpha==1.0) {
+#ifndef HPCG_NO_OPENMP
+    #pragma omp target teams distribute parallel for
+#endif
+    for (local_int_t i = 0; i < n; i++) w.values[i] = x.values[i] + beta * y.values[i];
+  } else if (beta==1.0) {
+#ifndef HPCG_NO_OPENMP
+    #pragma omp target teams distribute parallel for
+#endif
+    for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + y.values[i];
+  } else  {
+#ifndef HPCG_NO_OPENMP
+    #pragma omp target teams distribute parallel for
+#endif
+    for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + beta * y.values[i];
+  }
+
+  return 0;
 }

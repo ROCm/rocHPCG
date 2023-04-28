@@ -115,7 +115,7 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target exit data map(release: A.Ac[:1])
 #pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
-#pragma omp target exit data map(release: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
 #pragma omp target exit data map(release: A.mgData[0].Axf[:1])
 #pragma omp target exit data map(release: A.mgData[:1])
 #endif // End HPCG_NO_OPENMP

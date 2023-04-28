@@ -91,23 +91,26 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
 #endif // End HPCG_NO_OPENMP
 
-  // Note: read: A, p; write: Ap.
+  // Note: read: non-MGData of A, p; write: Ap.
   TICK(); ComputeSPMV_FromCG(A, p, Ap); TOCK(t3); // Ap = A*p
-  // TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
 
 #ifndef HPCG_NO_OPENMP
 #pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
 #pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows])
 #endif // End HPCG_NO_OPENMP
 
-// #ifndef HPCG_NO_OPENMP
-// #pragma omp target enter data map(to: data[:1])
-// #pragma omp target enter data map(to: data[0].p[:A.localNumberOfColumns])
-// #pragma omp target enter data map(to: data[0].Ap[:A.localNumberOfRows])
-// #endif // End HPCG_NO_OPENMP
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
 
-  // Note: read: Ap, p; write: Ap.
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
   TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
 #ifdef HPCG_DEBUG
@@ -124,24 +127,52 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     if (doPreconditioning)
       ComputeMG(A, r, z); // Apply preconditioner
     else
-      CopyVector (r, z); // copy r to z (no preconditioning)
+      CopyVector(r, z); // copy r to z (no preconditioning)
     TOCK(t5); // Preconditioner apply time
 
     if (k == 1) {
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
       TICK(); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
-      TICK(); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: data.z.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.p.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
     } else {
       oldrtz = rtz;
-      TICK(); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
       beta = rtz/oldrtz;
-      TICK(); ComputeWAXPBY (nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+      TICK(); ComputeWAXPBY(nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: data.z.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.p.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENM
     }
 
     TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
     TICK(); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
     alpha = rtz/pAp;
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
     TICK(); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
             ComputeWAXPBY(nrow, 1.0, r, -alpha, Ap, r, A.isWaxpbyOptimized);  TOCK(t2);// r = r - alpha*Ap
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.p.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
     TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
     normr = sqrt(normr);
 #ifdef HPCG_DEBUG

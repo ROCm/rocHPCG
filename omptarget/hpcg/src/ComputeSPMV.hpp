@@ -18,6 +18,7 @@
 #include "SparseMatrix.hpp"
 
 int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y);
-int ComputeSPMV_FromComputeMG( const SparseMatrix & A, Vector & x, Vector & y);
+int ComputeSPMV_FromCG( const SparseMatrix & A, Vector & x, Vector & y);
+int ComputeSPMV_FromComputeMG( const SparseMatrix & A, Vector & x);
 
 #endif  // COMPUTESPMV_HPP

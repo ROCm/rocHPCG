@@ -59,20 +59,7 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
   const double * const rv = r.values;
   double * const xv = x.values;
 
-  // printf("===> SYMG: nrow = %d\n", nrow);
-
-  // #pragma omp target enter data map(to: A[:1])
-  // #pragma omp target enter data map(to: A.matrixValues[:nrow])
-  // #pragma omp target enter data map(to: A.mtxIndL[:nrow])
-  // for (local_int_t i = 0; i < nrow; i++) {
-  //   const int currentNumberOfNonzeros = A.nonzerosInRow[i];
-  //   #pragma omp target enter data map(to: A.matrixValues[i][:currentNumberOfNonzeros])
-  //   #pragma omp target enter data map(to: A.mtxIndL[i][:currentNumberOfNonzeros])
-  // }
-  // #pragma omp target enter data map(to: rv[:nrow])
-  // #pragma omp target enter data map(to: xv[:nrow])
-
-  // DORU: The loops below is not a parallel loop across rows due to reading
+  // The loop below is not a parallel loop across rows due to reading
   // and writing of xv.
 
   for (local_int_t i = 0; i < nrow; i++) {

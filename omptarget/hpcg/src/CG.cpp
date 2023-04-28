@@ -84,7 +84,29 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #endif
   // p is of length ncols, copy x to p for sparse MV operation
   CopyVector(x, p);
-  TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+
+  // Map data object and sub-elements to the device:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
+  // Note: read: A, p; write: Ap.
+  TICK(); ComputeSPMV_FromCG(A, p, Ap); TOCK(t3); // Ap = A*p
+  // TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
+// #ifndef HPCG_NO_OPENMP
+// #pragma omp target enter data map(to: data[:1])
+// #pragma omp target enter data map(to: data[0].p[:A.localNumberOfColumns])
+// #pragma omp target enter data map(to: data[0].Ap[:A.localNumberOfRows])
+// #endif // End HPCG_NO_OPENMP
+
+  // Note: read: Ap, p; write: Ap.
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
   TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);

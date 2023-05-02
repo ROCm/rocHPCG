@@ -34,116 +34,6 @@
 
   @see ComputeMG_ref
 */
-int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
-  assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
-
-  // initialize x to zero
-  ZeroVector(x);
-
-  int ierr = 0;
-  if (A.mgData != 0) { // Go to next coarse level if defined
-    local_int_t nc = A.mgData->rc->localLength;
-
-    // Executed on the HOST only (for now):
-    // NOTE: read: non-MGData part of A, r and x; write: x.
-    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
-    for (int i=0; i< numberOfPresmootherSteps; ++i)
-      ierr += ComputeSYMGS(A, r, x);
-    if (ierr!=0)
-      return ierr;
-
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
-// #pragma omp target enter data map(to: A)
-// #pragma omp target enter data map(to: A.mgData[:1])
-// #pragma omp target enter data map(to: A.mgData[0].Axf[:1])
-// #pragma omp target enter data map(to: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-// #pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
-
-    // This can be executed on DEVICE:
-    // Note: read: non-MGData of A, x; write: A.mgData->Axf.
-    ierr = ComputeSPMV_FromComputeMG(A, x); if (ierr!=0) return ierr;
-
-#ifndef HPCG_NO_OPENMP
-// #pragma omp target exit data map(from: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: x.values[:A.localNumberOfRows])
-
-// #pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
-// #pragma omp target exit data map(release: A.mgData[0].Axf[:1])
-// #pragma omp target exit data map(release: A.mgData[:1])
-// #pragma omp target exit data map(release: A)
-#endif // End HPCG_NO_OPENMP
-
-//// Method 2: map the actual object structure: ////
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: r.values[:A.localNumberOfRows])
-// #pragma omp target enter data map(to: A)
-// #pragma omp target enter data map(to: A.mgData[:1])
-// #pragma omp target enter data map(to: A.mgData[0].f2cOperator[:nc])
-// #pragma omp target enter data map(to: A.mgData[0].Axf[:1])
-// #pragma omp target enter data map(to: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: A.mgData[0].rc[:1])
-#pragma omp target enter data map(to: A.mgData[0].rc[0].values[:nc])
-#endif
-
-    // Perform restriction operation using simple injection
-    // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
-    ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
-
-//// Method 2:
-#ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(from: A.mgData[0].rc[0].values[:nc])
-#pragma omp target exit data map(release: A.mgData[0].rc[:1])
-// #pragma omp target exit data map(release: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-// #pragma omp target exit data map(release: A.mgData[0].Axf[:1])
-// #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
-// #pragma omp target exit data map(release: A.mgData[:1])
-// #pragma omp target exit data map(release: A)
-#pragma omp target exit data map(release: r.values[:A.localNumberOfRows])
-#endif
-
-    ierr = ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
-
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
-// #pragma omp target enter data map(to: A)
-// #pragma omp target enter data map(to: A.mgData[:1])
-// #pragma omp target enter data map(to: A.mgData[0].f2cOperator[:nc])
-#pragma omp target enter data map(to: A.mgData[0].xc[:1])
-#pragma omp target enter data map(to: A.mgData[0].xc[0].values[:nc])
-#endif
-
-    // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
-    ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
-
-#ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
-#pragma omp target exit data map(release: A.mgData[0].xc[0].values[:nc])
-#pragma omp target exit data map(release: A.mgData[0].xc[:1])
-// #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
-// #pragma omp target exit data map(release: A.mgData[:1])
-// #pragma omp target exit data map(release: A)
-#endif
-
-    // Executed on the HOST only (for now):
-    // NOTE: read: non-MGData part of A, r and x; write: x.
-    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
-    for (int i=0; i< numberOfPostsmootherSteps; ++i)
-      ierr += ComputeSYMGS(A, r, x);
-
-    if (ierr!=0)
-      return ierr;
-  }
-  else {
-    // Executed on the HOST only:
-    // NOTE: read: non-MGData part of A, r and x; write: x.
-    ierr = ComputeSYMGS(A, r, x);
-    if (ierr!=0) return ierr;
-  }
-  return 0;
-}
-
 int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
   assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
 
@@ -165,13 +55,11 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
 
     // Note: read: non-MGData of A, x; write: A.mgData->Axf.
     ierr = ComputeSPMV_FromCG(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
-    // ierr = ComputeSPMV_FromComputeMG(A, x); if (ierr!=0) return ierr;
     // Perform restriction operation using simple injection
     // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
     ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
@@ -190,7 +78,6 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
   } else {
@@ -202,7 +89,6 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
 #endif
     ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
   }

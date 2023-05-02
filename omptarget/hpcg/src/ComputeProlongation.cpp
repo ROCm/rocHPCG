@@ -36,10 +36,6 @@
   @return Returns zero on success and a non-zero value otherwise.
 */
 int ComputeProlongation(const SparseMatrix & A, Vector & x) {
-
-  // double * xfv = x.values;
-  // double * xcv = A.mgData->xc->values;
-  // local_int_t * f2c = A.mgData->f2cOperator;
   local_int_t nc = A.mgData->rc->localLength;
 
 #ifndef HPCG_NO_OPENMP

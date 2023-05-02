@@ -38,11 +38,6 @@
   @see ComputeSPMV_ref
 */
 int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
-  A.isSpmvOptimized = false;
-  return ComputeSPMV_ref(A, x, y);
-}
-
-int ComputeSPMV_FromCG( const SparseMatrix & A, Vector & x, Vector & y) {
   assert(x.localLength >= A.localNumberOfColumns); // Test vector lengths
   assert(y.localLength >= A.localNumberOfRows);
 

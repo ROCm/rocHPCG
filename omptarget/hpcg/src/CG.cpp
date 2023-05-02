@@ -56,7 +56,7 @@
 
   @see CG_ref()
 */
-int CG_Offload(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
+int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr, double & normr0,
     double * times, bool doPreconditioning) {
 
@@ -84,7 +84,7 @@ int CG_Offload(const SparseMatrix & A, CGData & data, const Vector & b, Vector &
   CopyVector_Offload(x, p);
 
   // Map data object and sub-elements to the device:
-  TICK(); ComputeSPMV_FromCG(A, p, Ap); TOCK(t3); // Ap = A*p
+  TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
   TICK(); ComputeDotProduct_Offload(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
@@ -100,7 +100,7 @@ int CG_Offload(const SparseMatrix & A, CGData & data, const Vector & b, Vector &
   for (int k=1; k<=max_iter && normr/normr0 > tolerance * (1.0 + 1.0e-6); k++ ) {
     TICK();
     if (doPreconditioning)
-      ComputeMG_Offload(A, r, z); // Apply preconditioner
+      ComputeMG(A, r, z); // Apply preconditioner
     else
       CopyVector_Offload(r, z); // copy r to z (no preconditioning)
     TOCK(t5); // Preconditioner apply time
@@ -115,7 +115,7 @@ int CG_Offload(const SparseMatrix & A, CGData & data, const Vector & b, Vector &
       TICK(); ComputeWAXPBY(nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
     }
 
-    TICK(); ComputeSPMV_FromCG(A, p, Ap); TOCK(t3); // Ap = A*p
+    TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
     TICK(); ComputeDotProduct_Offload(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
     alpha = rtz/pAp;
     // printf("k = %d, beta = %f alpha (rtz = %f, pAp = %f) = %f\n", k, beta, rtz, pAp, alpha);

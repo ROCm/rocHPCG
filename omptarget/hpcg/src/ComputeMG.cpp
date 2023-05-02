@@ -34,7 +34,7 @@
 
   @see ComputeMG_ref
 */
-int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
+int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
   assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
 
   // initialize x to zero
@@ -59,11 +59,11 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
 #endif
 
     // Note: read: non-MGData of A, x; write: A.mgData->Axf.
-    ierr = ComputeSPMV_FromCG(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
+    ierr = ComputeSPMV(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
     // Perform restriction operation using simple injection
     // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
     ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
-    ierr = ComputeMG_Offload(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
+    ierr = ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
     // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
     ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
 

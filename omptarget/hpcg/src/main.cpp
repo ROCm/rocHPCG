@@ -306,7 +306,7 @@ int main(int argc, char * argv[]) {
   for (int i=0; i< numberOfCalls; ++i) {
     ZeroVector_Offload(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
-    ierr = CG_Offload( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
+    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
     if (ierr) ++err_count; // count the number of errors in CG
     // Convergence check accepts an error of no more than 6 significant digits of relTolerance
     if (normr / normr0 > refTolerance * (1.0 + 1.0e-6)) ++tolerance_failures; // the number of failures to reduce residual
@@ -364,12 +364,11 @@ int main(int argc, char * argv[]) {
 
   for (int i=0; i< numberOfCgSets; ++i) {
     ZeroVector_Offload(x); // Zero out x
-    ierr = CG_Offload( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
+    ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
     printf("CG call %d is Done!\n", i);
-    // if (i == 2) break;
   }
 
   // Clean-up device mapping of A:

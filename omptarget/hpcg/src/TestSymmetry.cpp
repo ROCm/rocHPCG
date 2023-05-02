@@ -32,6 +32,7 @@ using std::endl;
 #include "hpcg.hpp"
 
 #include "ComputeSPMV.hpp"
+#include "ComputeSPMV_ref.hpp"
 #include "ComputeMG.hpp"
 #include "ComputeDotProduct.hpp"
 #include "ComputeResidual.hpp"
@@ -95,7 +96,7 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 
  // Next, compute x'*A*y
  ComputeDotProduct_Offload(nrow, y_ncol, y_ncol, yNorm2, t4, A.isDotProductOptimized);
- int ierr = ComputeSPMV_FromCG(A, y_ncol, z_ncol); // z_nrow = A*y_overlap
+ int ierr = ComputeSPMV(A, y_ncol, z_ncol); // z_nrow = A*y_overlap
  if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
  double xtAy = 0.0;
  ierr = ComputeDotProduct_Offload(nrow, x_ncol, z_ncol, xtAy, t4, A.isDotProductOptimized); // x'*A*y
@@ -103,7 +104,7 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 
  // Next, compute y'*A*x
  ComputeDotProduct_Offload(nrow, x_ncol, x_ncol, xNorm2, t4, A.isDotProductOptimized);
- ierr = ComputeSPMV_FromCG(A, x_ncol, z_ncol); // b_computed = A*x_overlap
+ ierr = ComputeSPMV(A, x_ncol, z_ncol); // b_computed = A*x_overlap
  if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
  double ytAx = 0.0;
  ierr = ComputeDotProduct_Offload(nrow, y_ncol, z_ncol, ytAx, t4, A.isDotProductOptimized); // y'*A*x
@@ -118,14 +119,14 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  // Test symmetry of multi-grid
 
  // Compute x'*Minv*y
- ierr = ComputeMG_Offload(A, y_ncol, z_ncol); // z_ncol = Minv*y_ncol
+ ierr = ComputeMG(A, y_ncol, z_ncol); // z_ncol = Minv*y_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double xtMinvy = 0.0;
  ierr = ComputeDotProduct_Offload(nrow, x_ncol, z_ncol, xtMinvy, t4, A.isDotProductOptimized); // x'*Minv*y
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  // Next, compute z'*Minv*x
- ierr = ComputeMG_Offload(A, x_ncol, z_ncol); // z_ncol = Minv*x_ncol
+ ierr = ComputeMG(A, x_ncol, z_ncol); // z_ncol = Minv*x_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double ytMinvx = 0.0;
  ierr = ComputeDotProduct_Offload(nrow, y_ncol, z_ncol, ytMinvx, t4, A.isDotProductOptimized); // y'*Minv*x
@@ -154,7 +155,7 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  int numberOfCalls = 2;
  double residual = 0.0;
  for (int i=0; i< numberOfCalls; ++i) {
-   ierr = ComputeSPMV(A, x_ncol, z_ncol); // b_computed = A*x_overlap
+   ierr = ComputeSPMV_ref(A, x_ncol, z_ncol); // b_computed = A*x_overlap
    if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
    if ((ierr = ComputeResidual(A.localNumberOfRows, b, z_ncol, residual)))
      HPCG_fout << "Error in call to compute_residual: " << ierr << ".\n" << endl;

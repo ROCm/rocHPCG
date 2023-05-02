@@ -62,10 +62,11 @@ inline void ZeroVector(Vector & v) {
 }
 
 inline void ZeroVector_Offload(Vector & v) {
+  local_int_t localLength = v.localLength;
 #ifndef HPCG_NO_OPENMP
 #pragma omp target teams distribute parallel for
 #endif
-  for (int i = 0; i < v.localLength; ++i) v.values[i] = 0.0;
+  for (int i = 0; i < localLength; ++i) v.values[i] = 0.0;
 }
 /*!
   Multiply (scale) a specific vector entry by a given value.

@@ -113,43 +113,43 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  if (testsymmetry_data.depsym_spmv > 1.0) ++testsymmetry_data.count_fail;  // If the difference is > 1, count it wrong
  if (A.geom->rank==0) HPCG_fout << "Departure from symmetry (scaled) for SpMV abs(x'*A*y - y'*A*x) = " << testsymmetry_data.depsym_spmv << endl;
 
-//  printf("xtAy = %f, ytAx = %f, testsymmetry_data.depsym_spmv = %f\n", xtAy, ytAx, testsymmetry_data.depsym_spmv);
+ printf("xtAy = %f, ytAx = %f, testsymmetry_data.depsym_spmv = %f\n", xtAy, ytAx, testsymmetry_data.depsym_spmv);
 
 #ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
 
  // Test symmetry of multi-grid
 
  // Compute x'*Minv*y
- ierr = ComputeMG(A, y_ncol, z_ncol); // z_ncol = Minv*y_ncol
+ ierr = ComputeMG_Offload(A, y_ncol, z_ncol); // z_ncol = Minv*y_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double xtMinvy = 0.0;
  #ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: x_ncol.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target enter data map(to: x_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
  ierr = ComputeDotProduct_Offload(nrow, x_ncol, z_ncol, xtMinvy, t4, A.isDotProductOptimized); // x'*Minv*y
 #ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(release: x_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: z_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(release: x_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(release: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  // Next, compute z'*Minv*x
- ierr = ComputeMG(A, x_ncol, z_ncol); // z_ncol = Minv*x_ncol
+ ierr = ComputeMG_Offload(A, x_ncol, z_ncol); // z_ncol = Minv*x_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double ytMinvx = 0.0;
 #ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: y_ncol.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target enter data map(to: y_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
  ierr = ComputeDotProduct_Offload(nrow, y_ncol, z_ncol, ytMinvx, t4, A.isDotProductOptimized); // y'*Minv*x
 #ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(release: y_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: z_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(release: y_ncol.values[:A.localNumberOfColumns])
+// #pragma omp target exit data map(release: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
@@ -157,12 +157,18 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  if (testsymmetry_data.depsym_mg > 1.0) ++testsymmetry_data.count_fail;  // If the difference is > 1, count it wrong
  if (A.geom->rank==0) HPCG_fout << "Departure from symmetry (scaled) for MG abs(x'*Minv*y - y'*Minv*x) = " << testsymmetry_data.depsym_mg << endl;
 
-//  printf("xtMinvy = %f, ytMinvx = %f, testsymmetry_data.depsym_mg = %f\n", xtMinvy, ytMinvx, testsymmetry_data.depsym_mg);
+ printf("xtMinvy = %f, ytMinvx = %f, testsymmetry_data.depsym_mg = %f\n", xtMinvy, ytMinvx, testsymmetry_data.depsym_mg);
 
  // Clean-up device mapping of A:
  UnMapMultiGridSparseMatrix(A);
 #ifndef HPCG_NO_OPENMP
 #pragma omp target exit data map(release: A)
+#endif // End HPCG_NO_OPENMP
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
 #endif // End HPCG_NO_OPENMP
 
  CopyVector(xexact, x_ncol); // Copy exact answer into overlap vector

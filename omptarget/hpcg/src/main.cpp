@@ -255,8 +255,6 @@ int main(int argc, char * argv[]) {
   testcg_data.count_pass = testcg_data.count_fail = 0;
   TestCG(A, data, b, x, testcg_data);
 
-  printf("DONE WITH TestCG\n");
-
   TestSymmetryData testsymmetry_data;
   TestSymmetry(A, b, xexact, testsymmetry_data);
 
@@ -284,6 +282,14 @@ int main(int argc, char * argv[]) {
 #pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
 #endif // End HPCG_NO_OPENMP
 
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
   niters = 0;
   normr = 0.0;
   normr0 = 0.0;
@@ -298,9 +304,9 @@ int main(int argc, char * argv[]) {
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
-    ZeroVector(x); // start x at all zeros
+    ZeroVector_Offload(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
-    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
+    ierr = CG_Offload( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
     if (ierr) ++err_count; // count the number of errors in CG
     // Convergence check accepts an error of no more than 6 significant digits of relTolerance
     if (normr / normr0 > refTolerance * (1.0 + 1.0e-6)) ++tolerance_failures; // the number of failures to reduce residual
@@ -335,6 +341,7 @@ int main(int argc, char * argv[]) {
   // The variable total_runtime is the target benchmark execution time in seconds
 
   double total_runtime = params.runningTime;
+  printf("total_runtime = %f  opt_worst_time = %f\n", total_runtime, opt_worst_time);
   int numberOfCgSets = int(total_runtime / opt_worst_time) + 1; // Run at least once, account for rounding
 
 #ifdef HPCG_DEBUG
@@ -374,6 +381,14 @@ int main(int argc, char * argv[]) {
   // Clean-up device array mappings:
 #ifndef HPCG_NO_OPENMP
 #pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(release: data.z.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.r.values[:A.localNumberOfRows])
 #endif // End HPCG_NO_OPENMP
 
   // Compute difference between known exact solution and computed solution

@@ -109,7 +109,6 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     int expected_niters = testcg_data.expected_niters_no_prec;
     if (k==1) expected_niters = testcg_data.expected_niters_prec;
     for (int i=0; i< numberOfCgCalls; ++i) {
-      printf("START ITERATION! K = %d\n", k);
       ZeroVector_Offload(x); // Zero out x
       int ierr = CG_Offload(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1);
       if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;

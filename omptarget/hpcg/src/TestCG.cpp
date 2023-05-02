@@ -50,8 +50,6 @@ using std::endl;
   @see CG()
  */
 int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData & testcg_data) {
-
-
   // Use this array for collecting timing information
   std::vector< double > times(8,0.0);
   // Temporary storage for holding original diagonal and RHS
@@ -78,6 +76,25 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
   ReplaceMatrixDiagonal(A, exaggeratedDiagA);
 
+  // Map Matrix A to the device:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: A)
+#endif // End HPCG_NO_OPENMP
+  MapMultiGridSparseMatrix(A);
+
+  // Map additional arrays:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
   int niters = 0;
   double normr = 0.0;
   double normr0 = 0.0;
@@ -92,8 +109,9 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     int expected_niters = testcg_data.expected_niters_no_prec;
     if (k==1) expected_niters = testcg_data.expected_niters_prec;
     for (int i=0; i< numberOfCgCalls; ++i) {
-      ZeroVector(x); // Zero out x
-      int ierr = CG(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1);
+      printf("START ITERATION! K = %d\n", k);
+      ZeroVector_Offload(x); // Zero out x
+      int ierr = CG_Offload(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1);
       if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
       if (niters <= expected_niters) {
         ++testcg_data.count_pass;
@@ -109,6 +127,25 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
       }
     }
   }
+
+  // Clean-up device mapping of A:
+  UnMapMultiGridSparseMatrix(A);
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: A)
+#endif // End HPCG_NO_OPENMP
+
+  // Clean-up device array mappings:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
+
+#ifndef HPCG_NO_OPENMP
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.p.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: data.z.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
 
   // Restore matrix diagonal and RHS
   ReplaceMatrixDiagonal(A, origDiagA);

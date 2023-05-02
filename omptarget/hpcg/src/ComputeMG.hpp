@@ -19,4 +19,6 @@
 
 int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x);
 
+int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x);
+
 #endif // COMPUTEMG_HPP

@@ -369,6 +369,10 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
 #endif
     doc.add("Final Summary","");
     bool isValidRun = (testcg_data.count_fail==0) && (testsymmetry_data.count_fail==0) && (testnorms_data.pass) && (!global_failure);
+    // printf(" testcg_data.count_fail = %d (== 0)\n", testcg_data.count_fail);
+    // printf(" testsymmetry_data.count_fail = %d (== 0)\n", testsymmetry_data.count_fail);
+    // printf(" testnorms_data.pass = %d (== 1)\n", testnorms_data.pass);
+    // printf(" global_failure = %d (== 0)\n", global_failure);
     if (isValidRun) {
       doc.get("Final Summary")->add("HPCG result is VALID with a GFLOP/s rating of", totalGflops);
       doc.get("Final Summary")->add("HPCG 2.4 rating for historical reasons is", totalGflops24);

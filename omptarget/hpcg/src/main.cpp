@@ -62,83 +62,6 @@ using std::endl;
 #include "TestNorms.hpp"
 
 
-void MapMultiGridSparseMatrix(SparseMatrix &A) {
-  int totalNonZeroValues = 27 * A.localNumberOfRows;
-#ifndef HPCG_NO_OPENMP
-#ifndef HPCG_CONTIGUOUS_ARRAYS
-// If 1 array per row is used:
-#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
-    for (int i = 0; i < A.localNumberOfRows; ++i) {
-#pragma omp target enter data map(to: A.matrixValues[i][:A.nonzerosInRow[i]])
-#pragma omp target enter data map(to: A.mtxIndL[i][:A.nonzerosInRow[i]])
-    }
-#else
-// If 1 array per matrix is used:
-#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.matrixValues[0][:totalNonZeroValues])
-#pragma omp target enter data map(to: A.mtxIndL[0][:totalNonZeroValues])
-
-    // Connect the pointers in the pointer array with the pointed positions
-    // inside the contiguous memory array:
-#pragma omp target teams distribute parallel for
-    for (local_int_t i = 1; i < A.localNumberOfRows; ++i) {
-      A.mtxIndL[i] = A.mtxIndL[0] + i * 27;
-      A.matrixValues[i] = A.matrixValues[0] + i * 27;
-    }
-#endif // End HPCG_CONTIGUOUS_ARRAYS
-#endif // End HPCG_NO_OPENMP
-
-  // Recursive call to make sure ALL layers are mapped:
-  if (A.mgData != 0) {
-    local_int_t nc = A.mgData->rc->localLength;
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: A.mgData[:1])
-#pragma omp target enter data map(to: A.mgData[0].Axf[:1])
-#pragma omp target enter data map(to: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: A.mgData[0].f2cOperator[:nc])
-#pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.Ac[:1])
-#endif // End HPCG_NO_OPENMP
-    MapMultiGridSparseMatrix(*A.Ac);
-  }
-}
-
-void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
-  int totalNonZeroValues = 27 * A.localNumberOfRows;
-  // Recursive call to make sure ALL layers are unmapped:
-  if (A.mgData != 0) {
-    local_int_t nc = A.mgData->rc->localLength;
-    UnMapMultiGridSparseMatrix(*A.Ac);
-#ifndef HPCG_NO_OPENMP
-#pragma omp target exit data map(release: A.Ac[:1])
-#pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
-#pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
-#pragma omp target exit data map(from: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: A.mgData[0].Axf[:1])
-#pragma omp target exit data map(release: A.mgData[:1])
-#endif // End HPCG_NO_OPENMP
-  }
-#ifndef HPCG_NO_OPENMP
-#ifndef HPCG_CONTIGUOUS_ARRAYS
-// If 1 array per row is used:
-    for (int i = 0; i < A.localNumberOfRows; ++i) {
-#pragma omp target exit data map(release: A.matrixValues[i][:A.nonzerosInRow[i]])
-#pragma omp target exit data map(release: A.mtxIndL[i][:A.nonzerosInRow[i]])
-    }
-#pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
-#else
-// If 1 array per matrix is used:
-#pragma omp target exit data map(release: A.matrixValues[0][:totalNonZeroValues])
-#pragma omp target exit data map(release: A.mtxIndL[0][:totalNonZeroValues])
-#pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
-#endif // End HPCG_CONTIGUOUS_ARRAYS
-#endif // End HPCG_NO_OPENMP
-}
-
 /*!
   Main driver program: Construct synthetic problem, run V&V tests, compute benchmark parameters, run benchmark, report results.
 
@@ -278,7 +201,6 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Reference CG Timing Phase //
   ///////////////////////////////
-
   printf("===> Reference CG Timing Phase\n");
 
 #ifdef HPCG_DEBUG
@@ -329,26 +251,11 @@ int main(int argc, char * argv[]) {
   t1 = mytimer();
 #endif
 
-  // Map Matrix A to the device:
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A)
-#endif // End HPCG_NO_OPENMP
-  MapMultiGridSparseMatrix(A);
-
-  // Map additional arrays:
-#ifndef HPCG_NO_OPENMP
-#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
-
-// #ifndef HPCG_NO_OPENMP
-// #pragma omp target enter data map(to: data[:1])
-// #pragma omp target enter data map(to: data[:1])
-// #endif // End HPCG_NO_OPENMP
-
   TestCGData testcg_data;
   testcg_data.count_pass = testcg_data.count_fail = 0;
   TestCG(A, data, b, x, testcg_data);
+
+  printf("DONE WITH TestCG\n");
 
   TestSymmetryData testsymmetry_data;
   TestSymmetry(A, b, xexact, testsymmetry_data);
@@ -365,6 +272,17 @@ int main(int argc, char * argv[]) {
   // Optimized CG Setup Phase //
   //////////////////////////////
   printf("Optimized CG Setup Phase\n");
+
+  // Map Matrix A to the device:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: A)
+#endif // End HPCG_NO_OPENMP
+  MapMultiGridSparseMatrix(A);
+
+  // Map additional arrays:
+#ifndef HPCG_NO_OPENMP
+#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
+#endif // End HPCG_NO_OPENMP
 
   niters = 0;
   normr = 0.0;
@@ -437,15 +355,15 @@ int main(int argc, char * argv[]) {
   printf("numberOfCgSets = %d\n", numberOfCgSets);
   printf("optMaxIters = %d\n", optMaxIters);
 
-  for (int i=0; i< numberOfCgSets; ++i) {
-    ZeroVector(x); // Zero out x
-    ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
-    if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
-    if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
-    testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
-    printf("CG call %d is Done!\n", i);
-    // if (i == 2) break;
-  }
+  // for (int i=0; i< numberOfCgSets; ++i) {
+  //   ZeroVector(x); // Zero out x
+  //   ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
+  //   if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
+  //   if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
+  //   testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
+  //   printf("CG call %d is Done!\n", i);
+  //   // if (i == 2) break;
+  // }
 
   // Clean-up device mapping of A:
   UnMapMultiGridSparseMatrix(A);

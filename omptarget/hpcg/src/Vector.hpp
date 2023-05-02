@@ -60,6 +60,13 @@ inline void ZeroVector(Vector & v) {
   for (int i=0; i<localLength; ++i) vv[i] = 0.0;
   return;
 }
+
+inline void ZeroVector_Offload(Vector & v) {
+#ifndef HPCG_NO_OPENMP
+#pragma omp target teams distribute parallel for
+#endif
+  for (int i = 0; i < v.localLength; ++i) v.values[i] = 0.0;
+}
 /*!
   Multiply (scale) a specific vector entry by a given value.
 
@@ -91,11 +98,18 @@ inline void FillRandomVector(Vector & v) {
   @param[in] w Output vector
  */
 inline void CopyVector(const Vector & v, Vector & w) {
+  assert(w.localLength >= v.localLength);
+  for (int i = 0; i < v.localLength; ++i) w.values[i] = v.values[i];
+  return;
+}
+
+inline void CopyVector_Offload(const Vector & v, Vector & w) {
   local_int_t localLength = v.localLength;
   assert(w.localLength >= localLength);
-  double * vv = v.values;
-  double * wv = w.values;
-  for (int i=0; i<localLength; ++i) wv[i] = vv[i];
+#ifndef HPCG_NO_OPENMP
+#pragma omp target teams distribute parallel for
+#endif
+  for (int i = 0; i < localLength; ++i) w.values[i] = v.values[i];
   return;
 }
 

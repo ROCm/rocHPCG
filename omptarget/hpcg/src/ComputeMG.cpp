@@ -143,3 +143,73 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
   }
   return 0;
 }
+
+int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
+  assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
+
+  // initialize x to zero
+  ZeroVector_Offload(x);
+
+  int ierr = 0;
+  if (A.mgData != 0) { // Go to next coarse level if defined
+    local_int_t nc = A.mgData->rc->localLength;
+
+    // Executed on the HOST only (for now):
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+    if (ierr!=0) return ierr;
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update to(r.values[:A.localNumberOfRows])
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+
+    // This can be executed on DEVICE:
+    // Note: read: non-MGData of A, x; write: A.mgData->Axf.
+    // ierr = ComputeSPMV_FromComputeMG(A, x); if (ierr!=0) return ierr;
+    ierr = ComputeSPMV_FromCG(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
+
+    // Perform restriction operation using simple injection
+    // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
+    ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
+
+    ierr = ComputeMG_Offload(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
+
+    // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
+    ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
+
+    // Executed on the HOST only (for now):
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+    if (ierr!=0) return ierr;
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update to(r.values[:A.localNumberOfRows])
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+  }
+  else {
+    // Executed on the HOST only:
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
+#ifndef HPCG_NO_OPENMP
+#pragma omp target update to(r.values[:A.localNumberOfRows])
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+  }
+  return 0;
+}

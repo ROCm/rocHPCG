@@ -165,21 +165,17 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-#pragma omp target update to(r.values[:A.localNumberOfRows])
+// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
 
-    // This can be executed on DEVICE:
     // Note: read: non-MGData of A, x; write: A.mgData->Axf.
-    // ierr = ComputeSPMV_FromCG(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
-    ierr = ComputeSPMV_FromComputeMG(A, x); if (ierr!=0) return ierr;
-
+    ierr = ComputeSPMV_FromCG(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
+    // ierr = ComputeSPMV_FromComputeMG(A, x); if (ierr!=0) return ierr;
     // Perform restriction operation using simple injection
     // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
     ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
-
     ierr = ComputeMG_Offload(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
-
     // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
     ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
 
@@ -194,11 +190,10 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-#pragma omp target update to(r.values[:A.localNumberOfRows])
+// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
-  }
-  else {
+  } else {
     // Executed on the HOST only:
     // NOTE: read: non-MGData part of A, r and x; write: x.
 #ifndef HPCG_NO_OPENMP
@@ -207,7 +202,7 @@ int ComputeMG_Offload(const SparseMatrix  & A, const Vector & r, Vector & x) {
 #endif
     ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
 #ifndef HPCG_NO_OPENMP
-#pragma omp target update to(r.values[:A.localNumberOfRows])
+// #pragma omp target update to(r.values[:A.localNumberOfRows])
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
   }

@@ -414,8 +414,6 @@ int main(int argc, char * argv[]) {
   DeleteVector(b_computed);
   delete [] testnorms_data.values;
 
-
-
   HPCG_Finalize();
 
   // Finish up

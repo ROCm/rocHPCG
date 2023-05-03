@@ -55,9 +55,6 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
 #endif
 
   const local_int_t nrow = A.localNumberOfRows;
-  double ** matrixDiagonal = A.matrixDiagonal;  // An array of pointers to the diagonal entries A.matrixValues
-  const double * const rv = r.values;
-  double * const xv = x.values;
 
   // The loop below is not a parallel loop across rows due to reading
   // and writing of xv.
@@ -66,16 +63,16 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
     const double * const currentValues = A.matrixValues[i];
     const local_int_t * const currentColIndices = A.mtxIndL[i];
     const int currentNumberOfNonzeros = A.nonzerosInRow[i];
-    const double currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
-    double sum = rv[i]; // RHS value
+    const double currentDiagonal = A.matrixDiagonal[i][0]; // Current diagonal value
+    double sum = r.values[i]; // RHS value
 
     for (int j = 0; j < currentNumberOfNonzeros; j++) {
       local_int_t curCol = currentColIndices[j];
-      sum -= currentValues[j] * xv[curCol];
+      sum -= currentValues[j] * x.values[curCol];
     }
-    sum += xv[i] * currentDiagonal; // Remove diagonal contribution from previous loop
+    sum += x.values[i] * currentDiagonal; // Remove diagonal contribution from previous loop
 
-    xv[i] = sum/currentDiagonal;
+    x.values[i] = sum/currentDiagonal;
   }
 
   // Now the back sweep.
@@ -84,16 +81,16 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
     const double * const currentValues = A.matrixValues[i];
     const local_int_t * const currentColIndices = A.mtxIndL[i];
     const int currentNumberOfNonzeros = A.nonzerosInRow[i];
-    const double currentDiagonal = matrixDiagonal[i][0]; // Current diagonal value
-    double sum = rv[i]; // RHS value
+    const double currentDiagonal = A.matrixDiagonal[i][0]; // Current diagonal value
+    double sum = r.values[i]; // RHS value
 
     for (int j = 0; j < currentNumberOfNonzeros; j++) {
       local_int_t curCol = currentColIndices[j];
-      sum -= currentValues[j] * xv[curCol];
+      sum -= currentValues[j] * x.values[curCol];
     }
-    sum += xv[i] * currentDiagonal; // Remove diagonal contribution from previous loop
+    sum += x.values[i] * currentDiagonal; // Remove diagonal contribution from previous loop
 
-    xv[i] = sum/currentDiagonal;
+    x.values[i] = sum/currentDiagonal;
   }
 
   return 0;

@@ -169,6 +169,22 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
       A.matrixValues[i] = A.matrixValues[0] + i * 27;
     }
 #endif // End HPCG_CONTIGUOUS_ARRAYS
+
+// Copy diagonal to device:
+#pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.matrixDiagonal[:A.localNumberOfRows])
+#pragma omp target teams distribute parallel for
+    for (int i = 0; i < A.localNumberOfRows; ++i) {
+      const local_int_t * const currentColIndices = A.mtxIndL[i];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[i];
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = currentColIndices[j];
+        if (curCol == i) {
+          A.matrixDiagonal[i] = &A.matrixValues[i][j];
+        }
+      }
+    }
 #endif // End HPCG_OPENMP_TARGET
 
   // Recursive call to make sure ALL layers are mapped:
@@ -183,7 +199,6 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target enter data map(to: A.mgData[0].rc[0].values[:nc])
 #pragma omp target enter data map(to: A.mgData[0].xc[:1])
 #pragma omp target enter data map(to: A.mgData[0].xc[0].values[:nc])
-#pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.Ac[:1])
 #endif // End HPCG_OPENMP_TARGET
     MapMultiGridSparseMatrix(*A.Ac);
@@ -198,7 +213,6 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
     UnMapMultiGridSparseMatrix(*A.Ac);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A.Ac[:1])
-#pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
 #pragma omp target exit data map(release: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
 #pragma omp target exit data map(release: A.mgData[0].Axf[:1])
@@ -210,6 +224,8 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #endif // End HPCG_OPENMP_TARGET
   }
 #ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.matrixDiagonal[:A.localNumberOfRows])
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used:
     for (int i = 0; i < A.localNumberOfRows; ++i) {

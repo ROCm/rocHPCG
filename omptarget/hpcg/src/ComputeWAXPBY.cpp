@@ -46,17 +46,29 @@ int ComputeWAXPBY(const local_int_t n, const double alpha, const Vector & x,
 
   if (alpha==1.0) {
 #ifndef HPCG_NO_OPENMP
-    #pragma omp target teams distribute parallel for
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
 #endif
     for (local_int_t i = 0; i < n; i++) w.values[i] = x.values[i] + beta * y.values[i];
   } else if (beta==1.0) {
 #ifndef HPCG_NO_OPENMP
-    #pragma omp target teams distribute parallel for
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
 #endif
     for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + y.values[i];
   } else  {
 #ifndef HPCG_NO_OPENMP
-    #pragma omp target teams distribute parallel for
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
 #endif
     for (local_int_t i = 0; i < n; i++) w.values[i] = alpha * x.values[i] + beta * y.values[i];
   }

@@ -86,7 +86,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   // Map data object and sub-elements to the device:
   TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
-  TICK(); ComputeDotProduct_Offload(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+  TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
@@ -107,21 +107,21 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 
     if (k == 1) {
       TICK(); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
-      TICK(); ComputeDotProduct_Offload(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
     } else {
       oldrtz = rtz;
-      TICK(); ComputeDotProduct_Offload(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
       beta = rtz/oldrtz;
       TICK(); ComputeWAXPBY(nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
     }
 
     TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
-    TICK(); ComputeDotProduct_Offload(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
+    TICK(); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
     alpha = rtz/pAp;
     // printf("k = %d, beta = %f alpha (rtz = %f, pAp = %f) = %f\n", k, beta, rtz, pAp, alpha);
     TICK(); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
             ComputeWAXPBY(nrow, 1.0, r, -alpha, Ap, r, A.isWaxpbyOptimized);  TOCK(t2);// r = r - alpha*Ap
-    TICK(); ComputeDotProduct_Offload(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+    TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
     normr = sqrt(normr);
 #ifdef HPCG_DEBUG
     if (A.geom->rank==0 && (k%print_freq == 0 || k == max_iter))
@@ -145,7 +145,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 
 void MapMultiGridSparseMatrix(SparseMatrix &A) {
   int totalNonZeroValues = 27 * A.localNumberOfRows;
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used:
 #pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
@@ -169,12 +169,12 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
       A.matrixValues[i] = A.matrixValues[0] + i * 27;
     }
 #endif // End HPCG_CONTIGUOUS_ARRAYS
-#endif // End HPCG_NO_OPENMP
+#endif // End HPCG_OPENMP_TARGET
 
   // Recursive call to make sure ALL layers are mapped:
   if (A.mgData != 0) {
     local_int_t nc = A.mgData->rc->localLength;
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A.mgData[:1])
 #pragma omp target enter data map(to: A.mgData[0].Axf[:1])
 #pragma omp target enter data map(to: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
@@ -185,7 +185,7 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target enter data map(to: A.mgData[0].xc[0].values[:nc])
 #pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.Ac[:1])
-#endif // End HPCG_NO_OPENMP
+#endif // End HPCG_OPENMP_TARGET
     MapMultiGridSparseMatrix(*A.Ac);
   }
 }
@@ -196,7 +196,7 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
   if (A.mgData != 0) {
     local_int_t nc = A.mgData->rc->localLength;
     UnMapMultiGridSparseMatrix(*A.Ac);
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A.Ac[:1])
 #pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
@@ -207,9 +207,9 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target exit data map(release: A.mgData[0].xc[0].values[:nc])
 #pragma omp target exit data map(release: A.mgData[0].xc[:1])
 #pragma omp target exit data map(release: A.mgData[:1])
-#endif // End HPCG_NO_OPENMP
+#endif // End HPCG_OPENMP_TARGET
   }
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used:
     for (int i = 0; i < A.localNumberOfRows; ++i) {
@@ -225,5 +225,5 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
 #endif // End HPCG_CONTIGUOUS_ARRAYS
-#endif // End HPCG_NO_OPENMP
+#endif // End HPCG_OPENMP_TARGET
 }

@@ -272,23 +272,20 @@ int main(int argc, char * argv[]) {
   printf("Optimized CG Setup Phase\n");
 
   // Map Matrix A to the device:
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
-#endif // End HPCG_NO_OPENMP
+#endif
   MapMultiGridSparseMatrix(A);
 
   // Map additional arrays:
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
-
-#ifndef HPCG_NO_OPENMP
 #pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
 #pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
 #pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
 #pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
 #pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
+#endif
 
   niters = 0;
   normr = 0.0;
@@ -373,22 +370,19 @@ int main(int argc, char * argv[]) {
 
   // Clean-up device mapping of A:
   UnMapMultiGridSparseMatrix(A);
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
-#endif // End HPCG_NO_OPENMP
+#endif
 
-  // Clean-up device array mappings:
-#ifndef HPCG_NO_OPENMP
+  // Clean-up the rest of the arrays:
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
-
-#ifndef HPCG_NO_OPENMP
 #pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
 #pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
 #pragma omp target exit data map(release: data.z.values[:A.localNumberOfColumns])
 #pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
 #pragma omp target exit data map(release: data.r.values[:A.localNumberOfRows])
-#endif // End HPCG_NO_OPENMP
+#endif
 
   // Compute difference between known exact solution and computed solution
   // All processors are needed here.

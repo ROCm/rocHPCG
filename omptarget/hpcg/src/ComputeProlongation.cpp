@@ -39,7 +39,11 @@ int ComputeProlongation(const SparseMatrix & A, Vector & x) {
   local_int_t nc = A.mgData->rc->localLength;
 
 #ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
 #endif
   // TODO: Somehow note that this loop can be safely vectorized since f2c has no repeated indices
   // This loop is safe to vectorize

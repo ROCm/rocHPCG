@@ -46,7 +46,7 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
 
     // Executed on the HOST only (for now):
     // NOTE: read: non-MGData part of A, r and x; write: x.
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
 #endif
@@ -54,7 +54,7 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
     for (int i=0; i< numberOfPresmootherSteps; ++i)
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
 
@@ -69,7 +69,7 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
 
     // Executed on the HOST only (for now):
     // NOTE: read: non-MGData part of A, r and x; write: x.
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
 #endif
@@ -77,18 +77,18 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
     for (int i=0; i< numberOfPostsmootherSteps; ++i)
       ierr += ComputeSYMGS(A, r, x);
     if (ierr!=0) return ierr;
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
   } else {
     // Executed on the HOST only:
     // NOTE: read: non-MGData part of A, r and x; write: x.
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
 #endif
     ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
   }

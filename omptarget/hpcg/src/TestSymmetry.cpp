@@ -82,32 +82,32 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  double ANorm = 2 * 26.0;
 
  // Map Matrix A to the device:
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
-#endif // End HPCG_NO_OPENMP
+#endif
  MapMultiGridSparseMatrix(A);
 
  // Map additional arrays:
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: x_ncol.values[:A.localNumberOfColumns])
 #pragma omp target enter data map(to: y_ncol.values[:A.localNumberOfColumns])
 #pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
-#endif // End HPCG_NO_OPENMP
+#endif
 
  // Next, compute x'*A*y
- ComputeDotProduct_Offload(nrow, y_ncol, y_ncol, yNorm2, t4, A.isDotProductOptimized);
+ ComputeDotProduct(nrow, y_ncol, y_ncol, yNorm2, t4, A.isDotProductOptimized);
  int ierr = ComputeSPMV(A, y_ncol, z_ncol); // z_nrow = A*y_overlap
  if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
  double xtAy = 0.0;
- ierr = ComputeDotProduct_Offload(nrow, x_ncol, z_ncol, xtAy, t4, A.isDotProductOptimized); // x'*A*y
+ ierr = ComputeDotProduct(nrow, x_ncol, z_ncol, xtAy, t4, A.isDotProductOptimized); // x'*A*y
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  // Next, compute y'*A*x
- ComputeDotProduct_Offload(nrow, x_ncol, x_ncol, xNorm2, t4, A.isDotProductOptimized);
+ ComputeDotProduct(nrow, x_ncol, x_ncol, xNorm2, t4, A.isDotProductOptimized);
  ierr = ComputeSPMV(A, x_ncol, z_ncol); // b_computed = A*x_overlap
  if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
  double ytAx = 0.0;
- ierr = ComputeDotProduct_Offload(nrow, y_ncol, z_ncol, ytAx, t4, A.isDotProductOptimized); // y'*A*x
+ ierr = ComputeDotProduct(nrow, y_ncol, z_ncol, ytAx, t4, A.isDotProductOptimized); // y'*A*x
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  testsymmetry_data.depsym_spmv = std::fabs((long double) (xtAy - ytAx))/((xNorm2*ANorm*yNorm2 + yNorm2*ANorm*xNorm2) * (DBL_EPSILON));
@@ -122,14 +122,14 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  ierr = ComputeMG(A, y_ncol, z_ncol); // z_ncol = Minv*y_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double xtMinvy = 0.0;
- ierr = ComputeDotProduct_Offload(nrow, x_ncol, z_ncol, xtMinvy, t4, A.isDotProductOptimized); // x'*Minv*y
+ ierr = ComputeDotProduct(nrow, x_ncol, z_ncol, xtMinvy, t4, A.isDotProductOptimized); // x'*Minv*y
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  // Next, compute z'*Minv*x
  ierr = ComputeMG(A, x_ncol, z_ncol); // z_ncol = Minv*x_ncol
  if (ierr) HPCG_fout << "Error in call to MG: " << ierr << ".\n" << endl;
  double ytMinvx = 0.0;
- ierr = ComputeDotProduct_Offload(nrow, y_ncol, z_ncol, ytMinvx, t4, A.isDotProductOptimized); // y'*Minv*x
+ ierr = ComputeDotProduct(nrow, y_ncol, z_ncol, ytMinvx, t4, A.isDotProductOptimized); // y'*Minv*x
  if (ierr) HPCG_fout << "Error in call to dot: " << ierr << ".\n" << endl;
 
  testsymmetry_data.depsym_mg = std::fabs((long double) (xtMinvy - ytMinvx))/((xNorm2*ANorm*yNorm2 + yNorm2*ANorm*xNorm2) * (DBL_EPSILON));
@@ -140,15 +140,15 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 
  // Clean-up device mapping of A:
  UnMapMultiGridSparseMatrix(A);
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
-#endif // End HPCG_NO_OPENMP
+#endif
 
-#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
 #pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
 #pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
-#endif // End HPCG_NO_OPENMP
+#endif
 
  CopyVector(xexact, x_ncol); // Copy exact answer into overlap vector
 

@@ -19,8 +19,8 @@
 #include "Vector.hpp"
 #include "CGData.hpp"
 
-void MapMultiGridSparseMatrix(SparseMatrix &A);
-void UnMapMultiGridSparseMatrix(SparseMatrix &A);
+void MapMultiGridSparseMatrix(SparseMatrix &A, bool MapDiagonal);
+void UnMapMultiGridSparseMatrix(SparseMatrix &A, bool UnMapDiagonal);
 
 int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr,  double & normr0,

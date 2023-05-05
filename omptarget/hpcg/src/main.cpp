@@ -271,11 +271,13 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   printf("Optimized CG Setup Phase\n");
 
-  // Map Matrix A to the device:
+  // Map Matrix A to the device but not the diagonal since the diagonal is
+  // not used in any of the device-side computations:
+  bool MapDiagonal = 0;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
 #endif
-  MapMultiGridSparseMatrix(A);
+  MapMultiGridSparseMatrix(A, MapDiagonal);
 
   // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
@@ -365,11 +367,10 @@ int main(int argc, char * argv[]) {
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
-    printf("CG call %d is Done!\n", i);
   }
 
   // Clean-up device mapping of A:
-  UnMapMultiGridSparseMatrix(A);
+  UnMapMultiGridSparseMatrix(A, MapDiagonal);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
 #endif

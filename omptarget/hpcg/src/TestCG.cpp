@@ -76,11 +76,14 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
   ReplaceMatrixDiagonal(A, exaggeratedDiagA);
 
-  // Map Matrix A to the device:
+  // Map Matrix A to the device. For now do not map the diagonal since the
+  // computation involving the diagonal is happening on the host side for
+  // now.
+  bool MapDiagonal = 0;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
 #endif
-  MapMultiGridSparseMatrix(A);
+  MapMultiGridSparseMatrix(A, MapDiagonal);
 
   // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
@@ -125,7 +128,7 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
 
   // Clean-up device mapping of A:
-  UnMapMultiGridSparseMatrix(A);
+  UnMapMultiGridSparseMatrix(A, MapDiagonal);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
 #endif

@@ -81,11 +81,12 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  double xNorm2, yNorm2;
  double ANorm = 2 * 26.0;
 
- // Map Matrix A to the device:
+ // Map Matrix A to the device but not the diagonal since it is never used:
+ bool MapDiagonal = 0;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
 #endif
- MapMultiGridSparseMatrix(A);
+ MapMultiGridSparseMatrix(A, MapDiagonal);
 
  // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
@@ -139,7 +140,7 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 //  printf("xtMinvy = %f, ytMinvx = %f, testsymmetry_data.depsym_mg = %f\n", xtMinvy, ytMinvx, testsymmetry_data.depsym_mg);
 
  // Clean-up device mapping of A:
- UnMapMultiGridSparseMatrix(A);
+ UnMapMultiGridSparseMatrix(A, MapDiagonal);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
 #endif

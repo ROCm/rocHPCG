@@ -18,6 +18,10 @@
  HPCG routine
  */
 
+#ifndef HPCG_NO_MPI
+#include "ExchangeHalo.hpp"
+#endif
+
 #include "ComputeSPMV.hpp"
 #include "ComputeSPMV_ref.hpp"
 
@@ -42,7 +46,13 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
   assert(y.localLength >= A.localNumberOfRows);
 
 #ifndef HPCG_NO_MPI
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#endif
     ExchangeHalo(A, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
 #endif
 
   const local_int_t nrow = A.localNumberOfRows;

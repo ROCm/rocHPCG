@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cassert>
+#include <stdio.h>
 
 #include "ComputeOptimalShapeXYZ.hpp"
 #include "GenerateGeometry.hpp"

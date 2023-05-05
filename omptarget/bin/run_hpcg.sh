@@ -18,6 +18,5 @@ echo "================================================================="
 echo "=== Input file: $HPCG_BIN_DIR/hpcg.dat ==="
 cat  $HPCG_BIN_DIR/hpcg.dat
 echo "================================================================="
-echo $MPI/bin/mpirun -np 2 --mca btl_openib_warn_no_device_params_found 0 $AOMP/bin/gpurun $HPCG_BIN_DIR/xhpcg
-$MPI/bin/mpirun -np 2 --mca btl_openib_warn_no_device_params_found 0 $AOMP/bin/gpurun $HPCG_BIN_DIR/xhpcg
-#$MPI/bin/mpirun -np 2 --mca btl_openib_warn_no_device_params_found 0 $HPCG_BIN_DIR/xhpcg
+echo $MPI/bin/mpirun -np 4 --mca btl_openib_warn_no_device_params_found 0 $AOMP/bin/gpurun $HPCG_BIN_DIR/xhpcg
+$MPI/bin/mpirun -np 4 --mca btl_openib_warn_no_device_params_found 0 $AOMP/bin/gpurun $HPCG_BIN_DIR/xhpcg

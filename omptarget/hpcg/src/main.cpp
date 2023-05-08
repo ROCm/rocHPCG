@@ -118,8 +118,6 @@ int main(int argc, char * argv[]) {
   double t1 = mytimer();
 #endif
 
-  printf("===> SETUP\n");
-
   // Construct the geometry and linear system
   Geometry * geom = new Geometry;
   GenerateGeometry(size, rank, params.numThreads, params.pz, params.zl, params.zu, nx, ny, nz, params.npx, params.npy, params.npz, geom);
@@ -169,8 +167,6 @@ int main(int argc, char * argv[]) {
   // Reference SpMV+MG Timing Phase //
   ////////////////////////////////////
 
-  printf("===> Reference SpMV+MG Timing Phase\n");
-
   // Call Reference SpMV and MG. Compute Optimization time as ratio of times in these routines
 
   local_int_t nrow = A.localNumberOfRows;
@@ -201,7 +197,6 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Reference CG Timing Phase //
   ///////////////////////////////
-  printf("===> Reference CG Timing Phase\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -245,7 +240,6 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////
-  printf("Validation Testing Phase\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -269,7 +263,6 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Optimized CG Setup Phase //
   //////////////////////////////
-  printf("Optimized CG Setup Phase\n");
 
   // Map Matrix A to the device but not the diagonal since the diagonal is
   // not used in any of the device-side computations:
@@ -334,13 +327,11 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Optimized CG Timing Phase //
   ///////////////////////////////
-  printf("Optimized CG Timing Phase\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
 
   double total_runtime = params.runningTime;
-  printf("total_runtime = %f  opt_worst_time = %f\n", total_runtime, opt_worst_time);
   int numberOfCgSets = int(total_runtime / opt_worst_time) + 1; // Run at least once, account for rounding
 
 #ifdef HPCG_DEBUG
@@ -357,9 +348,6 @@ int main(int argc, char * argv[]) {
   TestNormsData testnorms_data;
   testnorms_data.samples = numberOfCgSets;
   testnorms_data.values = new double[numberOfCgSets];
-
-  printf("numberOfCgSets = %d\n", numberOfCgSets);
-  printf("optMaxIters = %d\n", optMaxIters);
 
   for (int i=0; i< numberOfCgSets; ++i) {
     ZeroVector_Offload(x); // Zero out x
@@ -400,7 +388,6 @@ int main(int argc, char * argv[]) {
   ////////////////////
   // Report Results //
   ////////////////////
-  printf("Report Results\n");
 
   // Report results to YAML file
   ReportResults(A, numberOfMgLevels, numberOfCgSets, refMaxIters, optMaxIters, &times[0], testcg_data, testsymmetry_data, testnorms_data, global_failure, quickPath);

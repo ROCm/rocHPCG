@@ -38,9 +38,9 @@ HPCG_DEPS = src/CG.o \
 	    src/ComputeWAXPBY_ref.o \
 	    src/ComputeMG_ref.o \
 	    src/ComputeMG.o \
-		src/ComputeProlongation.o \
+	    src/ComputeProlongation.o \
 	    src/ComputeProlongation_ref.o \
-		src/ComputeRestriction.o \
+	    src/ComputeRestriction.o \
 	    src/ComputeRestriction_ref.o \
 	    src/CheckAspectRatio.o \
 	    src/OutputFile.o \

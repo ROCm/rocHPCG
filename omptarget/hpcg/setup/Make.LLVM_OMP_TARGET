@@ -67,7 +67,7 @@ RM           = /bin/rm -f
 TOUCH        = touch
 
 # Set these environment variables to use this config
-TRIPLE       ?= amdgcn-amd-amdhsa 
+TRIPLE       ?= amdgcn-amd-amdhsa
 OFFLOAD_ARCH ?= gfx90a
 LLVM         ?= $(AOMP)
 #

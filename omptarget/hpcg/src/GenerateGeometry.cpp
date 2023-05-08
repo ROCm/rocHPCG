@@ -21,7 +21,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <cassert>
-#include <stdio.h>
 
 #include "ComputeOptimalShapeXYZ.hpp"
 #include "GenerateGeometry.hpp"
@@ -60,15 +59,13 @@ void GenerateGeometry(int size, int rank, int numThreads,
   int * partz_ids = 0;
   local_int_t * partz_nz = 0;
   int npartz = 0;
-  printf("===> GenerateGeometry: pz = %d\n", pz);
   if (pz==0) { // No variation in nz sizes
     npartz = 1;
     partz_ids = new int[1];
     partz_nz = new local_int_t[1];
     partz_ids[0] = npz;
     partz_nz[0] = nz;
-  }
-  else {
+  } else {
     npartz = 2;
     partz_ids = new int[2];
     partz_ids[0] = pz;
@@ -169,8 +166,3 @@ void GenerateGeometry(int size, int rank, int numThreads,
 
   return;
 }
-
-// void MapGeometryToDevice(Geometry * geom) {
-//   #pragma omp target enter data map(to: geom[:1])
-//   #pragma omp target enter data map(to: geom->partz_ids[:1], geom->partz_ids[:1])
-// }

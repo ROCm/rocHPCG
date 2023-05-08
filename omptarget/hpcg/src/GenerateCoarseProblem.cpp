@@ -101,7 +101,6 @@ void GenerateCoarseProblem(const SparseMatrix & Af) {
   Vector * Axf = new Vector;
   InitializeVector(*rc, Ac->localNumberOfRows);
   InitializeVector(*xc, Ac->localNumberOfColumns);
-  printf("Create AXF with %d length\n", Af.localNumberOfColumns);
   InitializeVector(*Axf, Af.localNumberOfColumns);
   Af.Ac = Ac;
   MGData * mgData = new MGData;

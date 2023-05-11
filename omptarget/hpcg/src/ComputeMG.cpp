@@ -24,6 +24,7 @@
 #include "ComputeSPMV.hpp"
 #include "ComputeRestriction.hpp"
 #include "ComputeProlongation.hpp"
+#include "mytimer.hpp"
 
 /*!
   @param[in] A the known system matrix
@@ -44,19 +45,30 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
   if (A.mgData != 0) { // Go to next coarse level if defined
     local_int_t nc = A.mgData->rc->localLength;
 
-    // Executed on the HOST only (for now):
+    double t_symgs = mytimer();
+
     // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring(A, r, x);
+#else
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
 #endif
-    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
     for (int i=0; i< numberOfPresmootherSteps; ++i)
       ierr += ComputeSYMGS(A, r, x);
-    if (ierr!=0) return ierr;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
-#endif
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
+
+    // printf(" (Size = %d) SYMGS time = %f\n", A.localNumberOfColumns, mytimer() - t_symgs);
 
     // Note: read: non-MGData of A, x; write: A.mgData->Axf.
     ierr = ComputeSPMV(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
@@ -67,22 +79,31 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
     // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
     ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
 
-    // Executed on the HOST only (for now):
     // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring(A, r, x);
+#else
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
 #endif
-    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
     for (int i=0; i< numberOfPostsmootherSteps; ++i)
       ierr += ComputeSYMGS(A, r, x);
-    if (ierr!=0) return ierr;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
-#endif
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
   } else {
-    // Executed on the HOST only:
     // NOTE: read: non-MGData part of A, r and x; write: x.
+#if defined(HPCG_USE_MULTICOLORING)
+    ierr += ComputeSYMGSWithMulitcoloring(A, r, x); if (ierr!=0) return ierr;
+#else
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
 #pragma omp target update from(r.values[:A.localNumberOfRows])
@@ -90,7 +111,8 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
     ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
-#endif
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
   }
   return 0;
 }

@@ -197,6 +197,7 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Reference CG Timing Phase //
   ///////////////////////////////
+  printf("Reference CG Timing Phase:\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -240,6 +241,7 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////
+  printf("Validation Testing Phase:\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -263,14 +265,14 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Optimized CG Setup Phase //
   //////////////////////////////
+  printf("Optimized CG Setup Phase:\n");
 
   // Map Matrix A to the device but not the diagonal since the diagonal is
   // not used in any of the device-side computations:
-  bool MapDiagonal = 0;
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target enter data map(to: A)
 #endif
-  MapMultiGridSparseMatrix(A, MapDiagonal);
+  MapMultiGridSparseMatrix(A);
 
   // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
@@ -298,7 +300,7 @@ int main(int argc, char * argv[]) {
   for (int i=0; i< numberOfCalls; ++i) {
     ZeroVector_Offload(x); // start x at all zeros
     double last_cummulative_time = opt_times[0];
-    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
+    ierr = CG(A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
     if (ierr) ++err_count; // count the number of errors in CG
     // Convergence check accepts an error of no more than 6 significant digits of relTolerance
     if (normr / normr0 > refTolerance * (1.0 + 1.0e-6)) ++tolerance_failures; // the number of failures to reduce residual
@@ -327,12 +329,16 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Optimized CG Timing Phase //
   ///////////////////////////////
+  printf("Optimized CG Timing Phase:\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
 
   double total_runtime = params.runningTime;
   int numberOfCgSets = int(total_runtime / opt_worst_time) + 1; // Run at least once, account for rounding
+
+  printf("opt_worst_time = %f\n", opt_worst_time);
+  printf("numberOfCgSets = %d\n", numberOfCgSets);
 
 #ifdef HPCG_DEBUG
   if (rank==0) {
@@ -358,7 +364,7 @@ int main(int argc, char * argv[]) {
   }
 
   // Clean-up device mapping of A:
-  UnMapMultiGridSparseMatrix(A, MapDiagonal);
+  UnMapMultiGridSparseMatrix(A);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A)
 #endif

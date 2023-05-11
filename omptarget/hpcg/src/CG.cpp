@@ -139,13 +139,22 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 //#ifndef HPCG_NO_MPI
 //  times[6] += t6; // exchange halo time
 //#endif
-  times[0] += mytimer() - t_begin;  // Total time. All done...
+  double total_time = mytimer() - t_begin;
+  times[0] += total_time;  // Total time. All done...
+
+  printf(" Times: DOT: %f  WAXBY: %f  SPMV:  %f  AllReduce: %f  ComputeMG: %f TOTAL: %f (niters = %d (max_iter = %d), doPreconditioning = %d)\n", t1, t2, t3, t4, t5, total_time, niters, max_iter, doPreconditioning);
   return 0;
 }
 
-void MapMultiGridSparseMatrix(SparseMatrix &A, bool MapDiagonal) {
+void MapMultiGridSparseMatrix(SparseMatrix &A) {
   int totalNonZeroValues = 27 * A.localNumberOfRows;
 #ifdef HPCG_OPENMP_TARGET
+
+#if defined(HPCG_USE_MULTICOLORING)
+#pragma omp target enter data map(to: A.colorBounds[:(A.totalColors+1)])
+#pragma omp target enter data map(to: A.colorToRow[:A.localNumberOfRows])
+#endif // End HPCG_USE_MULTICOLORING
+
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used:
 #pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
@@ -170,23 +179,24 @@ void MapMultiGridSparseMatrix(SparseMatrix &A, bool MapDiagonal) {
   }
 #endif // End HPCG_CONTIGUOUS_ARRAYS
 
-  // Copy diagonal to device:
 #pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
-  if (MapDiagonal) {
+
+  // Copy diagonal to device:
+#if defined(HPCG_USE_MULTICOLORING)
 #pragma omp target enter data map(to: A.matrixDiagonal[:A.localNumberOfRows])
 #pragma omp target teams distribute parallel for
-    for (int i = 0; i < A.localNumberOfRows; ++i) {
-      const local_int_t * const currentColIndices = A.mtxIndL[i];
-      const int currentNumberOfNonzeros = A.nonzerosInRow[i];
+  for (int i = 0; i < A.localNumberOfRows; ++i) {
+    const local_int_t * const currentColIndices = A.mtxIndL[i];
+    const int currentNumberOfNonzeros = A.nonzerosInRow[i];
 
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
-        local_int_t curCol = currentColIndices[j];
-        if (curCol == i) {
-          A.matrixDiagonal[i] = &A.matrixValues[i][j];
-        }
+    for (int j = 0; j < currentNumberOfNonzeros; j++) {
+      local_int_t curCol = currentColIndices[j];
+      if (curCol == i) {
+        A.matrixDiagonal[i] = &A.matrixValues[i][j];
       }
     }
   }
+#endif // End HPCG_USE_MULTICOLORING
 #endif // End HPCG_OPENMP_TARGET
 
   // Recursive call to make sure ALL layers are mapped:
@@ -203,16 +213,16 @@ void MapMultiGridSparseMatrix(SparseMatrix &A, bool MapDiagonal) {
 #pragma omp target enter data map(to: A.mgData[0].xc[0].values[:A.mgData->xc->localLength])
 #pragma omp target enter data map(to: A.Ac[:1])
 #endif // End HPCG_OPENMP_TARGET
-    MapMultiGridSparseMatrix(*A.Ac, MapDiagonal);
+    MapMultiGridSparseMatrix(*A.Ac);
   }
 }
 
-void UnMapMultiGridSparseMatrix(SparseMatrix &A, bool UnMapDiagonal) {
+void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
   int totalNonZeroValues = 27 * A.localNumberOfRows;
   // Recursive call to make sure ALL layers are unmapped:
   if (A.mgData != 0) {
     local_int_t nc = A.mgData->rc->localLength;
-    UnMapMultiGridSparseMatrix(*A.Ac, UnMapDiagonal);
+    UnMapMultiGridSparseMatrix(*A.Ac);
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A.Ac[:1])
 #pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
@@ -227,9 +237,9 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A, bool UnMapDiagonal) {
   }
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
-if (UnMapDiagonal) {
+#if defined(HPCG_USE_MULTICOLORING)
 #pragma omp target exit data map(release: A.matrixDiagonal[:A.localNumberOfRows])
-}
+#endif // End HPCG_USE_MULTICOLORING
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used:
     for (int i = 0; i < A.localNumberOfRows; ++i) {
@@ -245,5 +255,11 @@ if (UnMapDiagonal) {
 #pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
 #endif // End HPCG_CONTIGUOUS_ARRAYS
+
+#if defined(HPCG_USE_MULTICOLORING)
+#pragma omp target exit data map(release: A.colorToRow[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.colorBounds[:(A.totalColors+1)])
+#endif // End HPCG_USE_MULTICOLORING
+
 #endif // End HPCG_OPENMP_TARGET
 }

@@ -115,7 +115,6 @@ int ColorSparseMatrixRows(SparseMatrix & A) {
   // over the COLOR 0, COLOR 1, ... regions of this map. Each region
   // can be computed in parallel. Downside: the additional indirection
   // may be slow on the GPU.
-  //
 
   // Create the colorCounter array which holds the beginning index
   // of each color in the colorToRow map. This value will be increased
@@ -148,10 +147,17 @@ int ColorSparseMatrixRows(SparseMatrix & A) {
            "Row is in the wrong color region.");
   }
 
+  // Create diagonal array with inverse diagonal values:
+  double *discreteInverseDiagonal = new double[nrow];
+  for (local_int_t i = 0; i < nrow; ++i) {
+    discreteInverseDiagonal[i] = 1.0 / A.matrixDiagonal[i][0];
+  }
+
   // Save as part of matrix A:
   A.totalColors = totalColors;
   A.colorBounds = colorBounds;
   A.colorToRow = colorToRow;
+  A.discreteInverseDiagonal = discreteInverseDiagonal;
 
   // Perform this recursively since we need to color the coarser
   // levels of the multi-grid matrix:

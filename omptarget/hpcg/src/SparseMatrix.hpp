@@ -78,6 +78,7 @@ struct SparseMatrix_STRUCT {
   local_int_t totalColors;
   local_int_t * colorBounds;
   local_int_t * colorToRow;
+  double * discreteInverseDiagonal;
 #endif
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;
@@ -147,6 +148,12 @@ inline void ReplaceMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     double * dv = diagonal.values;
     assert(A.localNumberOfRows==diagonal.localLength);
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) *(curDiagA[i]) = dv[i];
+    // Update discrete diagonal values with new values:
+#if defined(HPCG_USE_MULTICOLORING)
+    for (local_int_t i = 0; i < A.localNumberOfRows; ++i) {
+      A.discreteInverseDiagonal[i] = 1.0 / A.matrixDiagonal[i][0];
+    }
+#endif
   return;
 }
 /*!

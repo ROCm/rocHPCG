@@ -145,7 +145,6 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
       const double * const currentValues = A.matrixValues[rowID];
       const local_int_t * const currentColIndices = A.mtxIndL[rowID];
       const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
-      const double currentDiagonal = A.matrixDiagonal[rowID][0]; // Current diagonal value
       double sum = r.values[rowID]; // RHS value
 
       for (int j = 0; j < currentNumberOfNonzeros; j++) {
@@ -154,7 +153,7 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
           sum -= currentValues[j] * x.values[curCol];
       }
 
-      x.values[rowID] = sum / currentDiagonal;
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
     }
   }
 
@@ -173,7 +172,6 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
       const double * const currentValues = A.matrixValues[rowID];
       const local_int_t * const currentColIndices = A.mtxIndL[rowID];
       const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
-      const double currentDiagonal = A.matrixDiagonal[rowID][0]; // Current diagonal value
       double sum = r.values[rowID]; // RHS value
 
       for (int j = 0; j < currentNumberOfNonzeros; j++) {
@@ -182,7 +180,7 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
           sum -= currentValues[j] * x.values[curCol];
       }
 
-      x.values[rowID] = sum / currentDiagonal;
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
     }
   }
 

@@ -34,6 +34,7 @@ using std::endl;
 
 #include "TestCG.hpp"
 #include "CG.hpp"
+#include "OptimizeProblem.hpp"
 
 /*!
   Test the correctness of the Preconditined CG implementation by using a system matrix with a dominant diagonal.
@@ -75,6 +76,11 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     }
   }
   ReplaceMatrixDiagonal(A, exaggeratedDiagA);
+
+  // Copy new values to SOA layout if it is enabled
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  ChangeLayoutToSOA(A);
+#endif
 
   // Map Matrix A to the device. For now do not map the diagonal since the
   // computation involving the diagonal is happening on the host side for
@@ -150,6 +156,11 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   DeleteVector(exaggeratedDiagA);
   DeleteVector(origB);
   testcg_data.normr = normr;
+
+  // Copy old values to SOA layout:
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  ChangeLayoutToSOA(A);
+#endif
 
   return 0;
 }

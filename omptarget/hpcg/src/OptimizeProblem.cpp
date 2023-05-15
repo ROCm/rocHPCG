@@ -20,7 +20,8 @@
 
 #include "OptimizeProblem.hpp"
 
-int ColorSparseMatrixRows(SparseMatrix & A) {
+#if defined(HPCG_USE_MULTICOLORING)
+void ColorSparseMatrixRows(SparseMatrix & A) {
   const local_int_t nrow = A.localNumberOfRows;
   // Value `nrow' means `uninitialized'; initialized colors go from 0 to nrow-1
   std::vector<local_int_t> colors(nrow, nrow);
@@ -162,10 +163,51 @@ int ColorSparseMatrixRows(SparseMatrix & A) {
   // Perform this recursively since we need to color the coarser
   // levels of the multi-grid matrix:
   if (A.mgData != 0)
-    return ColorSparseMatrixRows(*A.Ac);
-
-  return 0;
+    ColorSparseMatrixRows(*A.Ac);
 }
+#endif
+
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+void ChangeLayoutToSOA(SparseMatrix & A) {
+  // In this function we will provide an alternative layout for the
+  // device for:
+  // - A.matrixValues
+  // - A.mtxIndL
+  //
+  // This optimization is only possible if the HPCG_CONTIGUOUS_ARRAYS
+  // flag is also set.
+  // The current layout is as follows:
+  //
+  //   |---- 27 ----|---- 27 ----|---- 27 ----|... (nrow times)
+  //
+  // the SOA layout will be:
+  //
+  //   |---- nrow ----|---- nrow ----|... (27 times)
+  //
+  // This means that for the device we can replace all accesses to the
+  // above sparse matrix entries with accesses to the newly created fields
+  // thus keeping the memory footpring on the device the same but changing
+  // how data is read.
+  // TODO: check the impact of halo exchanges.
+  const local_int_t nrow = A.localNumberOfRows;
+  A.matrixValuesSOA = new double[27 * nrow];
+  A.mtxIndLSOA = new local_int_t[27 * nrow];
+  for (local_int_t i = 0; i < nrow; ++i) {
+    const double * const currentValues = A.matrixValues[i];
+    const local_int_t * const currentColIndices = A.mtxIndL[i];
+    const int currentNumberOfNonzeros = A.nonzerosInRow[i];
+
+    for (int j = 0; j < currentNumberOfNonzeros; j++) {
+      local_int_t curCol = currentColIndices[j];
+      A.mtxIndLSOA[i + j*nrow] = curCol;
+      A.matrixValuesSOA[i + j*nrow] = currentValues[j];
+    }
+  }
+
+  if (A.mgData != 0)
+    ChangeLayoutToSOA(*A.Ac);
+}
+#endif
 
 /*!
   Optimizes the data structures used for CG iteration to increase the
@@ -185,7 +227,11 @@ int ColorSparseMatrixRows(SparseMatrix & A) {
 int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vector & xexact) {
 
 #if defined(HPCG_USE_MULTICOLORING)
-  return ColorSparseMatrixRows(A);
+  ColorSparseMatrixRows(A);
+#endif
+
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  ChangeLayoutToSOA(A);
 #endif
 
   return 0;

@@ -45,6 +45,9 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
   assert(x.localLength >= A.localNumberOfColumns); // Test vector lengths
   assert(y.localLength >= A.localNumberOfRows);
 
+  // IDEA: only map back the values which are actually exchanged instead of
+  // bringing back the entire array x.
+
 #ifndef HPCG_NO_MPI
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update from(x.values[:A.localNumberOfColumns])
@@ -64,6 +67,18 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
 #pragma omp parallel for
 #endif
 #endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  for (local_int_t i = 0; i < nrow; i++)  {
+    double sum = 0.0;
+    const int cur_nnz = A.nonzerosInRow[i];
+    int pos = i;
+    for (int j = 0; j < cur_nnz; j++) {
+      sum += A.matrixValuesSOA[pos] * x.values[A.mtxIndLSOA[pos]];
+      pos += nrow;
+    }
+    y.values[i] = sum;
+  }
+#else
   for (local_int_t i = 0; i < nrow; i++)  {
     double sum = 0.0;
     const double * const cur_vals = A.matrixValues[i];
@@ -75,6 +90,6 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
     }
     y.values[i] = sum;
   }
-
+#endif
   return 0;
 }

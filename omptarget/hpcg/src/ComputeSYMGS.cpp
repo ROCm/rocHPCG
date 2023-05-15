@@ -122,7 +122,7 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target update to(x.values[:A.localNumberOfColumns])
 #endif
-#endif
+#endif // End HPCG_NO_MPI
 
   const local_int_t nrow = A.localNumberOfRows;
 
@@ -139,6 +139,24 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 #pragma omp parallel for
 #endif
 #endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
     for (local_int_t i = 0; i < colorNRows; i++) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
@@ -155,6 +173,7 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
     }
+#endif
   }
 
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
@@ -166,6 +185,24 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 #pragma omp parallel for
 #endif
 #endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
@@ -182,6 +219,237 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
     }
+#endif
+  }
+
+  return 0;
+}
+
+// TODO: Remove this after performance tuning is done.
+int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r, Vector & x) {
+  assert(x.localLength==A.localNumberOfColumns); // Make sure x contain space for halo values
+
+#ifndef HPCG_NO_MPI
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#endif
+  ExchangeHalo(A, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+#endif // End HPCG_NO_MPI
+
+  const local_int_t nrow = A.localNumberOfRows;
+
+  // Loop over colors. For each color launch a kernel which will compute the
+  // contributions for those rows in parallel since the rows of the same color
+  // do not share neighbours.
+
+  for (local_int_t color = 0; color < A.totalColors; color++) {
+    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const double * const currentValues = A.matrixValues[rowID];
+      const local_int_t * const currentColIndices = A.mtxIndL[rowID];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = currentColIndices[j];
+        if (curCol != rowID)
+          sum -= currentValues[j] * x.values[curCol];
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#endif
+  }
+
+  for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
+    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const double * const currentValues = A.matrixValues[rowID];
+      const local_int_t * const currentColIndices = A.mtxIndL[rowID];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = currentColIndices[j];
+        if (curCol != rowID)
+          sum -= currentValues[j] * x.values[curCol];
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#endif
+  }
+
+  return 0;
+}
+
+// TODO: Remove this after performance tuning is done.
+int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r, Vector & x) {
+  assert(x.localLength==A.localNumberOfColumns); // Make sure x contain space for halo values
+
+#ifndef HPCG_NO_MPI
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#endif
+  ExchangeHalo(A, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+#endif // End HPCG_NO_MPI
+
+  const local_int_t nrow = A.localNumberOfRows;
+
+  // Loop over colors. For each color launch a kernel which will compute the
+  // contributions for those rows in parallel since the rows of the same color
+  // do not share neighbours.
+
+  for (local_int_t color = 0; color < A.totalColors; color++) {
+    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const double * const currentValues = A.matrixValues[rowID];
+      const local_int_t * const currentColIndices = A.mtxIndL[rowID];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = currentColIndices[j];
+        if (curCol != rowID)
+          sum -= currentValues[j] * x.values[curCol];
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#endif
+  }
+
+  for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
+    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+      int pos = rowID;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol != rowID)
+          sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+        pos += nrow;
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#else
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+
+      const double * const currentValues = A.matrixValues[rowID];
+      const local_int_t * const currentColIndices = A.mtxIndL[rowID];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      double sum = r.values[rowID]; // RHS value
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        local_int_t curCol = currentColIndices[j];
+        if (curCol != rowID)
+          sum -= currentValues[j] * x.values[curCol];
+      }
+
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+    }
+#endif
   }
 
   return 0;

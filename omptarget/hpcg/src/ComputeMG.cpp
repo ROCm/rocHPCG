@@ -35,10 +35,175 @@
 
   @see ComputeMG_ref
 */
+
+int ComputeMG_LvL_2(const SparseMatrix  & A, const Vector & r, Vector & x) {
+  assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
+
+  // Initialize x to zero:
+  ZeroVector_Offload(x);
+
+  int ierr = 0;
+  if (A.mgData != 0) { // Go to next coarse level if defined
+    local_int_t nc = A.mgData->rc->localLength;
+
+    double t_symgs = mytimer();
+
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring_Lvl_2(A, r, x);
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
+
+    // printf(" (Size = %d) SYMGS time = %f\n", A.localNumberOfColumns, mytimer() - t_symgs);
+
+    // Note: read: non-MGData of A, x; write: A.mgData->Axf.
+    ierr = ComputeSPMV(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
+    // Perform restriction operation using simple injection
+    // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
+    ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
+    ierr = ComputeMG_LvL_2(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
+    // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
+    ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
+
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring_Lvl_2(A, r, x);
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
+  } else {
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+#if defined(HPCG_USE_MULTICOLORING)
+    ierr += ComputeSYMGSWithMulitcoloring_Lvl_2(A, r, x); if (ierr!=0) return ierr;
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+  }
+  return 0;
+}
+
+int ComputeMG_LvL_1(const SparseMatrix  & A, const Vector & r, Vector & x) {
+  assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
+
+  // Initialize x to zero:
+  ZeroVector_Offload(x);
+
+  int ierr = 0;
+  if (A.mgData != 0) { // Go to next coarse level if defined
+    local_int_t nc = A.mgData->rc->localLength;
+
+    double t_symgs = mytimer();
+
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring_Lvl_1(A, r, x);
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    for (int i=0; i< numberOfPresmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
+
+    // printf(" (Size = %d) SYMGS time = %f\n", A.localNumberOfColumns, mytimer() - t_symgs);
+
+    // Note: read: non-MGData of A, x; write: A.mgData->Axf.
+    ierr = ComputeSPMV(A, x, *A.mgData->Axf); if (ierr!=0) return ierr;
+    // Perform restriction operation using simple injection
+    // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
+    ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
+    ierr = ComputeMG_LvL_2(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
+    // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
+    ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
+
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+    int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
+
+    // If multi-coloring is used there is no need to update any data
+    // since all the computation will occur on the device.
+#if defined(HPCG_USE_MULTICOLORING)
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGSWithMulitcoloring_Lvl_1(A, r, x);
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    for (int i=0; i< numberOfPostsmootherSteps; ++i)
+      ierr += ComputeSYMGS(A, r, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+    if (ierr!=0) return ierr;
+  } else {
+    // NOTE: read: non-MGData part of A, r and x; write: x.
+#if defined(HPCG_USE_MULTICOLORING)
+    ierr += ComputeSYMGSWithMulitcoloring_Lvl_1(A, r, x); if (ierr!=0) return ierr;
+#else
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#pragma omp target update from(r.values[:A.localNumberOfRows])
+#endif
+    ierr = ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif // HPCG_OPENMP_TARGET
+#endif // HPCG_USE_MULTICOLORING
+  }
+  return 0;
+}
+
 int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
   assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
 
-  // initialize x to zero
+  // Initialize x to zero:
   ZeroVector_Offload(x);
 
   int ierr = 0;
@@ -75,7 +240,7 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
     // Perform restriction operation using simple injection
     // Note: read: r, A.mgData->{f2cOperator, Axf} ; write: A.mgData->rc.
     ierr = ComputeRestriction(A, r); if (ierr!=0) return ierr;
-    ierr = ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
+    ierr = ComputeMG_LvL_1(*A.Ac, *A.mgData->rc, *A.mgData->xc);  if (ierr!=0) return ierr;
     // Note: read: r, A.mgData->{f2cOperator, xc} ; write: x.
     ierr = ComputeProlongation(A, x);  if (ierr!=0) return ierr;
 

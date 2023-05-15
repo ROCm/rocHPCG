@@ -22,6 +22,8 @@
 #include "ExchangeHalo.hpp"
 #endif
 
+#include "globals.hpp"
+
 #include "ComputeSPMV.hpp"
 #include "ComputeSPMV_ref.hpp"
 
@@ -68,12 +70,15 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
 #endif
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
-  for (local_int_t i = 0; i < nrow; i++)  {
+  for (local_int_t i = 0; i < nrow; i++) {
     double sum = 0.0;
-    const int cur_nnz = A.nonzerosInRow[i];
     int pos = i;
-    for (int j = 0; j < cur_nnz; j++) {
-      sum += A.matrixValuesSOA[pos] * x.values[A.mtxIndLSOA[pos]];
+#pragma unroll
+    for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+      local_int_t col = A.mtxIndLSOA[pos];
+      if (col >= 0) {
+        sum += A.matrixValuesSOA[pos] * x.values[col];
+      }
       pos += nrow;
     }
     y.values[i] = sum;

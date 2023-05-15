@@ -22,6 +22,8 @@
 #include "ExchangeHalo.hpp"
 #endif
 
+#include "globals.hpp"
+
 #include "ComputeSYMGS.hpp"
 #include "ComputeSYMGS_ref.hpp"
 
@@ -143,13 +145,12 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
     for (local_int_t i = 0; i < colorNRows; i++) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }
@@ -189,13 +190,12 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }
@@ -258,13 +258,12 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
     for (local_int_t i = 0; i < colorNRows; i++) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }
@@ -304,13 +303,12 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }
@@ -373,13 +371,12 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
     for (local_int_t i = 0; i < colorNRows; i++) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }
@@ -419,13 +416,12 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
       const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
 
-      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
       double sum = r.values[rowID]; // RHS value
       int pos = rowID;
-
-      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+#pragma unroll
+      for (int j = 0; j < MAP_MAX_LENGTH; j++) {
         local_int_t curCol = A.mtxIndLSOA[pos];
-        if (curCol != rowID)
+        if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
         pos += nrow;
       }

@@ -18,6 +18,7 @@
  HPCG routine
  */
 
+#include "globals.hpp"
 #include "OptimizeProblem.hpp"
 
 #if defined(HPCG_USE_MULTICOLORING)
@@ -190,17 +191,21 @@ void ChangeLayoutToSOA(SparseMatrix & A) {
   // how data is read.
   // TODO: check the impact of halo exchanges.
   const local_int_t nrow = A.localNumberOfRows;
-  A.matrixValuesSOA = new double[27 * nrow];
-  A.mtxIndLSOA = new local_int_t[27 * nrow];
+  A.matrixValuesSOA = new double[MAP_MAX_LENGTH * nrow];
+  A.mtxIndLSOA = new local_int_t[MAP_MAX_LENGTH * nrow];
   for (local_int_t i = 0; i < nrow; ++i) {
     const double * const currentValues = A.matrixValues[i];
     const local_int_t * const currentColIndices = A.mtxIndL[i];
     const int currentNumberOfNonzeros = A.nonzerosInRow[i];
 
-    for (int j = 0; j < currentNumberOfNonzeros; j++) {
-      local_int_t curCol = currentColIndices[j];
-      A.mtxIndLSOA[i + j*nrow] = curCol;
-      A.matrixValuesSOA[i + j*nrow] = currentValues[j];
+    for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+      if (j < currentNumberOfNonzeros) {
+        local_int_t curCol = currentColIndices[j];
+        A.mtxIndLSOA[i + j*nrow] = curCol;
+        A.matrixValuesSOA[i + j*nrow] = currentValues[j];
+      } else {
+        A.mtxIndLSOA[i + j*nrow] = -1;
+      }
     }
   }
 

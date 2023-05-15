@@ -22,8 +22,8 @@ src/ComputeWAXPBY_ref.hpp src/ExchangeHalo.cpp src/ExchangeHalo.hpp \
 src/finalize.cpp src/GenerateCoarseProblem.cpp src/GenerateCoarseProblem.hpp \
 src/GenerateGeometry.cpp src/GenerateGeometry.hpp src/GenerateProblem.cpp \
 src/GenerateProblem.hpp src/GenerateProblem_ref.cpp src/GenerateProblem_ref.hpp \
-src/Geometry.hpp src/hpcgconfig.hpp.in src/hpcg.hpp src/init.cpp src/main.cpp \
-src/MGData.hpp src/MixedBaseCounter.cpp src/MixedBaseCounter.hpp \
+src/Geometry.hpp src/hpcgconfig.hpp.in src/globals.hpp src/hpcg.hpp src/init.cpp
+src/main.cpp src/MGData.hpp src/MixedBaseCounter.cpp src/MixedBaseCounter.hpp \
 src/mytimer.cpp src/mytimer.hpp src/OptimizeProblem.cpp src/OptimizeProblem.hpp \
 src/OutputFile.cpp src/OutputFile.hpp src/ReadHpcgDat.cpp src/ReadHpcgDat.hpp \
 src/ReportResults.cpp src/ReportResults.hpp src/SetupHalo.cpp src/SetupHalo.hpp \

@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include "hpcg.hpp"
+#include "globals.hpp"
 
 #include "CG.hpp"
 #include "mytimer.hpp"
@@ -147,7 +148,7 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 }
 
 void MapMultiGridSparseMatrix(SparseMatrix &A) {
-  int totalNonZeroValues = 27 * A.localNumberOfRows;
+  int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
 #ifdef HPCG_OPENMP_TARGET
 
 #if defined(HPCG_USE_MULTICOLORING)
@@ -178,8 +179,8 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
   // inside the contiguous memory array:
 #pragma omp target teams distribute parallel for
   for (local_int_t i = 1; i < A.localNumberOfRows; ++i) {
-    A.mtxIndL[i] = A.mtxIndL[0] + i * 27;
-    A.matrixValues[i] = A.matrixValues[0] + i * 27;
+    A.mtxIndL[i] = A.mtxIndL[0] + i * MAP_MAX_LENGTH;
+    A.matrixValues[i] = A.matrixValues[0] + i * MAP_MAX_LENGTH;
   }
 #endif // End HPCG_USE_SOA_LAYOUT
 #endif // End HPCG_CONTIGUOUS_ARRAYS
@@ -223,7 +224,7 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 }
 
 void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
-  int totalNonZeroValues = 27 * A.localNumberOfRows;
+  int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
   // Recursive call to make sure ALL layers are unmapped:
   if (A.mgData != 0) {
     local_int_t nc = A.mgData->rc->localLength;

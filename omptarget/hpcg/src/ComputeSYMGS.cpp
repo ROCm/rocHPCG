@@ -244,12 +244,14 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
   // Loop over colors. For each color launch a kernel which will compute the
   // contributions for those rows in parallel since the rows of the same color
   // do not share neighbours.
-
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams
+#endif
   for (local_int_t color = 0; color < A.totalColors; color++) {
     local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams distribute parallel for
+#pragma omp distribute parallel for
 #else
 #pragma omp parallel for
 #endif
@@ -290,11 +292,14 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
 #endif
   }
 
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams
+#endif
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
     local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams distribute parallel for
+#pragma omp distribute parallel for
 #else
 #pragma omp parallel for
 #endif
@@ -357,12 +362,14 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
   // Loop over colors. For each color launch a kernel which will compute the
   // contributions for those rows in parallel since the rows of the same color
   // do not share neighbours.
-
+#ifndef HPCG_NO_OPENMP
+#pragma omp target teams
+#endif
   for (local_int_t color = 0; color < A.totalColors; color++) {
     local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams distribute parallel for
+#pragma omp distribute parallel for
 #else
 #pragma omp parallel for
 #endif
@@ -403,11 +410,14 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
 #endif
   }
 
+#ifndef HPCG_NO_OPENMP
+#pragma omp target teams
+#endif
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
     local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams distribute parallel for
+#pragma omp distribute parallel for
 #else
 #pragma omp parallel for
 #endif

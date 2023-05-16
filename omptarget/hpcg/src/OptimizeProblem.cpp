@@ -161,6 +161,8 @@ void ColorSparseMatrixRows(SparseMatrix & A) {
   A.colorToRow = colorToRow;
   A.discreteInverseDiagonal = discreteInverseDiagonal;
 
+  printf("Color summry: Colors = %d\n", A.totalColors);
+
   // Perform this recursively since we need to color the coarser
   // levels of the multi-grid matrix:
   if (A.mgData != 0)

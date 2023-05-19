@@ -203,11 +203,8 @@ void ChangeLayoutToSOA(SparseMatrix & A) {
   //
   //   |---- nrow ----|---- nrow ----|... (27 times)
   //
-  // This means that for the device we can replace all accesses to the
-  // above sparse matrix entries with accesses to the newly created fields
-  // thus keeping the memory footpring on the device the same but changing
+  // This keeps the memory footprint on the device the same but changes
   // how data is read.
-  // TODO: check the impact of halo exchanges.
   const local_int_t nrow = A.localNumberOfRows;
   A.matrixValuesSOA = new double[MAP_MAX_LENGTH * nrow];
   A.mtxIndLSOA = new local_int_t[MAP_MAX_LENGTH * nrow];

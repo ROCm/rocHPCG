@@ -115,7 +115,7 @@ HPCG_LIBS     =
 #    *) Not generate debugging output.
 #    *) Not Build with OpenMP target offload.
 #
-HPCG_OPTS     = -DHPCG_CONTIGUOUS_ARRAYS -DHPCG_USE_MULTICOLORING -fopenmp-targets=$(TRIPLE) -Xopenmp-target=$(TRIPLE) -march=$(OFFLOAD_ARCH) -DHPCG_OPENMP_TARGET
+HPCG_OPTS     = -D__HIP_PLATFORM_AMD__ -DHPCG_USE_HIP_NONTEMPORAL_LS -DHPCG_USE_SOA_LAYOUT -DHPCG_CONTIGUOUS_ARRAYS -DHPCG_USE_MULTICOLORING -fopenmp-targets=$(TRIPLE) -Xopenmp-target=$(TRIPLE) -march=$(OFFLOAD_ARCH) -DHPCG_OPENMP_TARGET
 #
 # ----------------------------------------------------------------------
 #

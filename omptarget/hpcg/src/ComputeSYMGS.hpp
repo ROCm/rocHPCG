@@ -22,7 +22,5 @@ int ComputeSYMGS(const SparseMatrix  & A, const Vector & r, Vector & x);
 int ComputeSYMGSZeroGuess(const SparseMatrix & A, const Vector & r, Vector & x);
 
 int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vector & x);
-int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r, Vector & x);
-int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r, Vector & x);
 
 #endif // COMPUTESYMGS_HPP

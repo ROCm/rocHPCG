@@ -188,7 +188,8 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 
 #pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
 
-  // Copy diagonal to device when needed:
+  // Copy diagonal to device when needed but currently it is not needed
+  // becaue we copy inverse diagonal values using a separate arrray.
 // #if !defined(HPCG_USE_MULTICOLORING)
 // #pragma omp target enter data map(to: A.matrixDiagonal[:A.localNumberOfRows])
 // #pragma omp target teams distribute parallel for

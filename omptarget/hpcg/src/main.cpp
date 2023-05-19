@@ -61,6 +61,7 @@ using std::endl;
 #include "TestSymmetry.hpp"
 #include "TestNorms.hpp"
 
+
 /*!
   Main driver program: Construct synthetic problem, run V&V tests, compute benchmark parameters, run benchmark, report results.
 
@@ -126,7 +127,7 @@ int main(int argc, char * argv[]) {
     return ierr;
 
   // Use this array for collecting timing information
-  std::vector< double > times(10,0.0);
+  std::vector< double > times(10, 0.0);
 
   double setup_time = mytimer();
 
@@ -138,7 +139,7 @@ int main(int argc, char * argv[]) {
   SetupHalo(A);
   int numberOfMgLevels = 4; // Number of levels including first
   SparseMatrix * curLevelMatrix = &A;
-  for (int level = 1; level< numberOfMgLevels; ++level) {
+  for (int level = 1; level < numberOfMgLevels; ++level) {
     GenerateCoarseProblem(*curLevelMatrix);
     curLevelMatrix = curLevelMatrix->Ac; // Make the just-constructed coarse grid the next level
   }
@@ -150,7 +151,7 @@ int main(int argc, char * argv[]) {
   Vector * curb = &b;
   Vector * curx = &x;
   Vector * curxexact = &xexact;
-  for (int level = 0; level< numberOfMgLevels; ++level) {
+  for (int level = 0; level < numberOfMgLevels; ++level) {
      CheckProblem(*curLevelMatrix, curb, curx, curxexact);
      curLevelMatrix = curLevelMatrix->Ac; // Make the nextcoarse grid the next level
      curb = 0; // No vectors after the top level
@@ -161,8 +162,6 @@ int main(int argc, char * argv[]) {
 
   CGData data;
   InitializeSparseCGData(A, data);
-
-
 
   ////////////////////////////////////
   // Reference SpMV+MG Timing Phase //
@@ -176,7 +175,6 @@ int main(int argc, char * argv[]) {
   Vector x_overlap, b_computed;
   InitializeVector(x_overlap, ncol); // Overlapped copy of x vector
   InitializeVector(b_computed, nrow); // Computed RHS vector
-
 
   // Record execution time of reference SpMV and MG kernels for reporting times
   // First load vector with random values
@@ -199,6 +197,7 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Reference CG Timing Phase //
   ///////////////////////////////
+  printf("Reference CG Timing Phase:\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
@@ -242,10 +241,12 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Validation Testing Phase //
   //////////////////////////////
+  printf("Validation Testing Phase:\n");
 
 #ifdef HPCG_DEBUG
   t1 = mytimer();
 #endif
+
   TestCGData testcg_data;
   testcg_data.count_pass = testcg_data.count_fail = 0;
   TestCG(A, data, b, x, testcg_data);
@@ -264,6 +265,24 @@ int main(int argc, char * argv[]) {
   //////////////////////////////
   // Optimized CG Setup Phase //
   //////////////////////////////
+  printf("Optimized CG Setup Phase:\n");
+
+  // Map Matrix A to the device but not the diagonal since the diagonal is
+  // not used in any of the device-side computations:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: A)
+#endif
+  MapMultiGridSparseMatrix(A);
+
+  // Map additional arrays:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#endif
 
   niters = 0;
   normr = 0.0;
@@ -279,9 +298,13 @@ int main(int argc, char * argv[]) {
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
+#ifdef HPCG_OPENMP_TARGET
+    ZeroVector_Offload(x); // start x at all zeros
+#else
     ZeroVector(x); // start x at all zeros
+#endif
     double last_cummulative_time = opt_times[0];
-    ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
+    ierr = CG(A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
     if (ierr) ++err_count; // count the number of errors in CG
     // Convergence check accepts an error of no more than 6 significant digits of relTolerance
     if (normr / normr0 > refTolerance * (1.0 + 1.0e-6)) ++tolerance_failures; // the number of failures to reduce residual
@@ -310,12 +333,16 @@ int main(int argc, char * argv[]) {
   ///////////////////////////////
   // Optimized CG Timing Phase //
   ///////////////////////////////
+  printf("Optimized CG Timing Phase:\n");
 
   // Here we finally run the benchmark phase
   // The variable total_runtime is the target benchmark execution time in seconds
 
   double total_runtime = params.runningTime;
   int numberOfCgSets = int(total_runtime / opt_worst_time) + 1; // Run at least once, account for rounding
+
+  printf("opt_worst_time = %f\n", opt_worst_time);
+  printf("numberOfCgSets = %d\n", numberOfCgSets);
 
 #ifdef HPCG_DEBUG
   if (rank==0) {
@@ -333,12 +360,32 @@ int main(int argc, char * argv[]) {
   testnorms_data.values = new double[numberOfCgSets];
 
   for (int i=0; i< numberOfCgSets; ++i) {
+#ifdef HPCG_OPENMP_TARGET
+    ZeroVector_Offload(x); // Zero out x
+#else
     ZeroVector(x); // Zero out x
+#endif
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;
     testnorms_data.values[i] = normr/normr0; // Record scaled residual from this run
   }
+
+  // Clean-up device mapping of A:
+  UnMapMultiGridSparseMatrix(A);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A)
+#endif
+
+  // Clean-up the rest of the arrays:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(release: data.z.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: data.r.values[:A.localNumberOfRows])
+#endif
 
   // Compute difference between known exact solution and computed solution
   // All processors are needed here.
@@ -368,8 +415,6 @@ int main(int argc, char * argv[]) {
   DeleteVector(x_overlap);
   DeleteVector(b_computed);
   delete [] testnorms_data.values;
-
-
 
   HPCG_Finalize();
 

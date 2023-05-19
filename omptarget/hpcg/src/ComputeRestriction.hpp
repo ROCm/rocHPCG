@@ -12,15 +12,9 @@
 // ***************************************************
 //@HEADER
 
-#ifndef COMPUTESYMGS_HPP
-#define COMPUTESYMGS_HPP
-#include "SparseMatrix.hpp"
+#ifndef COMPUTERESTRICTION_HPP
+#define COMPUTERESTRICTION_HPP
 #include "Vector.hpp"
-
-int ComputeSYMGS(const SparseMatrix  & A, const Vector & r, Vector & x);
-
-int ComputeSYMGSZeroGuess(const SparseMatrix & A, const Vector & r, Vector & x);
-
-int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vector & x);
-
-#endif // COMPUTESYMGS_HPP
+#include "SparseMatrix.hpp"
+int ComputeRestriction(const SparseMatrix & A, const Vector & rf);
+#endif // COMPUTERESTRICTION_HPP

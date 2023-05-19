@@ -67,9 +67,8 @@ RM           = /bin/rm -f
 TOUCH        = touch
 
 # Set these environment variables to use this config
-TRIPLE       ?= amdgcn-amd-amdhsa 
+TRIPLE       ?= amdgcn-amd-amdhsa
 OFFLOAD_ARCH ?= gfx90a
-MPI_HOME     ?= /opt/openmpi-4.1.4
 LLVM         ?= $(AOMP)
 #
 # ----------------------------------------------------------------------
@@ -80,18 +79,6 @@ TOPdir       = .
 SRCdir       = $(TOPdir)/src
 INCdir       = $(TOPdir)/src
 BINdir       = $(TOPdir)/bin
-#
-# ----------------------------------------------------------------------
-# - Message Passing library (MPI) --------------------------------------
-# ----------------------------------------------------------------------
-# MPinc tells the  C  compiler where to find the Message Passing library
-# header files,  MPlib  is defined  to be the name of  the library to be
-# used. The variable MPdir is only used for defining MPinc and MPlib.
-#
-MPdir        = $(MPI_HOME)
-MPinc        = -I$(MPdir)/include
-MPlib        = $(MPdir)/lib
-#
 #
 # ----------------------------------------------------------------------
 # - HPCG includes / libraries / specifics -------------------------------
@@ -115,7 +102,7 @@ HPCG_LIBS     =
 #    *) Not generate debugging output.
 #    *) Not Build with OpenMP target offload.
 #
-HPCG_OPTS     = -D__HIP_PLATFORM_AMD__ -DHPCG_USE_HIP_NONTEMPORAL_LS -DHPCG_USE_SOA_LAYOUT -DHPCG_CONTIGUOUS_ARRAYS -DHPCG_USE_MULTICOLORING -fopenmp-targets=$(TRIPLE) -Xopenmp-target=$(TRIPLE) -march=$(OFFLOAD_ARCH) -DHPCG_OPENMP_TARGET
+HPCG_OPTS     = -D__HIP_PLATFORM_AMD__ -DHPCG_USE_HIP_NONTEMPORAL_LS -DHPCG_USE_SOA_LAYOUT -DHPCG_CONTIGUOUS_ARRAYS -DHPCG_USE_MULTICOLORING -fopenmp-targets=$(TRIPLE) -Xopenmp-target=$(TRIPLE) -march=$(OFFLOAD_ARCH) -DHPCG_OPENMP_TARGET -DHPCG_NO_MPI -DHPCG_DEBUG
 #
 # ----------------------------------------------------------------------
 #
@@ -125,8 +112,9 @@ HPCG_DEFS     = $(HPCG_OPTS) $(HPCG_INCLUDES)
 # - Compilers / linkers - Optimization flags ---------------------------
 # ----------------------------------------------------------------------
 #
-CXX          = LIBRARY_PATH=$(MPlib):$(AOMP)/lib LD_LIBRARY_PATH=$(MPlib):$(LLVM)/lib PATH=$(MPdir)/bin:$(PATH) OMPI_CC=$(LLVM)/bin/clang OMPI_CXX=$(LLVM)/bin/clang++ $(MPdir)/bin/mpicxx
-CXXFLAGS     = -fopenmp $(HPCG_DEFS) -O3 -ffast-math -fopenmp-target-fast
+CXX          = $(LLVM)/bin/clang++
+CXXFLAGS     = -fopenmp $(HPCG_DEFS) -O3 -ffast-math -fopenmp-target-fast -fopenmp-assume-no-thread-state -save-temps
+#
 #
 LINKER       = $(CXX)
 LINKFLAGS    = $(CXXFLAGS) -Wl,--as-needed

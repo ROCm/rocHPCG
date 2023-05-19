@@ -195,6 +195,9 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #ifdef OPT_ROCTX
   roctxRangePop(); // Total Time
 #endif
-  times[0] += mytimer() - t_begin;  // Total time. All done...
+
+  double total_time = mytimer() - t_begin;
+  times[0] += total_time;  // Total time. All done...
+  printf(" Times: DOT: %f  WAXBY: %f  SPMV:  %f  AllReduce: %f  ComputeMG: %f TOTAL: %f (niters = %d (max_iter = %d), doPreconditioning = %d)\n", t1, t2, t3, t4, t5, total_time, niters, max_iter, doPreconditioning);
   return 0;
 }

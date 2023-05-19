@@ -29,8 +29,8 @@ add_executable( xhpcg src/main.cpp src/CG.cpp src/CG_ref.cpp src/TestCG.cpp
     src/ComputeDotProduct_ref.cpp src/finalize.cpp src/init.cpp src/mytimer.cpp
     src/ComputeSPMV.cpp src/ComputeSPMV_ref.cpp src/ComputeSYMGS.cpp
     src/ComputeSYMGS_ref.cpp src/ComputeWAXPBY.cpp src/ComputeWAXPBY_ref.cpp
-    src/ComputeMG_ref.cpp src/ComputeMG.cpp src/ComputeProlongation_ref.cpp
-    src/ComputeRestriction_ref.cpp src/GenerateCoarseProblem.cpp
+    src/ComputeMG_ref.cpp src/ComputeMG.cpp src/ComputeProlongation_ref.cpp src/ComputeProlongation.cpp
+    src/ComputeRestriction_ref.cpp src/ComputeRestriction.cpp src/GenerateCoarseProblem.cpp
     src/ComputeOptimalShapeXYZ.cpp src/MixedBaseCounter.cpp
     src/CheckAspectRatio.cpp src/OutputFile.cpp)
 

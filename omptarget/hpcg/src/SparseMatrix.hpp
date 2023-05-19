@@ -73,6 +73,21 @@ struct SparseMatrix_STRUCT {
   local_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
   double * sendBuffer; //!< send buffer for non-blocking sends
 #endif
+
+#if defined(HPCG_USE_MULTICOLORING)
+  local_int_t totalColors;
+  local_int_t * colorBounds;
+  local_int_t * colorToRow;
+  // TODO: discrete diagonal should be a separate flag for example:
+  //       HPCG_DISCRETE_DIAGONAL
+  double * discreteInverseDiagonal;
+  local_int_t * diagIdx;
+#endif
+
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  double * matrixValuesSOA;
+  local_int_t * mtxIndLSOA;
+#endif
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;
 
@@ -112,6 +127,20 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.sendLength = 0;
   A.sendBuffer = 0;
 #endif
+
+#if defined(HPCG_USE_MULTICOLORING)
+  A.totalColors = 0;
+  A.colorBounds = 0;
+  A.colorToRow = 0;
+  A.discreteInverseDiagonal = 0;
+  A.diagIdx = 0;
+#endif
+
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  A.matrixValuesSOA = 0;
+  A.mtxIndLSOA = 0;
+#endif
+
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
   A.Ac =0;
   return;
@@ -141,6 +170,12 @@ inline void ReplaceMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
     double * dv = diagonal.values;
     assert(A.localNumberOfRows==diagonal.localLength);
     for (local_int_t i=0; i<A.localNumberOfRows; ++i) *(curDiagA[i]) = dv[i];
+    // Update discrete diagonal values with new values:
+#if defined(HPCG_USE_MULTICOLORING)
+    for (local_int_t i = 0; i < A.localNumberOfRows; ++i) {
+      A.discreteInverseDiagonal[i] = 1.0 / A.matrixDiagonal[i][0];
+    }
+#endif
   return;
 }
 /*!
@@ -174,6 +209,18 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if (A.receiveLength)            delete [] A.receiveLength;
   if (A.sendLength)            delete [] A.sendLength;
   if (A.sendBuffer)            delete [] A.sendBuffer;
+#endif
+
+#if defined(HPCG_USE_MULTICOLORING)
+  if (A.colorBounds) delete [] A.colorBounds;
+  if (A.colorToRow) delete [] A.colorToRow;
+  if (A.discreteInverseDiagonal) delete [] A.discreteInverseDiagonal;
+  if (A.diagIdx) delete [] A.diagIdx;
+#endif
+
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  if (A.matrixValuesSOA) delete [] A.matrixValuesSOA;
+  if (A.mtxIndLSOA) delete [] A.mtxIndLSOA;
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}

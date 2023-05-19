@@ -5,7 +5,22 @@ We are looking at different device memory management schemes.
 
 Initially a suboptimal scheme will using target map clauses on each target region .
 
+
+Setup environment:
+==================
+==================
+
+export AOMP=/path/to/rocm/aomp_dir
+export MPI_HOME=/path/to/openmpi_dir
+
+Example:
+export AOMP=/opt/rocm/aomp_17.0
+export MPI_HOME=/opt/openmpi-4.1.4
+
+
 To build:
+=========
+=========
 
 mkdir -p git/libs
 cd git/libs
@@ -14,10 +29,49 @@ cd rocHPCG
 git checkout omptarget
 cd omptarget/hpcg
 mkdir build; cd build
+
+At this point you have two options:
+
+1. No MPI:
+
+../configure LLVM_OMP_TARGET
+
+2. MPI-enabled:
+
 ../configure MPI_LLVM_OMP_TARGET
+
+The last step is to invoke make:
+
 make -j4
 
+
 To run:
+=======
+=======
+
+In the AOMP env var export the location of the AOMP you want to use:
+
+export AOMP=/path/to/rocm/aomp_dir
+
+No MPI version:
+===============
+
+cd omptarget/bin
+sh run_hpcg_no_mpi.sh
+
+OR
+
+Run the executable directly:
+
+cd omptarget/bin
+../hpcg/build/bin/xhpcg 104 104 104 600
+
+The last parameter, 600, represents the number of seconds to keep
+doing the iterations. For shorter runs, set it to the desired value.
+
+
+MPI version:
+============
 
 This run script will use openmpi and requires the ROCM gpurun tool.
 

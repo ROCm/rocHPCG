@@ -48,30 +48,28 @@ int ComputeDotProduct(const local_int_t n, const Vector & x, const Vector & y,
     double & result, double & time_allreduce, bool & isOptimized) {
 
   isOptimized = true;
-  assert(x.localLength>=n); // Test vector lengths
-  assert(y.localLength>=n);
+  assert(x.localLength >= n); // Test vector lengths
+  assert(y.localLength >= n);
 
   double local_result = 0.0;
-  double * xv = x.values;
-  double * yv = y.values;
-  if (yv==xv) {
+  if (y.values == x.values) {
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-    #pragma omp target teams distribute parallel for reduction (+:local_result) map(tofrom:xv[0:n])
+    #pragma omp target teams distribute parallel for reduction (+:local_result)
 #else
     #pragma omp parallel for reduction (+:local_result)
 #endif
 #endif
-    for (local_int_t i=0; i<n; i++) local_result += xv[i]*xv[i];
+    for (local_int_t i = 0; i < n; i++) local_result += x.values[i] * x.values[i];
   } else {
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-    #pragma omp target teams distribute parallel for reduction (+:local_result) map(tofrom:xv[0:n],yv[0:n])
+    #pragma omp target teams distribute parallel for reduction (+:local_result)
 #else
     #pragma omp parallel for reduction (+:local_result)
 #endif
 #endif
-    for (local_int_t i=0; i<n; i++) local_result += xv[i]*yv[i];
+    for (local_int_t i = 0; i < n; i++) local_result += x.values[i] * y.values[i];
   }
 
 #ifndef HPCG_NO_MPI

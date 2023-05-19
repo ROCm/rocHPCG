@@ -34,6 +34,7 @@ using std::endl;
 
 #include "TestCG.hpp"
 #include "CG.hpp"
+#include "OptimizeProblem.hpp"
 
 /*!
   Test the correctness of the Preconditined CG implementation by using a system matrix with a dominant diagonal.
@@ -50,8 +51,6 @@ using std::endl;
   @see CG()
  */
 int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData & testcg_data) {
-
-
   // Use this array for collecting timing information
   std::vector< double > times(8,0.0);
   // Temporary storage for holding original diagonal and RHS
@@ -78,6 +77,29 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
   ReplaceMatrixDiagonal(A, exaggeratedDiagA);
 
+  // Copy new values to SOA layout if it is enabled
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  ChangeLayoutToSOA(A);
+#endif
+
+  // Map Matrix A to the device. For now do not map the diagonal since the
+  // computation involving the diagonal is happening on the host side for
+  // now.
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: A)
+#endif
+  MapMultiGridSparseMatrix(A);
+
+  // Map additional arrays:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#endif
+
   int niters = 0;
   double normr = 0.0;
   double normr0 = 0.0;
@@ -92,7 +114,7 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     int expected_niters = testcg_data.expected_niters_no_prec;
     if (k==1) expected_niters = testcg_data.expected_niters_prec;
     for (int i=0; i< numberOfCgCalls; ++i) {
-      ZeroVector(x); // Zero out x
+      ZeroVector_Offload(x); // Zero out x
       int ierr = CG(A, data, b, x, maxIters, tolerance, niters, normr, normr0, &times[0], k==1);
       if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
       if (niters <= expected_niters) {
@@ -110,6 +132,22 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
     }
   }
 
+  // Clean-up device mapping of A:
+  UnMapMultiGridSparseMatrix(A);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A)
+#endif
+
+  // Clean-up device array mappings:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.p.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: data.z.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows])
+#endif
+
   // Restore matrix diagonal and RHS
   ReplaceMatrixDiagonal(A, origDiagA);
   CopyVector(origB, b);
@@ -118,6 +156,11 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   DeleteVector(exaggeratedDiagA);
   DeleteVector(origB);
   testcg_data.normr = normr;
+
+  // Copy old values to SOA layout:
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  ChangeLayoutToSOA(A);
+#endif
 
   return 0;
 }

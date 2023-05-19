@@ -38,7 +38,9 @@ HPCG_DEPS = src/CG.o \
 	    src/ComputeWAXPBY_ref.o \
 	    src/ComputeMG_ref.o \
 	    src/ComputeMG.o \
+	    src/ComputeProlongation.o \
 	    src/ComputeProlongation_ref.o \
+	    src/ComputeRestriction.o \
 	    src/ComputeRestriction_ref.o \
 	    src/CheckAspectRatio.o \
 	    src/OutputFile.o \
@@ -48,7 +50,7 @@ HPCG_DEPS = src/CG.o \
 
 # These header files are included in many source files, so we recompile every file if one or more of these header is modified.
 PRIMARY_HEADERS = HPCG_SRC_PATH/src/Geometry.hpp HPCG_SRC_PATH/src/SparseMatrix.hpp HPCG_SRC_PATH/src/Vector.hpp HPCG_SRC_PATH/src/CGData.hpp \
-                  HPCG_SRC_PATH/src/MGData.hpp HPCG_SRC_PATH/src/hpcg.hpp
+                  HPCG_SRC_PATH/src/MGData.hpp HPCG_SRC_PATH/src/hpcg.hpp HPCG_SRC_PATH/src/globals.hpp
 
 all: bin/xhpcg
 
@@ -165,7 +167,13 @@ src/ComputeMG_ref.o: HPCG_SRC_PATH/src/ComputeMG_ref.cpp HPCG_SRC_PATH/src/Compu
 src/ComputeMG.o: HPCG_SRC_PATH/src/ComputeMG.cpp HPCG_SRC_PATH/src/ComputeMG.hpp $(PRIMARY_HEADERS)
 	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
 
+src/ComputeProlongation.o: HPCG_SRC_PATH/src/ComputeProlongation.cpp HPCG_SRC_PATH/src/ComputeProlongation.hpp $(PRIMARY_HEADERS)
+	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
+
 src/ComputeProlongation_ref.o: HPCG_SRC_PATH/src/ComputeProlongation_ref.cpp HPCG_SRC_PATH/src/ComputeProlongation_ref.hpp $(PRIMARY_HEADERS)
+	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
+
+src/ComputeRestriction.o: HPCG_SRC_PATH/src/ComputeRestriction.cpp HPCG_SRC_PATH/src/ComputeRestriction.hpp $(PRIMARY_HEADERS)
 	$(CXX) -c $(CXXFLAGS) -IHPCG_SRC_PATH/src $< -o $@
 
 src/ComputeRestriction_ref.o: HPCG_SRC_PATH/src/ComputeRestriction_ref.cpp HPCG_SRC_PATH/src/ComputeRestriction_ref.hpp $(PRIMARY_HEADERS)

@@ -474,6 +474,9 @@ int main(int argc, char * argv[]) {
   double total_runtime = params.runningTime;
   int numberOfCgSets = int(total_runtime / opt_worst_time) + 1; // Run at least once, account for rounding
 
+  printf("opt_worst_time = %f\n", opt_worst_time);
+  printf("numberOfCgSets = %d\n", numberOfCgSets);
+
 #ifdef HPCG_DEBUG
   if (rank==0) {
     HPCG_fout << "Projected running time: " << total_runtime << " seconds" << endl;

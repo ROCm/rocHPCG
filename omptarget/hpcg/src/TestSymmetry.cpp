@@ -32,12 +32,14 @@ using std::endl;
 #include "hpcg.hpp"
 
 #include "ComputeSPMV.hpp"
+#include "ComputeSPMV_ref.hpp"
 #include "ComputeMG.hpp"
 #include "ComputeDotProduct.hpp"
 #include "ComputeResidual.hpp"
 #include "Geometry.hpp"
 #include "SparseMatrix.hpp"
 #include "TestSymmetry.hpp"
+#include "CG.hpp"
 
 /*!
   Tests symmetry-preserving properties of the sparse matrix vector multiply and multi-grid routines.
@@ -79,6 +81,19 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  double xNorm2, yNorm2;
  double ANorm = 2 * 26.0;
 
+ // Map Matrix A to the device but not the diagonal since it is never used:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: A)
+#endif
+ MapMultiGridSparseMatrix(A);
+
+ // Map additional arrays:
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: x_ncol.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: y_ncol.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
+#endif
+
  // Next, compute x'*A*y
  ComputeDotProduct(nrow, y_ncol, y_ncol, yNorm2, t4, A.isDotProductOptimized);
  int ierr = ComputeSPMV(A, y_ncol, z_ncol); // z_nrow = A*y_overlap
@@ -98,6 +113,8 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  testsymmetry_data.depsym_spmv = std::fabs((long double) (xtAy - ytAx))/((xNorm2*ANorm*yNorm2 + yNorm2*ANorm*xNorm2) * (DBL_EPSILON));
  if (testsymmetry_data.depsym_spmv > 1.0) ++testsymmetry_data.count_fail;  // If the difference is > 1, count it wrong
  if (A.geom->rank==0) HPCG_fout << "Departure from symmetry (scaled) for SpMV abs(x'*A*y - y'*A*x) = " << testsymmetry_data.depsym_spmv << endl;
+
+//  printf("xtAy = %f, ytAx = %f, testsymmetry_data.depsym_spmv = %f\n", xtAy, ytAx, testsymmetry_data.depsym_spmv);
 
  // Test symmetry of multi-grid
 
@@ -119,17 +136,32 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
  if (testsymmetry_data.depsym_mg > 1.0) ++testsymmetry_data.count_fail;  // If the difference is > 1, count it wrong
  if (A.geom->rank==0) HPCG_fout << "Departure from symmetry (scaled) for MG abs(x'*Minv*y - y'*Minv*x) = " << testsymmetry_data.depsym_mg << endl;
 
+//  printf("xtMinvy = %f, ytMinvx = %f, testsymmetry_data.depsym_mg = %f\n", xtMinvy, ytMinvx, testsymmetry_data.depsym_mg);
+
+ // Clean-up device mapping of A:
+ UnMapMultiGridSparseMatrix(A);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A)
+#endif
+
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
+#endif
+
  CopyVector(xexact, x_ncol); // Copy exact answer into overlap vector
 
  int numberOfCalls = 2;
  double residual = 0.0;
  for (int i=0; i< numberOfCalls; ++i) {
-   ierr = ComputeSPMV(A, x_ncol, z_ncol); // b_computed = A*x_overlap
+   ierr = ComputeSPMV_ref(A, x_ncol, z_ncol); // b_computed = A*x_overlap
    if (ierr) HPCG_fout << "Error in call to SpMV: " << ierr << ".\n" << endl;
    if ((ierr = ComputeResidual(A.localNumberOfRows, b, z_ncol, residual)))
      HPCG_fout << "Error in call to compute_residual: " << ierr << ".\n" << endl;
    if (A.geom->rank==0) HPCG_fout << "SpMV call [" << i << "] Residual [" << residual << "]" << endl;
  }
+
  DeleteVector(x_ncol);
  DeleteVector(y_ncol);
  DeleteVector(z_ncol);

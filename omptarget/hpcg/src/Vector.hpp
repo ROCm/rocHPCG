@@ -56,10 +56,19 @@ inline void InitializeVector(Vector & v, local_int_t localLength) {
  */
 inline void ZeroVector(Vector & v) {
   local_int_t localLength = v.localLength;
-  double * vv = v.values;
-  for (int i=0; i<localLength; ++i) vv[i] = 0.0;
+  for (int i=0; i<localLength; ++i) v.values[i] = 0.0;
   return;
 }
+
+inline void ZeroVector_Offload(Vector & v) {
+  local_int_t localLength = v.localLength;
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#endif
+  for (int i=0; i<localLength; ++i) v.values[i] = 0.0;
+  return;
+}
+
 /*!
   Multiply (scale) a specific vector entry by a given value.
 
@@ -93,9 +102,17 @@ inline void FillRandomVector(Vector & v) {
 inline void CopyVector(const Vector & v, Vector & w) {
   local_int_t localLength = v.localLength;
   assert(w.localLength >= localLength);
-  double * vv = v.values;
-  double * wv = w.values;
-  for (int i=0; i<localLength; ++i) wv[i] = vv[i];
+  for (int i = 0; i < localLength; ++i) w.values[i] = v.values[i];
+  return;
+}
+
+inline void CopyVector_Offload(const Vector & v, Vector & w) {
+  local_int_t localLength = v.localLength;
+  assert(w.localLength >= localLength);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#endif
+  for (int i = 0; i < localLength; ++i) w.values[i] = v.values[i];
   return;
 }
 

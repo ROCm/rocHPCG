@@ -65,8 +65,7 @@ void GenerateGeometry(int size, int rank, int numThreads,
     partz_nz = new local_int_t[1];
     partz_ids[0] = npz;
     partz_nz[0] = nz;
-  }
-  else {
+  } else {
     npartz = 2;
     partz_ids = new int[2];
     partz_ids[0] = pz;

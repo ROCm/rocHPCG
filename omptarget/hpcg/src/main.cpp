@@ -298,7 +298,11 @@ int main(int argc, char * argv[]) {
 
   // Compute the residual reduction and residual count for the user ordering and optimized kernels.
   for (int i=0; i< numberOfCalls; ++i) {
+#ifdef HPCG_OPENMP_TARGET
     ZeroVector_Offload(x); // start x at all zeros
+#else
+    ZeroVector(x); // start x at all zeros
+#endif
     double last_cummulative_time = opt_times[0];
     ierr = CG(A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true);
     if (ierr) ++err_count; // count the number of errors in CG
@@ -356,7 +360,11 @@ int main(int argc, char * argv[]) {
   testnorms_data.values = new double[numberOfCgSets];
 
   for (int i=0; i< numberOfCgSets; ++i) {
+#ifdef HPCG_OPENMP_TARGET
     ZeroVector_Offload(x); // Zero out x
+#else
+    ZeroVector(x); // Zero out x
+#endif
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;
     if (rank==0) HPCG_fout << "Call [" << i << "] Scaled Residual [" << normr/normr0 << "]" << endl;

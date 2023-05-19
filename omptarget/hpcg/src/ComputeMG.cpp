@@ -40,7 +40,11 @@ int ComputeMG(const SparseMatrix  & A, const Vector & r, Vector & x) {
   assert(x.localLength == A.localNumberOfColumns); // Make sure x contain space for halo values
 
   // Initialize x to zero:
+#ifdef HPCG_OPENMP_TARGET
   ZeroVector_Offload(x);
+#else
+  ZeroVector(x);
+#endif
 
   int ierr = 0;
   if (A.mgData != 0) { // Go to next coarse level if defined

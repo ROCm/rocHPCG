@@ -81,6 +81,7 @@ struct SparseMatrix_STRUCT {
   // TODO: discrete diagonal should be a separate flag for example:
   //       HPCG_DISCRETE_DIAGONAL
   double * discreteInverseDiagonal;
+  local_int_t * diagIdx;
 #endif
 
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
@@ -132,6 +133,7 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.colorBounds = 0;
   A.colorToRow = 0;
   A.discreteInverseDiagonal = 0;
+  A.diagIdx = 0;
 #endif
 
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
@@ -213,6 +215,7 @@ inline void DeleteMatrix(SparseMatrix & A) {
   if (A.colorBounds) delete [] A.colorBounds;
   if (A.colorToRow) delete [] A.colorToRow;
   if (A.discreteInverseDiagonal) delete [] A.discreteInverseDiagonal;
+  if (A.diagIdx) delete [] A.diagIdx;
 #endif
 
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)

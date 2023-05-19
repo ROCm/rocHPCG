@@ -27,6 +27,10 @@
 #include "ComputeSYMGS.hpp"
 #include "ComputeSYMGS_ref.hpp"
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+#include <hip/hip_runtime.h>
+#endif
+
 /*!
   Routine to compute one step of symmetric Gauss-Seidel:
 
@@ -113,6 +117,135 @@ int ComputeSYMGS( const SparseMatrix & A, const Vector & r, Vector & x) {
   return 0;
 }
 
+int ComputeSYMGSZeroGuess(const SparseMatrix & A, const Vector & r, Vector & x) {
+  assert(x.localLength==A.localNumberOfColumns); // Make sure x contain space for halo values
+  const local_int_t nrow = A.localNumberOfRows;
+
+  // The first color only has diagonal values which matter so we can
+  // execute the computation pointwise between r and the diagonal.
+  // Those values will be outputted in x.
+  local_int_t currentColorStart = A.colorBounds[0];
+  local_int_t currentColorEnd = A.colorBounds[1];
+  local_int_t colorNRows = currentColorEnd - currentColorStart;
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+  for (local_int_t i = 0; i < colorNRows; i++) {
+    const local_int_t rowID = A.colorToRow[currentColorStart + i];
+    x.values[rowID] = r.values[rowID] * A.discreteInverseDiagonal[rowID];
+  }
+
+  // Loop over colors. For each color launch a kernel which will compute the
+  // contributions for those rows in parallel since the rows of the same color
+  // do not share neighbours.
+
+  for (local_int_t color = 1; color < A.totalColors; color++) {
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = 0; i < colorNRows; i++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+      local_int_t diag = __builtin_nontemporal_load(A.diagIdx + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+      local_int_t diag = A.diagIdx[rowID];
+#endif
+      int pos = rowID;
+
+      for (int j = 0; j < diag; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
+        pos += nrow;
+      }
+
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
+    }
+#else
+    assert(false && "Not implemented")
+#endif
+  }
+
+  for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+    for (local_int_t i = colorNRows - 1; i >= 0; i--) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      local_int_t diag = __builtin_nontemporal_load(A.diagIdx + rowID);
+      int pos = diag * nrow + rowID;
+      double diag_val = __builtin_nontemporal_load(A.matrixValuesSOA + pos);
+      double sum = __builtin_nontemporal_load(x.values + rowID) * diag_val;
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      local_int_t diag = A.diagIdx[rowID];
+      int pos = diag * nrow + rowID;
+      double diag_val = A.matrixValuesSOA[pos];
+      double sum = x.values[rowID] * diag_val;
+#endif
+      pos += nrow;
+
+      for (int j = diag + 1; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol < 0)
+          break;
+        sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
+        local_int_t curCol = A.mtxIndLSOA[pos];
+        if (curCol < 0)
+          break;
+        sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
+        pos += nrow;
+      }
+
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
+      x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
+    }
+#else
+    assert(false && "Not implemented")
+#endif
+  }
+
+  return 0;
+}
+
 int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vector & x) {
   assert(x.localLength==A.localNumberOfColumns); // Make sure x contain space for halo values
 
@@ -133,7 +266,9 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
   // do not share neighbours.
 
   for (local_int_t color = 0; color < A.totalColors; color++) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target teams distribute parallel for
@@ -143,19 +278,34 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = 0; i < colorNRows; i++) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
 
-      double sum = r.values[rowID]; // RHS value
       int pos = rowID;
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = 0; i < colorNRows; i++) {
@@ -178,7 +328,9 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
   }
 
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
 #pragma omp target teams distribute parallel for
@@ -188,19 +340,33 @@ int ComputeSYMGSWithMulitcoloring(const SparseMatrix & A, const Vector & r, Vect
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
-
-      double sum = r.values[rowID]; // RHS value
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
       int pos = rowID;
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
@@ -244,33 +410,48 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
   // Loop over colors. For each color launch a kernel which will compute the
   // contributions for those rows in parallel since the rows of the same color
   // do not share neighbours.
-#ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams
-#endif
+
   for (local_int_t color = 0; color < A.totalColors; color++) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp distribute parallel for
+#pragma omp target teams distribute parallel for
 #else
 #pragma omp parallel for
 #endif
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = 0; i < colorNRows; i++) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
-
-      double sum = r.values[rowID]; // RHS value
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
       int pos = rowID;
+
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = 0; i < colorNRows; i++) {
@@ -292,33 +473,46 @@ int ComputeSYMGSWithMulitcoloring_Lvl_1(const SparseMatrix & A, const Vector & r
 #endif
   }
 
-#ifdef HPCG_OPENMP_TARGET
-#pragma omp target teams
-#endif
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp distribute parallel for
+#pragma omp target teams distribute parallel for
 #else
 #pragma omp parallel for
 #endif
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
-
-      double sum = r.values[rowID]; // RHS value
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
       int pos = rowID;
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
@@ -362,33 +556,46 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
   // Loop over colors. For each color launch a kernel which will compute the
   // contributions for those rows in parallel since the rows of the same color
   // do not share neighbours.
-#ifndef HPCG_NO_OPENMP
-#pragma omp target teams
-#endif
   for (local_int_t color = 0; color < A.totalColors; color++) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp distribute parallel for
+#pragma omp target teams distribute parallel for
 #else
 #pragma omp parallel for
 #endif
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = 0; i < colorNRows; i++) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
-
-      double sum = r.values[rowID]; // RHS value
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
       int pos = rowID;
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = 0; i < colorNRows; i++) {
@@ -410,33 +617,46 @@ int ComputeSYMGSWithMulitcoloring_Lvl_2(const SparseMatrix & A, const Vector & r
 #endif
   }
 
-#ifndef HPCG_NO_OPENMP
-#pragma omp target teams
-#endif
   for (local_int_t color = A.totalColors - 1; color >= 0; color--) {
-    local_int_t colorNRows = A.colorBounds[color + 1] - A.colorBounds[color];
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
 #ifndef HPCG_NO_OPENMP
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp distribute parallel for
+#pragma omp target teams distribute parallel for
 #else
 #pragma omp parallel for
 #endif
 #endif
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {
-      const local_int_t rowID = A.colorToRow[A.colorBounds[color] + i];
-
-      double sum = r.values[rowID]; // RHS value
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      const local_int_t rowID = __builtin_nontemporal_load(A.colorToRow + (currentColorStart + i));
+      double sum = __builtin_nontemporal_load(r.values + rowID);
+#else
+      const local_int_t rowID = A.colorToRow[currentColorStart + i];
+      double sum = r.values[rowID];
+#endif
       int pos = rowID;
 #pragma unroll
       for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+        local_int_t curCol = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+        if (curCol >= 0 && curCol != rowID)
+          sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[curCol];
+#else
         local_int_t curCol = A.mtxIndLSOA[pos];
         if (curCol >= 0 && curCol != rowID)
           sum -= A.matrixValuesSOA[pos] * x.values[curCol];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
         pos += nrow;
       }
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      __builtin_nontemporal_store(sum * __builtin_nontemporal_load(A.discreteInverseDiagonal + rowID), x.values + rowID);
+#else
       x.values[rowID] = sum * A.discreteInverseDiagonal[rowID];
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
     }
 #else
     for (local_int_t i = colorNRows - 1; i >= 0; i--) {

@@ -155,6 +155,7 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target enter data map(to: A.colorBounds[:(A.totalColors+1)])
 #pragma omp target enter data map(to: A.colorToRow[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.discreteInverseDiagonal[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.diagIdx[:A.localNumberOfRows])
 #endif // End HPCG_USE_MULTICOLORING
 
 #ifndef HPCG_CONTIGUOUS_ARRAYS
@@ -269,6 +270,7 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #endif // End HPCG_CONTIGUOUS_ARRAYS
 
 #if defined(HPCG_USE_MULTICOLORING)
+#pragma omp target exit data map(release: A.diagIdx[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.discreteInverseDiagonal[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.colorToRow[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.colorBounds[:(A.totalColors+1)])

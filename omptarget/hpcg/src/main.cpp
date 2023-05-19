@@ -355,8 +355,8 @@ int main(int argc, char * argv[]) {
   testnorms_data.samples = numberOfCgSets;
   testnorms_data.values = new double[numberOfCgSets];
 
-  for (int i=0; i< numberOfCgSets; ++i) {
-  // for (int i=0; i<10; ++i) {
+  // for (int i=0; i< numberOfCgSets; ++i) {
+  for (int i=0; i<10; ++i) {
     ZeroVector_Offload(x); // Zero out x
     ierr = CG( A, data, b, x, optMaxIters, optTolerance, niters, normr, normr0, &times[0], true);
     if (ierr) HPCG_fout << "Error in call to CG: " << ierr << ".\n" << endl;

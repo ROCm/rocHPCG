@@ -27,6 +27,10 @@
 #include "ComputeSPMV.hpp"
 #include "ComputeSPMV_ref.hpp"
 
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+#include <hip/hip_runtime.h>
+#endif
+
 /*!
   Routine to compute sparse matrix vector product y = Ax where:
   Precondition: First call exchange_externals to get off-processor values of x
@@ -75,13 +79,23 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
     int pos = i;
 #pragma unroll
     for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+      local_int_t col = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
+      if (col >= 0)
+        sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[col];
+#else
       local_int_t col = A.mtxIndLSOA[pos];
-      if (col >= 0) {
+      if (col >= 0)
         sum += A.matrixValuesSOA[pos] * x.values[col];
-      }
+#endif
       pos += nrow;
     }
+
+#if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
+    __builtin_nontemporal_store(sum, y.values + i);
+#else
     y.values[i] = sum;
+#endif // End HPCG_USE_HIP_NONTEMPORAL_LS
   }
 #else
   for (local_int_t i = 0; i < nrow; i++)  {

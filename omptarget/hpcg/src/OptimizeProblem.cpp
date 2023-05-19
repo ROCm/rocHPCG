@@ -155,11 +155,27 @@ void ColorSparseMatrixRows(SparseMatrix & A) {
     discreteInverseDiagonal[i] = 1.0 / A.matrixDiagonal[i][0];
   }
 
+  // Populate array with iagonal indices:
+  local_int_t *diagIdx = new local_int_t[nrow];
+  for (local_int_t i = 0; i < nrow; ++i) {
+    const local_int_t * const currentColIndices = A.mtxIndL[i];
+    const int currentNumberOfNonzeros = A.nonzerosInRow[i];
+
+    for (int j = 0; j < currentNumberOfNonzeros; j++) {
+      local_int_t curCol = currentColIndices[j];
+      if (i == curCol) {
+        diagIdx[i] = j;
+        break;
+      }
+    }
+  }
+
   // Save as part of matrix A:
   A.totalColors = totalColors;
   A.colorBounds = colorBounds;
   A.colorToRow = colorToRow;
   A.discreteInverseDiagonal = discreteInverseDiagonal;
+  A.diagIdx = diagIdx;
 
   printf("Color summry: Colors = %d\n", A.totalColors);
 

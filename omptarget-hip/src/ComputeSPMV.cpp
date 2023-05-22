@@ -225,30 +225,87 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
     assert(x.localLength >= A.localNumberOfColumns);
     assert(y.localLength >= A.localNumberOfRows);
 
-#ifndef HPCG_NO_MPI
-    if(A.geom->size > 1)
-    {
-        PrepareSendBuffer(A, x);
-    }
-#endif
+// #ifndef HPCG_NO_MPI
+//     if(A.geom->size > 1)
+//     {
+//         PrepareSendBuffer(A, x);
+//     }
+// #endif
 
     if(&y != A.mgData->Axf)
     {
-        if(A.ell_width == 27) LAUNCH_SPMV_ELL(1024, 27);
-    }
+        if(A.ell_width == 27) {
+            // LAUNCH_SPMV_ELL(1024, 27);
+            local_int_t nrows = A.localNumberOfRows;
+            local_int_t rows_per_block = A.localNumberOfRows / A.nblocks;
 
-#ifndef HPCG_NO_MPI
-    if(A.geom->size > 1)
+            dim3 blocks(A.nblocks, (A.localNumberOfRows - 1) / (A.nblocks * blocksize) + 1); \
+            dim3 threads(blocksize);                                                         \
+                                                                                            \
+            kernel_spmv_ell<blocksize, width><<<blocks, threads, 0, stream_interior>>>(      \
+                A.localNumberOfRows,                                                         \
+                A.localNumberOfRows / A.nblocks,                                             \
+                A.ell_col_ind,                                                               \
+                A.ell_val,                                                                   \
+                x.d_values,                                                                  \
+                y.d_values);
+            }
+
+            template <unsigned int BLOCKSIZE, unsigned int WIDTH>
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_spmv_ell(local_int_t m,
+                                local_int_t rows_per_block,
+                                const local_int_t* ell_col_ind,
+                                const double* ell_val,
+                                const double* x,
+                                double* y)
+{
+    // Applies for chunks of BLOCKSIZE * nblocks
+    local_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
+
+    // Applies for chunks of BLOCKSIZE and restarts for each color_block_offset
+    local_int_t thread_block_offset = blockIdx.x * rows_per_block;
+
+    // Row entry point
+    local_int_t row = color_block_offset + thread_block_offset + threadIdx.x;
+
+    if(row >= nrows)
     {
-        ExchangeHaloAsync(A, x);
-        ObtainRecvBuffer(A, x);
-
-        if(&y != A.mgData->Axf)
-        {
-            if(A.ell_width == 27) LAUNCH_SPMV_HALO(1024, 27);
-        }
+        return;
     }
-#endif
+
+    double sum = 0.0;
+    local_int_t idx = row;
+
+#pragma unroll
+    for(local_int_t p = 0; p < WIDTH; ++p)
+    {
+        local_int_t col = __builtin_nontemporal_load(A.ell_col_ind + idx);
+
+        if(col >= 0 && col < nrows)
+        {
+            sum = fma(__builtin_nontemporal_load(A.ell_val + idx), x.values[col], sum);
+        }
+
+        idx += nrows;
+    }
+
+    __builtin_nontemporal_store(sum, y.values + row);
+}
+    }
+
+// #ifndef HPCG_NO_MPI
+//     if(A.geom->size > 1)
+//     {
+//         ExchangeHaloAsync(A, x);
+//         ObtainRecvBuffer(A, x);
+
+//         if(&y != A.mgData->Axf)
+//         {
+//             if(A.ell_width == 27) LAUNCH_SPMV_HALO(1024, 27);
+//         }
+//     }
+// #endif
 
     if(&y == A.mgData->Axf)
     {

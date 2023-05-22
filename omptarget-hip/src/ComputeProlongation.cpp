@@ -36,27 +36,9 @@
 
 #include <hip/hip_runtime.h>
 
-template <unsigned int BLOCKSIZE>
-__launch_bounds__(BLOCKSIZE)
-__global__ void kernel_prolongation(local_int_t size,
-                                    const local_int_t* __restrict__ f2cOperator,
-                                    const double* __restrict__ coarse,
-                                    double* __restrict__ fine,
-                                    const local_int_t* __restrict__ perm_fine,
-                                    const local_int_t* __restrict__ perm_coarse)
-{
-    local_int_t idx_coarse = blockIdx.x * BLOCKSIZE + threadIdx.x;
-
-    if(idx_coarse >= size)
-    {
-        return;
-    }
-
-    local_int_t idx_fine = __builtin_nontemporal_load(f2cOperator + idx_coarse);
-    local_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
-
-    fine[perm_fine[idx_fine]] += coarse[idx_perm];
-}
+#ifndef HPCG_NO_OPENMP
+#include <omp.h>
+#endif
 
 /*!
   Routine to compute the coarse residual vector.
@@ -69,17 +51,20 @@ __global__ void kernel_prolongation(local_int_t size,
 
   @return Returns zero on success and a non-zero value otherwise.
 */
-int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
-{
-    dim3 blocks((Af.mgData->rc->localLength - 1) / 128 + 1);
-    dim3 threads(128);
+int ComputeProlongation(const SparseMatrix& Af, Vector& xf) {
+  local_int_t nc = A.mgData->rc->localLength;
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+  // TODO: Somehow note that this loop can be safely vectorized since f2c has no repeated indices
+  // This loop is safe to vectorize
+  for (local_int_t i = 0; i < nc; ++i) {
+    x.values[__builtin_nontemporal_load(A.mgData->f2cOperator + i)] += __builtin_nontemporal_load(A.mgData->xc->values + i);
+  }
 
-    kernel_prolongation<128><<<blocks, threads>>>(Af.mgData->rc->localLength,
-                                                  Af.mgData->d_f2cOperator,
-                                                  Af.mgData->xc->d_values,
-                                                  xf.d_values,
-                                                  Af.perm,
-                                                  Af.Ac->perm);
-
-    return 0;
+  return 0;
 }

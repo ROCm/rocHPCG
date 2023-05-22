@@ -51,6 +51,7 @@
 #include "ComputeSPMV.hpp"
 #include "ComputeRestriction.hpp"
 #include "ComputeProlongation.hpp"
+#include "mytimer.hpp"
 
 /*!
   @param[in] A the known system matrix
@@ -64,38 +65,35 @@
 int ComputeMG(const SparseMatrix& A, const Vector& r, Vector& x)
 {
     assert(x.localLength == A.localNumberOfColumns);
+    int ierr = 0;
 
     if(A.mgData != 0)
     {
-        RETURN_IF_HPCG_ERROR(ComputeSYMGSZeroGuess(A, r, x));
+        ierr += ComputeSYMGSZeroGuess(A, r, x); if (ierr!=0) return ierr;
 
         int numberOfPresmootherSteps = A.mgData->numberOfPresmootherSteps;
-
-        for(int i = 1; i < numberOfPresmootherSteps; ++i)
-        {
-            RETURN_IF_HPCG_ERROR(ComputeSYMGS(A, r, x));
+        for(int i = 1; i < numberOfPresmootherSteps; ++i) {
+            ierr += ComputeSYMGS(A, r, x); if (ierr!=0) return ierr;
         }
 
-#ifndef HPCG_REFERENCE
-        RETURN_IF_HPCG_ERROR(ComputeFusedSpMVRestriction(A, r, x));
-#else
-        RETURN_IF_HPCG_ERROR(ComputeSPMV(A, x, *A.mgData->Axf));
-        RETURN_IF_HPCG_ERROR(ComputeRestriction(A, r));
-#endif
+// Fused SPMV and Restriction not supported yet.
+// #ifndef HPCG_REFERENCE
+//         ierr += ComputeFusedSpMVRestriction(A, r, x)); if (ierr!=0) return ierr;
+// #else
+        ierr += ComputeSPMV(A, x, *A.mgData->Axf)); if (ierr!=0) return ierr;
+        ierr += ComputeRestriction(A, r)); if (ierr!=0) return ierr;
+// #endif
 
-        RETURN_IF_HPCG_ERROR(ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc));
-        RETURN_IF_HPCG_ERROR(ComputeProlongation(A, x));
+        ierr += ComputeMG(*A.Ac, *A.mgData->rc, *A.mgData->xc)); if (ierr!=0) return ierr;
+        ierr += ComputeProlongation(A, x)); if (ierr!=0) return ierr;
 
         int numberOfPostsmootherSteps = A.mgData->numberOfPostsmootherSteps;
 
-        for(int i = 0; i < numberOfPostsmootherSteps; ++i)
-        {
-            RETURN_IF_HPCG_ERROR(ComputeSYMGS(A, r, x));
+        for(int i = 0; i < numberOfPostsmootherSteps; ++i) {
+            ierr += ComputeSYMGS(A, r, x)); if (ierr!=0) return ierr;
         }
-    }
-    else
-    {
-        RETURN_IF_HPCG_ERROR(ComputeSYMGSZeroGuess(A, r, x));
+    } else {
+        ierr += ComputeSYMGSZeroGuess(A, r, x)); if (ierr!=0) return ierr;
     }
 
     return 0;

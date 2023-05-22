@@ -50,11 +50,8 @@
 
 #include <cmath>
 
-#ifdef OPT_ROCTX
-#include <roctracer/roctx.h>
-#endif
-
 #include "hpcg.hpp"
+#include "globals.hpp"
 
 #include "CG.hpp"
 #include "mytimer.hpp"
@@ -65,21 +62,8 @@
 
 
 // Use TICK and TOCK to time a code section in MATLAB-like fashion
-#ifdef OPT_ROCTX // add roctx in TICK/TOCK
-#ifndef HPCG_NO_MPI
-#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
-#else
-#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
-#endif
-#define TOCK(t) hipDeviceSynchronize(); roctxRangePop(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
-#else // don't include markers
-#ifndef HPCG_NO_MPI
-#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
-#else
-#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
-#endif
-#define TOCK(t) hipDeviceSynchronize(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
-#endif
+#define TICK()  t0 = mytimer() //!< record current time in 't0'
+#define TOCK(t) t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
 
 /*!
   Routine to compute an approximate solution to Ax = b
@@ -104,9 +88,6 @@
 int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
     const int max_iter, const double tolerance, int & niters, double & normr, double & normr0,
     double * times, bool doPreconditioning, bool verbose) {
-#ifdef OPT_ROCTX
-  roctxRangePush("Total Time");
-#endif
   double t_begin = mytimer();  // Start timing right away
   normr = 0.0;
   double rtz = 0.0, oldrtz = 0.0, alpha = 0.0, beta = 0.0, pAp = 0.0;
@@ -130,10 +111,15 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   if (print_freq<1)  print_freq=1;
 #endif
   // p is of length ncols, copy x to p for sparse MV operation
-  HIPCopyVector(x, p);
-  TICK("SpMV"); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
-  TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
-  TICK("DDOT"); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+#ifdef HPCG_OPENMP_TARGET
+  CopyVector_Offload(x, p);
+#else
+  CopyVector(x, p);
+#endif
+
+  TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+  TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
+  TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
@@ -146,33 +132,37 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   // Start iterations
 
   for (int k=1; k<=max_iter && normr/normr0 > tolerance; k++ ) {
-    TICK("MG");
+    TICK();
     if (doPreconditioning)
       ComputeMG(A, r, z); // Apply preconditioner
     else
-      HIPCopyVector (r, z); // copy r to z (no preconditioning)
+#ifdef HPCG_OPENMP_TARGET
+      CopyVector_Offload(r, z);; // copy r to z (no preconditioning)
+#else
+      CopyVector(r, z);; // copy r to z (no preconditioning)
+#endif
     TOCK(t5); // Preconditioner apply time
 
     if (k == 1) {
-      TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
-      TICK("DDOT"); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK(); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
     } else {
       oldrtz = rtz;
-      TICK("DDOT"); ComputeDotProduct (nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+      TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
       beta = rtz/oldrtz;
-      TICK("WAXPBY"); ComputeWAXPBY (nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
+      TICK(); ComputeWAXPBY(nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
     }
 
-    TICK("SpMV"); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
-    TICK("DDOT"); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
+    TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+    TICK(); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
     alpha = rtz/pAp;
 #ifndef HPCG_REFERENCE
-    TICK("WAXPBY"); ComputeFusedWAXPBYDot(nrow, -alpha, Ap, r, normr, t4);
+    TICK(); ComputeFusedWAXPBYDot(nrow, -alpha, Ap, r, normr, t4);
             ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized); TOCK(t2); // x = x + alpha*p
 #else
-    TICK("WAXPBY"); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
+    TICK(); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
             ComputeWAXPBY(nrow, 1.0, r, -alpha, Ap, r, A.isWaxpbyOptimized);  TOCK(t2);// r = r - alpha*Ap
-    TICK("DDOT"); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
+    TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
 #endif
     normr = sqrt(normr);
 #ifdef HPCG_DEBUG
@@ -192,12 +182,142 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 //#ifndef HPCG_NO_MPI
 //  times[6] += t6; // exchange halo time
 //#endif
-#ifdef OPT_ROCTX
-  roctxRangePop(); // Total Time
-#endif
 
   double total_time = mytimer() - t_begin;
   times[0] += total_time;  // Total time. All done...
   printf(" Times: DOT: %f  WAXBY: %f  SPMV:  %f  AllReduce: %f  ComputeMG: %f TOTAL: %f (niters = %d (max_iter = %d), doPreconditioning = %d)\n", t1, t2, t3, t4, t5, total_time, niters, max_iter, doPreconditioning);
   return 0;
+}
+
+void MapMultiGridSparseMatrix(SparseMatrix &A) {
+  int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
+#ifdef HPCG_OPENMP_TARGET
+
+#if defined(HPCG_USE_MULTICOLORING)
+#pragma omp target enter data map(to: A.colorBounds[:(A.totalColors+1)])
+#pragma omp target enter data map(to: A.colorToRow[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.discreteInverseDiagonal[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.diagIdx[:A.localNumberOfRows])
+#endif // End HPCG_USE_MULTICOLORING
+
+#ifndef HPCG_CONTIGUOUS_ARRAYS
+// If 1 array per row is used
+#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
+  for (int i = 0; i < A.localNumberOfRows; ++i) {
+#pragma omp target enter data map(to: A.matrixValues[i][:A.nonzerosInRow[i]])
+#pragma omp target enter data map(to: A.mtxIndL[i][:A.nonzerosInRow[i]])
+  }
+#else
+// If 1 array per matrix is used
+#if defined(HPCG_USE_SOA_LAYOUT)
+#pragma omp target enter data map(to: A.matrixValuesSOA[:totalNonZeroValues])
+#pragma omp target enter data map(to: A.mtxIndLSOA[:totalNonZeroValues])
+#else
+#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.matrixValues[0][:totalNonZeroValues])
+#pragma omp target enter data map(to: A.mtxIndL[0][:totalNonZeroValues])
+  // Connect the pointers in the pointer array with the pointed positions
+  // inside the contiguous memory array:
+#pragma omp target teams distribute parallel for
+  for (local_int_t i = 1; i < A.localNumberOfRows; ++i) {
+    A.mtxIndL[i] = A.mtxIndL[0] + i * MAP_MAX_LENGTH;
+    A.matrixValues[i] = A.matrixValues[0] + i * MAP_MAX_LENGTH;
+  }
+#endif // End HPCG_USE_SOA_LAYOUT
+#endif // End HPCG_CONTIGUOUS_ARRAYS
+
+#pragma omp target enter data map(to: A.nonzerosInRow[:A.localNumberOfRows])
+
+  // Copy diagonal to device when needed but currently it is not needed
+  // becaue we copy inverse diagonal values using a separate arrray.
+// #if !defined(HPCG_USE_MULTICOLORING)
+// #pragma omp target enter data map(to: A.matrixDiagonal[:A.localNumberOfRows])
+// #pragma omp target teams distribute parallel for
+  // for (int i = 0; i < A.localNumberOfRows; ++i) {
+  //   const local_int_t * const currentColIndices = A.mtxIndL[i];
+  //   const int currentNumberOfNonzeros = A.nonzerosInRow[i];
+
+  //   for (int j = 0; j < currentNumberOfNonzeros; j++) {
+  //     local_int_t curCol = currentColIndices[j];
+  //     if (curCol == i) {
+  //       A.matrixDiagonal[i] = &A.matrixValues[i][j];
+  //     }
+  //   }
+  // }
+// #endif // End !HPCG_USE_MULTICOLORING
+#endif // End HPCG_OPENMP_TARGET
+
+  // Recursive call to make sure ALL layers are mapped:
+  if (A.mgData != 0) {
+    local_int_t nc = A.mgData->rc->localLength;
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target enter data map(to: A.mgData[:1])
+#pragma omp target enter data map(to: A.mgData[0].Axf[:1])
+#pragma omp target enter data map(to: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
+#pragma omp target enter data map(to: A.mgData[0].f2cOperator[:nc])
+#pragma omp target enter data map(to: A.mgData[0].rc[:1])
+#pragma omp target enter data map(to: A.mgData[0].rc[0].values[:A.mgData->rc->localLength])
+#pragma omp target enter data map(to: A.mgData[0].xc[:1])
+#pragma omp target enter data map(to: A.mgData[0].xc[0].values[:A.mgData->xc->localLength])
+#pragma omp target enter data map(to: A.Ac[:1])
+#endif // End HPCG_OPENMP_TARGET
+    MapMultiGridSparseMatrix(*A.Ac);
+  }
+}
+
+void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
+  int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
+  // Recursive call to make sure ALL layers are unmapped:
+  if (A.mgData != 0) {
+    local_int_t nc = A.mgData->rc->localLength;
+    UnMapMultiGridSparseMatrix(*A.Ac);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A.Ac[:1])
+#pragma omp target exit data map(release: A.mgData[0].f2cOperator[:nc])
+#pragma omp target exit data map(release: A.mgData[0].Axf[0].values[:A.localNumberOfColumns])
+#pragma omp target exit data map(release: A.mgData[0].Axf[:1])
+#pragma omp target exit data map(release: A.mgData[0].rc[0].values[:A.mgData->rc->localLength])
+#pragma omp target exit data map(release: A.mgData[0].rc[:1])
+#pragma omp target exit data map(release: A.mgData[0].xc[0].values[:A.mgData->xc->localLength])
+#pragma omp target exit data map(release: A.mgData[0].xc[:1])
+#pragma omp target exit data map(release: A.mgData[:1])
+#endif // End HPCG_OPENMP_TARGET
+  }
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target exit data map(release: A.nonzerosInRow[:A.localNumberOfRows])
+  // Only enable this when needed.
+// #if !defined(HPCG_USE_MULTICOLORING)
+// #pragma omp target exit data map(release: A.matrixDiagonal[:A.localNumberOfRows])
+// #endif
+#ifndef HPCG_CONTIGUOUS_ARRAYS
+// If 1 array per row is used:
+    for (int i = 0; i < A.localNumberOfRows; ++i) {
+#pragma omp target exit data map(release: A.matrixValues[i][:A.nonzerosInRow[i]])
+#pragma omp target exit data map(release: A.mtxIndL[i][:A.nonzerosInRow[i]])
+    }
+#pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
+#else
+// If 1 array per matrix is used
+#if defined(HPCG_USE_SOA_LAYOUT)
+#pragma omp target exit data map(release: A.matrixValuesSOA[:totalNonZeroValues])
+#pragma omp target exit data map(release: A.mtxIndLSOA[:totalNonZeroValues])
+#else
+#pragma omp target exit data map(release: A.matrixValues[0][:totalNonZeroValues])
+#pragma omp target exit data map(release: A.mtxIndL[0][:totalNonZeroValues])
+#pragma omp target exit data map(release: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.mtxIndL[:A.localNumberOfRows])
+#endif // END HPCG_USE_SOA_LAYOUT
+#endif // End HPCG_CONTIGUOUS_ARRAYS
+
+#if defined(HPCG_USE_MULTICOLORING)
+#pragma omp target exit data map(release: A.diagIdx[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.discreteInverseDiagonal[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.colorToRow[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.colorBounds[:(A.totalColors+1)])
+#endif // End HPCG_USE_MULTICOLORING
+
+#endif // End HPCG_OPENMP_TARGET
 }

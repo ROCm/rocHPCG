@@ -50,106 +50,11 @@
 #include <mpi.h>
 #include "mytimer.hpp"
 #endif
-
-#include "utils.hpp"
+#ifndef HPCG_NO_OPENMP
+#include <omp.h>
+#endif
+#include <cassert>
 #include "ComputeDotProduct.hpp"
-
-#include <hip/hip_runtime.h>
-
-template <unsigned int BLOCKSIZE>
-__launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot1_part1(local_int_t n, const double* x, double* workspace)
-{
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * BLOCKSIZE;
-
-    double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += inc)
-    {
-        double val = x[idx];
-        sum = fma(val, val, sum);
-    }
-
-    __shared__ double sdata[BLOCKSIZE];
-    sdata[threadIdx.x] = sum;
-
-    __syncthreads();
-
-    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
-
-    if(threadIdx.x == 0)
-    {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
-    }
-}
-
-template <unsigned int BLOCKSIZE>
-__launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot2_part1(local_int_t n,
-                                  const double* x,
-                                  const double* y,
-                                  double* workspace)
-{
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * BLOCKSIZE;
-
-    double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += inc)
-    {
-        sum = fma(y[idx], x[idx], sum);
-    }
-
-    __shared__ double sdata[BLOCKSIZE];
-    sdata[threadIdx.x] = sum;
-
-    __syncthreads();
-
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
-
-    if(threadIdx.x == 0)
-    {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
-    }
-}
-
-template <unsigned int BLOCKSIZE>
-__launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot_part2(double* workspace)
-{
-    __shared__ double sdata[BLOCKSIZE];
-    sdata[threadIdx.x] = workspace[threadIdx.x];
-
-    __syncthreads();
-
-    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
-
-    if(threadIdx.x == 0)
-    {
-        workspace[0] = sdata[0] + sdata[1];
-    }
-}
 
 /*!
   Routine to compute the dot product of two vectors.
@@ -175,35 +80,43 @@ int ComputeDotProduct(local_int_t n,
                       double& time_allreduce,
                       bool& isOptimized)
 {
-    assert(x.localLength >= n);
-    assert(y.localLength >= n);
+  isOptimized = true;
+  assert(x.localLength >= n); // Test vector lengths
+  assert(y.localLength >= n);
 
-    double* tmp = reinterpret_cast<double*>(workspace);
-
-    if(x.d_values == y.d_values)
-    {
-        kernel_dot1_part1<1024><<<1024, 1024>>>(n, x.d_values, tmp);
-        kernel_dot_part2<1024><<<1, 1024>>>(tmp);
-    }
-    else
-    {
-        kernel_dot2_part1<256><<<256, 256>>>(n, x.d_values, y.d_values, tmp);
-        kernel_dot_part2<256><<<1, 256>>>(tmp);
-    }
-
-    double local_result;
-    HIP_CHECK(hipMemcpy(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost));
+  double local_result = 0.0;
+  if (y.values == x.values) {
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+    #pragma omp target teams distribute parallel for reduction (+:local_result)
+#else
+    #pragma omp parallel for reduction (+:local_result)
+#endif
+#endif
+    for (local_int_t i = 0; i < n; i++) local_result += x.values[i] * x.values[i];
+  } else {
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+    #pragma omp target teams distribute parallel for reduction (+:local_result)
+#else
+    #pragma omp parallel for reduction (+:local_result)
+#endif
+#endif
+    for (local_int_t i = 0; i < n; i++) local_result += x.values[i] * y.values[i];
+  }
 
 #ifndef HPCG_NO_MPI
-    double t0 = mytimer();
-    double global_result = 0.0;
+  // Use MPI's reduce function to collect all partial sums
+  double t0 = mytimer();
+  double global_result = 0.0;
 
-    MPI_Allreduce(&local_result, &global_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_result, &global_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    result = global_result;
-    time_allreduce += mytimer() - t0;
+  result = global_result;
+  time_allreduce += mytimer() - t0;
 #else
-    result = local_result;
+  time_allreduce += 0.0;
+  result = local_result;
 #endif
 
     return 0;

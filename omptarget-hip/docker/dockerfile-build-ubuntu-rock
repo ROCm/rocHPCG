@@ -1,0 +1,49 @@
+# Parameters related to building rocHPCG
+ARG base_image
+
+FROM ${base_image}
+LABEL maintainer="rochpcg-maintainer@amd.com"
+
+ARG user_uid
+
+ARG library_dependencies="rocblas rocsolver"
+
+# Install dependent packages
+# Dependencies:
+# * hcc-config.cmake: pkg-config
+# * rochpcg-test: googletest rocprim
+# * libhsakmt.so: libnuma1 libnuma-dev
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    sudo \
+    ca-certificates \
+    git \
+    make \
+    cmake \
+    pkg-config \
+    libnuma1 \
+    libnuma-dev \
+    mpi-default-bin \
+    mpi-default-dev \
+    libomp-dev \
+    ${library_dependencies} \
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# docker pipeline runs containers with particular uid
+# create a jenkins user with this specific uid so it can use sudo priviledges
+# Grant any member of video group password-less sudo privileges
+RUN useradd --create-home -u ${user_uid} -o -G video --shell /bin/bash jenkins && \
+    mkdir -p /etc/sudoers.d/ && \
+    echo '%video   ALL=(ALL) NOPASSWD:ALL' | tee /etc/sudoers.d/sudo-nopasswd
+
+ARG GTEST_SRC_ROOT=/usr/local/src/gtest
+
+# Clone gtest repo
+# Build gtest and install into /usr/local
+RUN mkdir -p ${GTEST_SRC_ROOT} && cd ${GTEST_SRC_ROOT} && \
+    git clone -b release-1.8.1 --depth=1 https://github.com/google/googletest . && \
+    mkdir -p build && cd build && \
+    cmake .. && \
+    make -j $(nproc) install && \
+    rm -rf ${GTEST_SRC_ROOT}

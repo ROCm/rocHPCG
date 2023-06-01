@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -106,9 +106,9 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
 
     double sum = 0.0;
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+    for(global_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
+        global_int_t idx = p * m + row;
         local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < n)
@@ -148,7 +148,7 @@ __global__ void kernel_spmv_ell(local_int_t m,
     }
 
     double sum = 0.0;
-    local_int_t idx = row;
+    global_int_t idx = row;
 
 #pragma unroll
     for(local_int_t p = 0; p < WIDTH; ++p)

@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -124,7 +124,7 @@ __global__ void kernel_symgs_sweep(local_int_t m,
     }
 
     local_int_t row = gid + offset;
-    local_int_t idx = row;
+    global_int_t idx = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
@@ -161,7 +161,7 @@ __global__ void kernel_symgs_interior(local_int_t m,
         return;
     }
 
-    local_int_t idx = row;
+    global_int_t idx = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
@@ -265,8 +265,9 @@ __global__ void kernel_forward_sweep_0(local_int_t m,
     }
 
     local_int_t row  = gid + offset;
-    local_int_t idx  = row;
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
+
+    global_int_t idx  = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
@@ -308,7 +309,8 @@ __global__ void kernel_backward_sweep_0(local_int_t m,
 
     local_int_t row  = gid + offset;
     local_int_t diag = __builtin_nontemporal_load(diag_idx + row);
-    local_int_t idx  = diag * m + row;
+
+    global_int_t idx = (global_int_t)diag * m + row;
 
     double diag_val = __builtin_nontemporal_load(ell_val + idx);
     idx += m;

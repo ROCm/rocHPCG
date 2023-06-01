@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -68,8 +68,8 @@ __global__ void kernel_permute_ell_rows(local_int_t m,
         return;
     }
 
-    local_int_t idx = p * m + perm[row];
-    local_int_t col = tmp_cols[row];
+    global_int_t idx = (global_int_t)p * m + perm[row];
+    local_int_t  col = tmp_cols[row];
 
     ell_col_ind[idx] = col;
     ell_val[idx] = tmp_vals[row];
@@ -101,8 +101,8 @@ __global__ void kernel_perm_cols(local_int_t m,
                                  local_int_t* __restrict__ mtxIndL,
                                  double* __restrict__ matrixValues)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
-    local_int_t idx = row * nonzerosPerRow + threadIdx.x;
+    local_int_t row  = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    global_int_t idx = (global_int_t)row * nonzerosPerRow + threadIdx.x;
     local_int_t key = n;
     double val = 0.0;
 
@@ -198,7 +198,7 @@ void PermuteRows(SparseMatrix& A)
     // Permute ELL rows
     for(local_int_t p = 0; p < A.ell_width; ++p)
     {
-        local_int_t offset = p * m;
+        global_int_t offset = (global_int_t)p * m;
 
         HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(local_int_t) * m, hipMemcpyDeviceToDevice));
         HIP_CHECK(hipMemcpy(tmp_vals, A.ell_val + offset, sizeof(double) * m, hipMemcpyDeviceToDevice));

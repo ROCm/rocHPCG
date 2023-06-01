@@ -118,7 +118,7 @@ __global__ void kernel_copy_indices(local_int_t size,
         return;
     }
 
-    local_int_t idx = row * BLOCKSIZEX + threadIdx.x;
+    global_int_t idx = (global_int_t)row * BLOCKSIZEX + threadIdx.x;
 
     if(threadIdx.x < nonzerosInRow[row])
     {

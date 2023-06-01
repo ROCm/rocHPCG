@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -105,7 +105,7 @@ __global__ void kernel_fused_restrict_spmv(local_int_t size,
 
     double sum = __builtin_nontemporal_load(fine + idx_perm_fine);
 
-    local_int_t idx = idx_perm_fine;
+    global_int_t idx = idx_perm_fine;
 
 #pragma unroll
     for(local_int_t p = 0; p < WIDTH; ++p)

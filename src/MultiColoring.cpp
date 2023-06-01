@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -187,7 +187,10 @@ __global__ void kernel_jpl(local_int_t m,
     // Get row hash value
     local_int_t row_hash = hash[row];
 
-    local_int_t idx = row * BLOCKSIZEX + threadIdx.x;
+    // Index into columns
+    global_int_t idx = (global_int_t)row * BLOCKSIZEX + threadIdx.x;
+
+    // Get column index
     local_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
 
     if(col >= 0 && col < m)
@@ -226,7 +229,7 @@ __global__ void kernel_jpl(local_int_t m,
     {
         if(max[threadIdx.y] == true)
         {
-           colors[row] = color1;
+            colors[row] = color1;
         }
         else if(min[threadIdx.y] == true)
         {

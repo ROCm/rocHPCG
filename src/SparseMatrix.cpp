@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -81,8 +81,8 @@ __global__ void kernel_copy_diagonal(local_int_t m,
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        global_int_t idx = (global_int_t)p * m + row;
+        local_int_t  col = ell_col_ind[idx];
 
         if(col >= 0 && col < n)
         {
@@ -131,7 +131,7 @@ __global__ void kernel_replace_diagonal(local_int_t m,
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
+        global_int_t idx = (global_int_t)p * m + row;
         local_int_t col = ell_col_ind[idx];
 
         if(col >= 0 && col < n)
@@ -148,7 +148,7 @@ __global__ void kernel_replace_diagonal(local_int_t m,
         }
     }
 
-    inv_diag[row] = 1.0 / diag;
+    inv_diag[row] = __drcp_rn(diag);
 }
 
 void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
@@ -186,8 +186,8 @@ __global__ void kernel_to_ell_col(local_int_t m,
         return;
     }
 
-    local_int_t col = __ldg(mtxIndL + row * nonzerosPerRow + threadIdx.x);
-    ell_col_ind[threadIdx.x * m + row] = col;
+    local_int_t col = __ldg(mtxIndL + (global_int_t)row * nonzerosPerRow + threadIdx.x);
+    ell_col_ind[(global_int_t)threadIdx.x * m + row] = col;
 
 #ifndef HPCG_NO_MPI
     if(col >= m)
@@ -221,8 +221,8 @@ __global__ void kernel_to_ell_val(local_int_t m,
         return;
     }
 
-    local_int_t idx = threadIdx.x * m + row;
-    ell_val[idx] = matrixValues[row * nnz_per_row + threadIdx.x];
+    global_int_t idx = (global_int_t)threadIdx.x * m + row;
+    ell_val[idx] = matrixValues[(global_int_t)row * nnz_per_row + threadIdx.x];
 }
 
 template <unsigned int BLOCKSIZE>
@@ -274,8 +274,11 @@ void ConvertToELL(SparseMatrix& A)
     A.ell_val = reinterpret_cast<double*>(A.d_mtxIndG);
     A.d_mtxIndG = NULL;
 
+    // Number of ELL entries
+    global_int_t localNumberOfELLNonzeros = (global_int_t)A.ell_width * A.localNumberOfRows;
+
     // Resize
-    HIP_CHECK(deviceRealloc((void*)A.ell_val, sizeof(double) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(deviceRealloc((void*)A.ell_val, sizeof(double) * localNumberOfELLNonzeros));
 
     // Determine blocksize
     unsigned int blocksize = 1024 / A.ell_width;
@@ -304,7 +307,7 @@ void ConvertToELL(SparseMatrix& A)
     A.d_matrixValues = NULL;
 
     // Resize the array
-    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * localNumberOfELLNonzeros));
 
     // Convert mtxIndL into ELL column indices
     local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
@@ -376,13 +379,13 @@ __global__ void kernel_extract_diag_index(local_int_t m,
 
     for(local_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
+        global_int_t idx = (global_int_t)p * m + row;
         local_int_t col = ell_col_ind[idx];
 
         if(col == row)
         {
             diag_idx[row] = p;
-            inv_diag[row] = 1.0 / ell_val[idx];
+            inv_diag[row] = __drcp_rn(ell_val[idx]);
             break;
         }
     }

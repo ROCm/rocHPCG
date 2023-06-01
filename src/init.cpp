@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -226,7 +226,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 #endif
 
   // Allocate device workspace
-  HIP_CHECK(deviceMalloc((void**)&workspace, sizeof(local_int_t) * 1024));
+  HIP_CHECK(deviceMalloc((void**)&workspace, sizeof(global_int_t) * 1024));
 
 #ifdef HPCG_NO_OPENMP
   params.numThreads = 1;

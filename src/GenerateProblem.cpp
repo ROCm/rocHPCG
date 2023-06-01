@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -218,7 +218,7 @@ __global__ void kernel_generate_problem(local_int_t m,
         // Interior vertex
 
         // Index into matrix
-        local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + threadIdx.x;
+        global_int_t idx = (global_int_t)currentLocalRow * numberOfNonzerosPerRow + threadIdx.x;
 
         // Diagonal entry is threated differently
         if(curcol == currentGlobalRow)
@@ -253,7 +253,7 @@ __global__ void kernel_generate_problem(local_int_t m,
             int offset = column_offset[threadIdx.x] - 1;
 
             // Index into matrix
-            local_int_t idx = currentLocalRow * numberOfNonzerosPerRow + offset;
+            global_int_t idx = (global_int_t)currentLocalRow * numberOfNonzerosPerRow + offset;
 
             // Diagonal entry is threated differently
             if(curcol == currentGlobalRow)
@@ -304,7 +304,7 @@ __global__ void kernel_generate_problem(local_int_t m,
 
 // Block reduce sum using LDS
 template <unsigned int BLOCKSIZE>
-__device__ void reduce_sum(local_int_t tid, local_int_t* data)
+__device__ void reduce_sum(local_int_t tid, global_int_t* data)
 {
     __syncthreads();
 
@@ -324,18 +324,18 @@ template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_local_nnz_part1(local_int_t size,
                                        const char* __restrict__ nonzerosInRow,
-                                       local_int_t* __restrict__ workspace)
+                                       global_int_t* __restrict__ workspace)
 {
     local_int_t tid = threadIdx.x;
     local_int_t gid = blockIdx.x * BLOCKSIZE + tid;
     local_int_t inc = gridDim.x * BLOCKSIZE;
 
-    __shared__ local_int_t sdata[BLOCKSIZE];
+    __shared__ global_int_t sdata[BLOCKSIZE];
     sdata[tid] = 0;
 
     for(local_int_t idx = gid; idx < size; idx += inc)
     {
-        sdata[tid] += nonzerosInRow[idx];
+        sdata[tid] += (global_int_t)nonzerosInRow[idx];
     }
 
     reduce_sum<BLOCKSIZE>(tid, sdata);
@@ -348,9 +348,9 @@ __global__ void kernel_local_nnz_part1(local_int_t size,
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_local_nnz_part2(local_int_t* workspace)
+__global__ void kernel_local_nnz_part2(global_int_t* workspace)
 {
-    __shared__ local_int_t sdata[BLOCKSIZE];
+    __shared__ global_int_t sdata[BLOCKSIZE];
     sdata[threadIdx.x] += workspace[threadIdx.x];
 
     reduce_sum<BLOCKSIZE>(threadIdx.x, sdata);
@@ -405,10 +405,13 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     if(x != NULL) HIPInitializeVector(*x, localNumberOfRows);
     if(xexact != NULL) HIPInitializeVector(*xexact, localNumberOfRows);
 
+    // Maximum number of local non-zeros
+    global_int_t localNumberOfMaxNonzeros = (global_int_t)localNumberOfRows * numberOfNonzerosPerRow;
+
     // Allocate structures
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, std::max(sizeof(double), sizeof(global_int_t)) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfRows * numberOfNonzerosPerRow));
-    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * localNumberOfRows * numberOfNonzerosPerRow));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndG, std::max(sizeof(double), sizeof(global_int_t)) * localNumberOfMaxNonzeros));
+    HIP_CHECK(deviceMalloc((void**)&A.d_matrixValues, sizeof(double) * localNumberOfMaxNonzeros));
+    HIP_CHECK(deviceMalloc((void**)&A.d_mtxIndL, sizeof(local_int_t) * localNumberOfMaxNonzeros));
     HIP_CHECK(deviceMalloc((void**)&A.d_nonzerosInRow, sizeof(char) * localNumberOfRows));
     HIP_CHECK(deviceMalloc((void**)&A.d_matrixDiagonal, sizeof(local_int_t) * localNumberOfRows));
     HIP_CHECK(deviceMalloc((void**)&A.d_rowHash, sizeof(local_int_t) * localNumberOfRows));
@@ -451,24 +454,25 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
             xexact->d_values);
     }
 
-    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
+    global_int_t* tmp = reinterpret_cast<global_int_t*>(workspace);
 
     // Compute number of local non-zero entries using two step reduction
     kernel_local_nnz_part1<256><<<256, 256>>>(localNumberOfRows, A.d_nonzerosInRow, tmp);
     kernel_local_nnz_part2<256><<<1, 256>>>(tmp);
 
     // Copy number of local non-zero entries to host
-    local_int_t localNumberOfNonzeros;
-    HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
+    global_int_t localNumberOfNonzeros;
+    HIP_CHECK(hipMemcpy(&localNumberOfNonzeros, tmp, sizeof(global_int_t), hipMemcpyDeviceToHost));
 
     global_int_t totalNumberOfNonzeros = 0;
 #ifndef HPCG_NO_MPI
     // Use MPI's reduce function to sum all nonzeros
 #ifdef HPCG_NO_LONG_LONG
-    MPI_Allreduce(&localNumberOfNonzeros, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    int lnnz = localNumberOfNonzeros;
+    MPI_Allreduce(&lnnz, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #else
-    long long lnnz = localNumberOfNonzeros, gnnz = 0;
-    MPI_Allreduce(&lnnz, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+    long long gnnz = 0;
+    MPI_Allreduce(&localNumberOfNonzeros, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
     totalNumberOfNonzeros = gnnz;
 #endif
 #else
@@ -499,15 +503,18 @@ void CopyProblemToHost(SparseMatrix& A, Vector* b, Vector* x, Vector* xexact)
     local_int_t* mtxDiag = new local_int_t[A.localNumberOfRows];
     A.localToGlobalMap.resize(A.localNumberOfRows);
 
+    // Maximum number of local non-zeros
+    global_int_t localNumberOfMaxNonzeros = (global_int_t)A.localNumberOfRows * A.numberOfNonzerosPerRow;
+
     // Now allocate the arrays pointed to
-    A.mtxIndL[0] = new local_int_t[A.localNumberOfRows * A.numberOfNonzerosPerRow];
-    A.matrixValues[0] = new double[A.localNumberOfRows * A.numberOfNonzerosPerRow];
-    A.mtxIndG[0] = new global_int_t[A.localNumberOfRows * A.numberOfNonzerosPerRow];
+    A.mtxIndL[0] = new local_int_t[localNumberOfMaxNonzeros];
+    A.matrixValues[0] = new double[localNumberOfMaxNonzeros];
+    A.mtxIndG[0] = new global_int_t[localNumberOfMaxNonzeros];
 
     // Copy GPU data to host
     HIP_CHECK(hipMemcpy(A.nonzerosInRow, A.d_nonzerosInRow, sizeof(char) * A.localNumberOfRows, hipMemcpyDeviceToHost));
-    HIP_CHECK(hipMemcpy(A.mtxIndG[0], A.d_mtxIndG, sizeof(global_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow, hipMemcpyDeviceToHost));
-    HIP_CHECK(hipMemcpy(A.matrixValues[0], A.d_matrixValues, sizeof(double) * A.localNumberOfRows * A.numberOfNonzerosPerRow, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(A.mtxIndG[0], A.d_mtxIndG, sizeof(global_int_t) * localNumberOfMaxNonzeros, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(A.matrixValues[0], A.d_matrixValues, sizeof(double) * localNumberOfMaxNonzeros, hipMemcpyDeviceToHost));
     HIP_CHECK(hipMemcpy(mtxDiag, A.d_matrixDiagonal, sizeof(local_int_t) * A.localNumberOfRows, hipMemcpyDeviceToHost));
     HIP_CHECK(hipMemcpy(A.localToGlobalMap.data(), A.d_localToGlobalMap, sizeof(global_int_t) * A.localNumberOfRows, hipMemcpyDeviceToHost));
 

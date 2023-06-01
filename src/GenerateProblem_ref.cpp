@@ -123,7 +123,7 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
   }
 #endif
 
-  local_int_t localNumberOfNonzeros = 0;
+  global_int_t localNumberOfNonzeros = 0;
   // TODO:  This triply nested loop could be flattened or use nested parallelism
 #ifndef HPCG_NO_OPENMP
   #pragma omp parallel for
@@ -190,7 +190,8 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
 #ifndef HPCG_NO_MPI
   // Use MPI's reduce function to sum all nonzeros
 #ifdef HPCG_NO_LONG_LONG
-  MPI_Allreduce(&localNumberOfNonzeros, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  int lnnz = localNumberOfNonzeros;
+  MPI_Allreduce(&lnnz, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #else
   long long lnnz = localNumberOfNonzeros, gnnz = 0; // convert to 64 bit for MPI call
   MPI_Allreduce(&lnnz, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);

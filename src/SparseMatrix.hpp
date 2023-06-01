@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -79,7 +79,7 @@ struct SparseMatrix_STRUCT {
   global_int_t totalNumberOfNonzeros; //!< total number of matrix nonzeros across all processes
   local_int_t localNumberOfRows; //!< number of rows local to this process
   local_int_t localNumberOfColumns;  //!< number of columns local to this process
-  local_int_t localNumberOfNonzeros;  //!< number of nonzeros local to this process
+  global_int_t localNumberOfNonzeros;  //!< number of nonzeros local to this process
   local_int_t numberOfNonzerosPerRow; //!< maximum number of nonzeros per row
   char  * nonzerosInRow;  //!< The number of nonzeros in a row will always be 27 or fewer
   global_int_t ** mtxIndG; //!< matrix indices as global values

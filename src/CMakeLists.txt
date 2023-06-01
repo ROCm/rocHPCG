@@ -1,4 +1,4 @@
-# Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -99,7 +99,7 @@ endif()
 
 # AMD targets
 foreach(target ${AMDGPU_TARGETS})
-  list(APPEND HIP_HIPCC_FLAGS "--amdgpu-target=${target}")
+  list(APPEND HIP_HIPCC_FLAGS "--offload-arch=${target}")
 endforeach()
 
 # Target executable

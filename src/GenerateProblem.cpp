@@ -335,7 +335,7 @@ __global__ void kernel_local_nnz_part1(local_int_t size,
 
     for(local_int_t idx = gid; idx < size; idx += inc)
     {
-        sdata[tid] += (global_int_t)nonzerosInRow[idx];
+        sdata[tid] += nonzerosInRow[idx];
     }
 
     reduce_sum<BLOCKSIZE>(tid, sdata);
@@ -351,7 +351,7 @@ __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_local_nnz_part2(global_int_t* workspace)
 {
     __shared__ global_int_t sdata[BLOCKSIZE];
-    sdata[threadIdx.x] += workspace[threadIdx.x];
+    sdata[threadIdx.x] = workspace[threadIdx.x];
 
     reduce_sum<BLOCKSIZE>(threadIdx.x, sdata);
 
@@ -471,8 +471,8 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     int lnnz = localNumberOfNonzeros;
     MPI_Allreduce(&lnnz, &totalNumberOfNonzeros, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #else
-    long long gnnz = 0;
-    MPI_Allreduce(&localNumberOfNonzeros, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+    long long lnnz = localNumberOfNonzeros, gnnz = 0;
+    MPI_Allreduce(&lnnz, &gnnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
     totalNumberOfNonzeros = gnnz;
 #endif
 #else
@@ -523,7 +523,7 @@ void CopyProblemToHost(SparseMatrix& A, Vector* b, Vector* x, Vector* xexact)
 
     // Initialize pointers
     A.matrixDiagonal[0] = A.matrixValues[0] + mtxDiag[0];
-    for(local_int_t i = 1; i < A.localNumberOfRows; ++i)
+    for(global_int_t i = 1; i < A.localNumberOfRows; ++i)
     {
         A.mtxIndL[i] = A.mtxIndL[0] + i * A.numberOfNonzerosPerRow;
         A.matrixValues[i] = A.matrixValues[0] + i * A.numberOfNonzerosPerRow;

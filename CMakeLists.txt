@@ -1,4 +1,4 @@
-# Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+# Modifications (c) 2019-2023 Advanced Micro Devices, Inc.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -89,7 +89,7 @@ find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
 
 # Setup version
-rocm_setup_version(VERSION 0.8.3)
+rocm_setup_version(VERSION 0.8.4)
 
 # rocHPCG source directory
 add_subdirectory(src)

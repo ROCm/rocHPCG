@@ -351,7 +351,7 @@ __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_local_nnz_part2(local_int_t* workspace)
 {
     __shared__ local_int_t sdata[BLOCKSIZE];
-    sdata[threadIdx.x] += workspace[threadIdx.x];
+    sdata[threadIdx.x] = workspace[threadIdx.x];
 
     reduce_sum<BLOCKSIZE>(threadIdx.x, sdata);
 

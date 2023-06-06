@@ -18,5 +18,8 @@
 #include "SparseMatrix.hpp"
 
 int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y);
+#if defined(HPCG_PERMUTE_ROWS)
+int reordered_ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y);
+#endif
 
 #endif  // COMPUTESPMV_HPP

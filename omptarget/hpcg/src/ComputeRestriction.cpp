@@ -51,3 +51,20 @@ int ComputeRestriction(const SparseMatrix & A, const Vector & r) {
   }
   return 0;
 }
+
+#if defined(HPCG_PERMUTE_ROWS)
+int reordered_ComputeRestriction(const SparseMatrix & A, const Vector & r) {
+  local_int_t nc = A.mgData->rc->localLength;
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+  for (local_int_t i = 0; i < nc; ++i) {
+    A.mgData->rc->values[A.Ac->oldRowToNewRow[i]] = r.values[A.oldRowToNewRow[A.mgData->f2cOperator[i]]] -  A.mgData->Axf->values[A.oldRowToNewRow[A.mgData->f2cOperator[i]]];
+  }
+  return 0;
+}
+#endif

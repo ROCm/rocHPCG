@@ -80,6 +80,13 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
   double ** matrixValues = new double*[localNumberOfRows];
   double ** matrixDiagonal = new double*[localNumberOfRows];
 
+#if defined(HPCG_PERMUTE_ROWS)
+  char * reordered_nonzerosInRow = new char[localNumberOfRows];
+  local_int_t  ** reordered_mtxIndL = new local_int_t*[localNumberOfRows];
+  double ** reordered_matrixValues = new double*[localNumberOfRows];
+  double ** reordered_matrixDiagonal = new double*[localNumberOfRows];
+#endif
+
   if (b!=0) InitializeVector(*b, localNumberOfRows);
   if (x!=0) InitializeVector(*x, localNumberOfRows);
   if (xexact!=0) InitializeVector(*xexact, localNumberOfRows);
@@ -103,6 +110,14 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
     mtxIndL[i] = 0;
   }
 
+#if defined(HPCG_PERMUTE_ROWS)
+  for (local_int_t i=0; i< localNumberOfRows; ++i) {
+    reordered_matrixValues[i] = 0;
+    reordered_matrixDiagonal[i] = 0;
+    reordered_mtxIndL[i] = 0;
+  }
+#endif
+
 #ifndef HPCG_CONTIGUOUS_ARRAYS
   // Now allocate the arrays pointed to
   for (local_int_t i=0; i< localNumberOfRows; ++i)
@@ -123,6 +138,16 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
     matrixValues[i] = matrixValues[0] + i * numberOfNonzerosPerRow;
     mtxIndG[i] = mtxIndG[0] + i * numberOfNonzerosPerRow;
   }
+#if defined(HPCG_PERMUTE_ROWS)
+  // Now allocate the arrays pointed to
+  reordered_mtxIndL[0] = new local_int_t[localNumberOfRows * numberOfNonzerosPerRow];
+  reordered_matrixValues[0] = new double[localNumberOfRows * numberOfNonzerosPerRow];
+
+  for (local_int_t i=1; i< localNumberOfRows; ++i) {
+    reordered_mtxIndL[i] = reordered_mtxIndL[0] + i * numberOfNonzerosPerRow;
+    reordered_matrixValues[i] = reordered_matrixValues[0] + i * numberOfNonzerosPerRow;
+  }
+#endif
 #endif
 
   local_int_t localNumberOfNonzeros = 0;
@@ -216,6 +241,15 @@ void GenerateProblem_ref(SparseMatrix & A, Vector * b, Vector * x, Vector * xexa
   A.mtxIndL = mtxIndL;
   A.matrixValues = matrixValues;
   A.matrixDiagonal = matrixDiagonal;
+
+#if defined(HPCG_PERMUTE_ROWS)
+  A.reordered_nonzerosInRow = reordered_nonzerosInRow;
+  A.reordered_mtxIndL = reordered_mtxIndL;
+  A.reordered_matrixValues = reordered_matrixValues;
+  A.reordered_matrixDiagonal = reordered_matrixDiagonal;
+  A.reordered_diagIdx = new local_int_t[localNumberOfRows];
+  A.reordered_discreteInverseDiagonal = new double[localNumberOfRows];
+#endif
 
   return;
 }

@@ -49,6 +49,8 @@ int ComputeProlongation(const SparseMatrix & A, Vector & x) {
   // This loop is safe to vectorize
   for (local_int_t i = 0; i < nc; ++i) {
     x.values[A.mgData->f2cOperator[i]] += A.mgData->xc->values[i];
+    // if (i < 10)
+    //   printf("x.values[A.mgData->f2cOperator[%d]] = %f\n", i, x.values[A.mgData->f2cOperator[i]]);
   }
 
   return 0;

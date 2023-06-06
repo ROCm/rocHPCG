@@ -89,13 +89,18 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
 #endif
 
   // Map data object and sub-elements to the device:
+#if defined(HPCG_PERMUTE_ROWS)
+  TICK(); reordered_ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+#else
   TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+#endif
   TICK(); ComputeWAXPBY(nrow, 1.0, b, -1.0, Ap, r, A.isWaxpbyOptimized);  TOCK(t2); // r = b - Ax (x stored in p)
   TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
   normr = sqrt(normr);
 #ifdef HPCG_DEBUG
   if (A.geom->rank==0) HPCG_fout << "Initial Residual = "<< normr << std::endl;
 #endif
+  // printf("normr = %f\n", normr);
 
   // Record initial residual for convergence testing
   normr0 = normr;
@@ -104,32 +109,70 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   // Convergence check accepts an error of no more than 6 significant digits of tolerance
   for (int k=1; k<=max_iter && normr/normr0 > tolerance * (1.0 + 1.0e-6); k++ ) {
     TICK();
-    if (doPreconditioning)
+    if (doPreconditioning) {
       ComputeMG(A, r, z); // Apply preconditioner
-    else
+    } else {
+      // copy reordered r to non-reordered z (no preconditioning)
 #ifdef HPCG_OPENMP_TARGET
-      CopyVector_Offload(r, z);; // copy r to z (no preconditioning)
+#if defined(HPCG_PERMUTE_ROWS)
+      local_int_t localLength = r.localLength;
+      #pragma omp target teams distribute parallel for
+      for (int i = 0; i < localLength; ++i) {
+        z.values[i] = r.values[A.oldRowToNewRow[i]];
+      }
 #else
-      CopyVector(r, z);; // copy r to z (no preconditioning)
+      CopyVector_Offload(r, z); // copy r to z (no preconditioning)
 #endif
+#else
+      CopyVector(r, z); // copy r to z (no preconditioning)
+#endif
+    }
     TOCK(t5); // Preconditioner apply time
 
     if (k == 1) {
+      // z and p not reordered
       TICK(); ComputeWAXPBY(nrow, 1.0, z, 0.0, z, p, A.isWaxpbyOptimized); TOCK(t2); // Copy Mr to p
+#if defined(HPCG_PERMUTE_ROWS)
+      // r is reordered, z is not reordered so a special Dot product needs to be used:
+      // R2nR: the dot product between a reordered first array and a non-reordered second
+      // array:
+      TICK(); ComputeDotProduct_R2nR(A.oldRowToNewRow, nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+#else
       TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+#endif
     } else {
       oldrtz = rtz;
+#if defined(HPCG_PERMUTE_ROWS)
+      // r is reordered, z is not reordered so a special Dot product needs to be used:
+      // R2nR: the dot product between a reordered first array and a non-reordered second
+      // array:
+      TICK(); ComputeDotProduct_R2nR(A.oldRowToNewRow, nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+#else
       TICK(); ComputeDotProduct(nrow, r, z, rtz, t4, A.isDotProductOptimized); TOCK(t1); // rtz = r'*z
+#endif
       beta = rtz/oldrtz;
+      // z and p not reordered => p not reordered
       TICK(); ComputeWAXPBY(nrow, 1.0, z, beta, p, p, A.isWaxpbyOptimized);  TOCK(t2); // p = beta*p + z
     }
 
+#if defined(HPCG_PERMUTE_ROWS)
+    // Ap is reordered, p is not reordered
+    TICK(); reordered_ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
+    // Ap is reordered, p is not reordered so a special Dot product needs to be used:
+    // nR2R: the dot product between a non-reordered first array and a reordered second
+    // array:
+    TICK(); ComputeDotProduct_nR2R(A.oldRowToNewRow, nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
+#else
     TICK(); ComputeSPMV(A, p, Ap); TOCK(t3); // Ap = A*p
     TICK(); ComputeDotProduct(nrow, p, Ap, pAp, t4, A.isDotProductOptimized); TOCK(t1); // alpha = p'*Ap
+#endif
     alpha = rtz/pAp;
     // printf("k = %d, beta = %f alpha (rtz = %f, pAp = %f) = %f\n", k, beta, rtz, pAp, alpha);
+    // OK: x and p not reordered
     TICK(); ComputeWAXPBY(nrow, 1.0, x, alpha, p, x, A.isWaxpbyOptimized);// x = x + alpha*p
+            // OK: r and Ap reordered
             ComputeWAXPBY(nrow, 1.0, r, -alpha, Ap, r, A.isWaxpbyOptimized);  TOCK(t2);// r = r - alpha*Ap
+    // Dot products with itself do not need to know about the ordering:
     TICK(); ComputeDotProduct(nrow, r, r, normr, t4, A.isDotProductOptimized); TOCK(t1);
     normr = sqrt(normr);
 #ifdef HPCG_DEBUG
@@ -162,8 +205,13 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #if defined(HPCG_USE_MULTICOLORING)
 #pragma omp target enter data map(to: A.colorBounds[:(A.totalColors+1)])
 #pragma omp target enter data map(to: A.colorToRow[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.oldRowToNewRow[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.discreteInverseDiagonal[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.diagIdx[:A.localNumberOfRows])
+#if defined(HPCG_PERMUTE_ROWS)
+#pragma omp target enter data map(to: A.reordered_discreteInverseDiagonal[:A.localNumberOfRows])
+#pragma omp target enter data map(to: A.reordered_diagIdx[:A.localNumberOfRows])
+#endif
 #endif // End HPCG_USE_MULTICOLORING
 
 #ifndef HPCG_CONTIGUOUS_ARRAYS
@@ -179,6 +227,10 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #if defined(HPCG_USE_SOA_LAYOUT)
 #pragma omp target enter data map(to: A.matrixValuesSOA[:totalNonZeroValues])
 #pragma omp target enter data map(to: A.mtxIndLSOA[:totalNonZeroValues])
+#if defined(HPCG_PERMUTE_ROWS)
+#pragma omp target enter data map(to: A.reordered_matrixValuesSOA[:totalNonZeroValues])
+#pragma omp target enter data map(to: A.reordered_mtxIndLSOA[:totalNonZeroValues])
+#endif
 #else
 #pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
@@ -279,9 +331,14 @@ void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
 #endif // End HPCG_CONTIGUOUS_ARRAYS
 
 #if defined(HPCG_USE_MULTICOLORING)
+#if defined(HPCG_PERMUTE_ROWS)
+#pragma omp target exit data map(release: A.reordered_discreteInverseDiagonal[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.reordered_diagIdx[:A.localNumberOfRows])
+#endif
 #pragma omp target exit data map(release: A.diagIdx[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.discreteInverseDiagonal[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.colorToRow[:A.localNumberOfRows])
+#pragma omp target exit data map(release: A.oldRowToNewRow[:A.localNumberOfRows])
 #pragma omp target exit data map(release: A.colorBounds[:(A.totalColors+1)])
 #endif // End HPCG_USE_MULTICOLORING
 

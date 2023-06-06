@@ -82,7 +82,7 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
 #if defined(HPCG_USE_HIP_NONTEMPORAL_LS)
       local_int_t col = __builtin_nontemporal_load(A.mtxIndLSOA + pos);
       if (col >= 0)
-        sum -= __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[col];
+        sum += __builtin_nontemporal_load(A.matrixValuesSOA + pos) * x.values[col];
 #else
       local_int_t col = A.mtxIndLSOA[pos];
       if (col >= 0)
@@ -112,3 +112,59 @@ int ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
 #endif
   return 0;
 }
+
+#if defined(HPCG_PERMUTE_ROWS)
+int reordered_ComputeSPMV( const SparseMatrix & A, Vector & x, Vector & y) {
+  assert(x.localLength >= A.localNumberOfColumns); // Test vector lengths
+  assert(y.localLength >= A.localNumberOfRows);
+
+  // IDEA: only map back the values which are actually exchanged instead of
+  // bringing back the entire array x.
+
+#ifndef HPCG_NO_MPI
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update from(x.values[:A.localNumberOfColumns])
+#endif
+    ExchangeHalo(A, x);
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target update to(x.values[:A.localNumberOfColumns])
+#endif
+#endif
+
+  const local_int_t nrow = A.localNumberOfRows;
+
+#ifndef HPCG_USE_SOA_LAYOUT
+  assert(false && "Not implemented");
+#endif
+
+#ifndef HPCG_USE_HIP_NONTEMPORAL_LS
+  assert(false && "Not implemented");
+#endif
+
+#ifndef HPCG_CONTIGUOUS_ARRAYS
+  assert(false && "Not implemented");
+#endif
+
+#ifndef HPCG_NO_OPENMP
+#ifdef HPCG_OPENMP_TARGET
+#pragma omp target teams distribute parallel for
+#else
+#pragma omp parallel for
+#endif
+#endif
+  for (local_int_t i = 0; i < nrow; i++) {
+    double re_sum = 0.0;
+    int pos = i;
+#pragma unroll
+    for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+      local_int_t re_col = __builtin_nontemporal_load(A.reordered_mtxIndLSOA + pos);
+      if (re_col >= 0)
+        re_sum += __builtin_nontemporal_load(A.reordered_matrixValuesSOA + pos) * x.values[re_col];
+      pos += nrow;
+    }
+
+    __builtin_nontemporal_store(re_sum, y.values + i);
+  }
+  return 0;
+}
+#endif

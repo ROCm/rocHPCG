@@ -77,6 +77,13 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   }
   ReplaceMatrixDiagonal(A, exaggeratedDiagA);
 
+  // Redo reordering since original matrix has changed.
+#if defined(HPCG_PERMUTE_ROWS)
+  PermuteRows(A);
+  RecomputeReorderedB(A, b);
+  reordered_ChangeLayoutToSOA(A);
+#endif
+
   // Copy new values to SOA layout if it is enabled
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
   ChangeLayoutToSOA(A);
@@ -156,6 +163,12 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
   DeleteVector(exaggeratedDiagA);
   DeleteVector(origB);
   testcg_data.normr = normr;
+
+#if defined(HPCG_PERMUTE_ROWS)
+  PermuteRows(A);
+  RecomputeReorderedB(A, b);
+  reordered_ChangeLayoutToSOA(A);
+#endif
 
   // Copy old values to SOA layout:
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)

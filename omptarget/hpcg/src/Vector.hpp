@@ -116,7 +116,6 @@ inline void CopyVector_Offload(const Vector & v, Vector & w) {
   return;
 }
 
-
 /*!
   Deallocates the members of the data structure of the known system matrix provided they are not 0.
 

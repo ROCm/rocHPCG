@@ -78,6 +78,7 @@ struct SparseMatrix_STRUCT {
   local_int_t totalColors;
   local_int_t * colorBounds;
   local_int_t * colorToRow;
+  local_int_t * oldRowToNewRow;
   // TODO: discrete diagonal should be a separate flag for example:
   //       HPCG_DISCRETE_DIAGONAL
   double * discreteInverseDiagonal;
@@ -87,6 +88,17 @@ struct SparseMatrix_STRUCT {
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
   double * matrixValuesSOA;
   local_int_t * mtxIndLSOA;
+#endif
+
+#if defined(HPCG_PERMUTE_ROWS)
+  char  * reordered_nonzerosInRow;
+  local_int_t ** reordered_mtxIndL;
+  double ** reordered_matrixValues;
+  double ** reordered_matrixDiagonal;
+  double * reordered_discreteInverseDiagonal;
+  double * reordered_matrixValuesSOA;
+  local_int_t * reordered_mtxIndLSOA;
+  local_int_t * reordered_diagIdx;
 #endif
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;
@@ -132,6 +144,7 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
   A.totalColors = 0;
   A.colorBounds = 0;
   A.colorToRow = 0;
+  A.oldRowToNewRow = 0;
   A.discreteInverseDiagonal = 0;
   A.diagIdx = 0;
 #endif
@@ -139,6 +152,17 @@ inline void InitializeSparseMatrix(SparseMatrix & A, Geometry * geom) {
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
   A.matrixValuesSOA = 0;
   A.mtxIndLSOA = 0;
+#endif
+
+#if defined(HPCG_PERMUTE_ROWS)
+  A.reordered_nonzerosInRow = 0;
+  A.reordered_mtxIndL = 0;
+  A.reordered_matrixValues = 0;
+  A.reordered_matrixDiagonal = 0;
+  A.reordered_discreteInverseDiagonal = 0;
+  A.reordered_matrixValuesSOA = 0;
+  A.reordered_mtxIndLSOA = 0;
+  A.reordered_diagIdx = 0;
 #endif
 
   A.mgData = 0; // Fine-to-coarse grid transfer initially not defined.
@@ -214,6 +238,7 @@ inline void DeleteMatrix(SparseMatrix & A) {
 #if defined(HPCG_USE_MULTICOLORING)
   if (A.colorBounds) delete [] A.colorBounds;
   if (A.colorToRow) delete [] A.colorToRow;
+  if (A.oldRowToNewRow) delete [] A.oldRowToNewRow;
   if (A.discreteInverseDiagonal) delete [] A.discreteInverseDiagonal;
   if (A.diagIdx) delete [] A.diagIdx;
 #endif
@@ -221,6 +246,17 @@ inline void DeleteMatrix(SparseMatrix & A) {
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
   if (A.matrixValuesSOA) delete [] A.matrixValuesSOA;
   if (A.mtxIndLSOA) delete [] A.mtxIndLSOA;
+#endif
+
+#if defined(HPCG_PERMUTE_ROWS)
+  if (A.reordered_nonzerosInRow) delete [] A.reordered_nonzerosInRow;
+  if (A.reordered_mtxIndL) delete [] A.reordered_mtxIndL;
+  if (A.reordered_matrixValues) delete [] A.reordered_matrixValues;
+  if (A.reordered_matrixDiagonal) delete [] A.reordered_matrixDiagonal;
+  if (A.reordered_discreteInverseDiagonal) delete [] A.reordered_discreteInverseDiagonal;
+  if (A.reordered_matrixValuesSOA) delete [] A.reordered_matrixValuesSOA;
+  if (A.reordered_mtxIndLSOA) delete [] A.reordered_mtxIndLSOA;
+  if (A.reordered_diagIdx) delete [] A.reordered_diagIdx;
 #endif
 
   if (A.geom!=0) { DeleteGeometry(*A.geom); delete A.geom; A.geom = 0;}

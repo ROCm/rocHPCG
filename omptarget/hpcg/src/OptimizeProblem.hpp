@@ -21,8 +21,17 @@
 
 int OptimizeProblem(SparseMatrix & A, CGData & data,  Vector & b, Vector & x, Vector & xexact);
 
+#if defined(HPCG_PERMUTE_ROWS) && defined(HPCG_CONTIGUOUS_ARRAYS)
+void PermuteRows(SparseMatrix &A);
+void RecomputeReorderedB(SparseMatrix &A, Vector &b);
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
 void ChangeLayoutToSOA(SparseMatrix & A);
+void reordered_ChangeLayoutToSOA(SparseMatrix & A);
+#endif
+#else
+#if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+void ChangeLayoutToSOA(SparseMatrix & A);
+#endif
 #endif
 
 // This helper function should be implemented in a non-trivial way if OptimizeProblem is non-trivial

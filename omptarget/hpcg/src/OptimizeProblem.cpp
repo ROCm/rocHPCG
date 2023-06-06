@@ -129,9 +129,14 @@ void ColorSparseMatrixRows(SparseMatrix & A) {
   // For each row look at the color and add the row ID to the
   // appropriate color region.
   local_int_t *colorToRow = new local_int_t[nrow];
-  for (local_int_t i = 0; i < nrow; ++i) colorToRow[i] = -1;
+  local_int_t *oldRowToNewRow = new local_int_t[nrow];
+  for (local_int_t i = 0; i < nrow; ++i) {
+    colorToRow[i] = -1;
+    oldRowToNewRow[i] = -1;
+  }
   for (local_int_t i = 0; i < nrow; ++i) {
     colorToRow[colorCounter[colors[i]]] = i;
+    oldRowToNewRow[i] = colorCounter[colors[i]];
     colorCounter[colors[i]]++;
   }
 
@@ -174,6 +179,7 @@ void ColorSparseMatrixRows(SparseMatrix & A) {
   A.totalColors = totalColors;
   A.colorBounds = colorBounds;
   A.colorToRow = colorToRow;
+  A.oldRowToNewRow = oldRowToNewRow;
   A.discreteInverseDiagonal = discreteInverseDiagonal;
   A.diagIdx = diagIdx;
 
@@ -184,6 +190,82 @@ void ColorSparseMatrixRows(SparseMatrix & A) {
   if (A.mgData != 0)
     ColorSparseMatrixRows(*A.Ac);
 }
+
+#if defined(HPCG_PERMUTE_ROWS) && defined(HPCG_CONTIGUOUS_ARRAYS)
+void PermuteRows(SparseMatrix &A) {
+  // This method will permute the rows of matrix A such that all
+  // the rows which have the same color will be adjacent.
+  //
+  // To achieve this we have to:
+  // - permute the rows of the rows of the A.mtxIndL data structure;
+  // - permute the A.matrixValues data structure;
+  // - permute the values of the corresponding b vector so that the
+  //   same row ID can be used to access the value in b corresponding
+  //   to the map in A.mtxIndL;
+  // - the diagonal element can no longer be identified by comparing
+  //   row ID with col ID. Only the diagonal index stored in the
+  //   A.diagIdx vector can now be used. Since A.diagIdx is indexed by
+  //   row ID, we have to premute the elements in A.diagIdx also;
+  // - re-assign A.matrixDiagonal pointers;
+  // - recompute A.discreteInverseDiagonal.
+  //
+  // Outcome:
+  // - accesses to A.diagIdx, A.mtxIndL, A.discreteInverseDiagonal,
+  //   A.matrixDiagonal and b will be perfectly coalesced.
+  //
+  // Because this only permutes the rows, maps like f2cOperator which deal
+  // with column IDs do not need to be re-numbered.
+  const local_int_t nrow = A.localNumberOfRows;
+
+  for (local_int_t color = 0; color < A.totalColors; color++) {
+    local_int_t currentColorStart = A.colorBounds[color];
+    local_int_t currentColorEnd = A.colorBounds[color + 1];
+    local_int_t colorNRows = currentColorEnd - currentColorStart;
+
+    for (local_int_t i = 0; i < colorNRows; i++) {
+      const int rowID = A.colorToRow[currentColorStart + i];
+      const int currentNumberOfNonzeros = A.nonzerosInRow[rowID];
+      const local_int_t * const currentColIndices = A.mtxIndL[rowID];
+      const double * const currentValues = A.matrixValues[rowID];
+
+      const int newID = currentColorStart + i;
+      local_int_t * const reordered_currentColIndices = A.reordered_mtxIndL[newID];
+      double * const reordered_currentValues = A.reordered_matrixValues[newID];
+      A.reordered_nonzerosInRow[newID] = currentNumberOfNonzeros;
+
+      for (int j = 0; j < currentNumberOfNonzeros; j++) {
+        reordered_currentValues[j] = currentValues[j];
+        reordered_currentColIndices[j] = currentColIndices[j];
+        // If this is a diagonal element in the old matrix:
+        if (rowID == currentColIndices[j]) {
+          A.reordered_diagIdx[newID] = j;
+          A.reordered_matrixDiagonal[newID] = &reordered_currentValues[j];
+          A.reordered_discreteInverseDiagonal[newID] = 1.0 / currentValues[j];
+        }
+      }
+    }
+  }
+
+  // Reorder rows of the multi-grid:
+  if (A.mgData != 0)
+    PermuteRows(*A.Ac);
+}
+
+void RecomputeReorderedB(SparseMatrix &A, Vector &b) {
+  const local_int_t nrow = A.localNumberOfRows;
+
+  // Reorder b:
+  double *reordered_b = new double[nrow];
+  for (local_int_t i = 0; i < nrow; i++) {
+    reordered_b[i] = b.values[A.colorToRow[i]];
+  }
+  for (local_int_t i = 0; i < nrow; i++) {
+    b.values[i] = reordered_b[i];
+  }
+  delete [] reordered_b;
+}
+#endif
+
 #endif
 
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
@@ -229,6 +311,32 @@ void ChangeLayoutToSOA(SparseMatrix & A) {
 }
 #endif
 
+#if defined(HPCG_PERMUTE_ROWS) && defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+void reordered_ChangeLayoutToSOA(SparseMatrix &A) {
+  const local_int_t nrow = A.localNumberOfRows;
+  A.reordered_matrixValuesSOA = new double[MAP_MAX_LENGTH * nrow];
+  A.reordered_mtxIndLSOA = new local_int_t[MAP_MAX_LENGTH * nrow];
+  for (local_int_t i = 0; i < nrow; ++i) {
+    const double * const currentValues = A.reordered_matrixValues[i];
+    const local_int_t * const currentColIndices = A.reordered_mtxIndL[i];
+    const int currentNumberOfNonzeros = A.reordered_nonzerosInRow[i];
+
+    for (int j = 0; j < MAP_MAX_LENGTH; j++) {
+      if (j < currentNumberOfNonzeros) {
+        local_int_t curCol = currentColIndices[j];
+        A.reordered_mtxIndLSOA[i + j*nrow] = curCol;
+        A.reordered_matrixValuesSOA[i + j*nrow] = currentValues[j];
+      } else {
+        A.reordered_mtxIndLSOA[i + j*nrow] = -1;
+      }
+    }
+  }
+
+  if (A.mgData != 0)
+    reordered_ChangeLayoutToSOA(*A.Ac);
+}
+#endif
+
 /*!
   Optimizes the data structures used for CG iteration to increase the
   performance of the benchmark version of the preconditioned CG algorithm.
@@ -248,9 +356,17 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
 
 #if defined(HPCG_USE_MULTICOLORING)
   ColorSparseMatrixRows(A);
+
+#if defined(HPCG_PERMUTE_ROWS) && defined(HPCG_CONTIGUOUS_ARRAYS)
+  PermuteRows(A);
+  RecomputeReorderedB(A, b);
+#endif
 #endif
 
 #if defined(HPCG_USE_SOA_LAYOUT) && defined(HPCG_CONTIGUOUS_ARRAYS)
+#if defined(HPCG_PERMUTE_ROWS)
+  reordered_ChangeLayoutToSOA(A);
+#endif
   ChangeLayoutToSOA(A);
 #endif
 

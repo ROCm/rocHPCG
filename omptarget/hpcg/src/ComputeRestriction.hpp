@@ -17,4 +17,7 @@
 #include "Vector.hpp"
 #include "SparseMatrix.hpp"
 int ComputeRestriction(const SparseMatrix & A, const Vector & rf);
+#if defined(HPCG_PERMUTE_ROWS)
+int reordered_ComputeRestriction(const SparseMatrix & A, const Vector & r);
+#endif
 #endif // COMPUTERESTRICTION_HPP

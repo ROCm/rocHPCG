@@ -128,7 +128,7 @@ install_packages( )
   local library_dependencies_ubuntu=( "make" "pkg-config" "libnuma1" "cmake" "libnuma-dev" "autoconf" "libtool" "automake" "m4" "flex" )
   local library_dependencies_centos=( "epel-release" "make" "cmake3" "gcc-c++" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
   local library_dependencies_fedora=( "make" "cmake" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
-  local library_dependencies_sles=( "make" "cmake" "gcc-c++" "libcxxtools9" "rpm-build" "libnuma-devel" "autoconf" "libtool" "automake" "m4" "flex" )
+  local library_dependencies_sles=( "make" "cmake" "gcc-c++" "libcxxtools10" "rpm-build" "libnuma-devel" "autoconf" "libtool" "automake" "m4" "flex" )
 
   if [[ "${with_rocm}" == /opt/rocm ]]; then
     library_dependencies_ubuntu+=("rocm-dev" "rocprim")

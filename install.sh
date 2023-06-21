@@ -128,7 +128,20 @@ install_packages( )
   local library_dependencies_ubuntu=( "make" "pkg-config" "libnuma1" "cmake" "libnuma-dev" "autoconf" "libtool" "automake" "m4" "flex" )
   local library_dependencies_centos=( "epel-release" "make" "cmake3" "gcc-c++" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
   local library_dependencies_fedora=( "make" "cmake" "gcc-c++" "libcxx-devel" "rpm-build" "numactl-libs" "autoconf" "libtool" "automake" "m4" "flex" )
-  local library_dependencies_sles=( "make" "cmake" "gcc-c++" "libcxxtools10" "rpm-build" "libnuma-devel" "autoconf" "libtool" "automake" "m4" "flex" )
+  local library_dependencies_sles=( "make" "cmake" "gcc-c++" "rpm-build" "libnuma-devel" "autoconf" "libtool" "automake" "m4" "flex" )
+
+  if [[ ( "${ID}" == "sles" ) ]]; then
+    if [[ -f /etc/os-release ]]; then
+      . /etc/os-release
+
+      function version { echo "$@" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }'; }
+      if [[ $(version $VERSION_ID) -ge $(version 15.4) ]]; then
+          library_dependencies_sles+=( "libcxxtools10" )
+      else
+          library_dependencies_sles+=( "libcxxtools9" )
+      fi
+    fi
+  fi
 
   if [[ "${with_rocm}" == /opt/rocm ]]; then
     library_dependencies_ubuntu+=("rocm-dev" "rocprim")

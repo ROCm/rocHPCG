@@ -78,7 +78,7 @@ include(cmake/Dependencies.cmake)
 # Availability of rocm_check_target_ids command assures that we can also build
 # for gfx90a target
 if(COMMAND rocm_check_target_ids)
-    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+;gfx90a:xnack-;gfx90a:xnack+")
+    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+;gfx90a:xnack-;gfx90a:xnack+;gfx940;gfx941;gfx942")
 else()
     set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+")
 endif()
@@ -89,7 +89,7 @@ find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
 
 # Setup version
-rocm_setup_version(VERSION 0.8.4)
+rocm_setup_version(VERSION 0.8.5)
 
 # rocHPCG source directory
 add_subdirectory(src)

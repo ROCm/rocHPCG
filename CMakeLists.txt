@@ -32,6 +32,7 @@ set(CMAKE_INSTALL_PREFIX ${ROCM_PATH} CACHE PATH "Install path prefix, prepended
 # CMake modules
 list(APPEND CMAKE_MODULE_PATH
      ${CMAKE_CURRENT_SOURCE_DIR}/cmake
+     ${ROCM_PATH}/lib/cmake/hip
      ${ROCM_PATH}/hip/cmake)
 
 # Set a default build type if none was specified

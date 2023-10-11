@@ -57,7 +57,7 @@ string YAML_Doc::generateYAML() {
   tm * ptm;
   time ( &rawtime );
   ptm = localtime(&rawtime);
-  char sdate[25];
+  char sdate[256];
   //use tm_mon+1 because tm_mon is 0 .. 11 instead of 1 .. 12
   sprintf (sdate,"%04d.%02d.%02d.%02d.%02d.%02d",ptm->tm_year + 1900, ptm->tm_mon+1,
       ptm->tm_mday, ptm->tm_hour, ptm->tm_min,ptm->tm_sec);
@@ -70,7 +70,7 @@ string YAML_Doc::generateYAML() {
   filename = filename + string(sdate) + ".yaml";
   if (destinationDirectory!="" && destinationDirectory!=".") {
     string mkdir_cmd = "mkdir " + destinationDirectory;
-    system(mkdir_cmd.c_str());
+    int err = system(mkdir_cmd.c_str());
     filename = destinationDirectory + "/" + destinationFileName;
   } else
     filename = "./" + filename;

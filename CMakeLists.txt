@@ -32,6 +32,7 @@ set(CMAKE_INSTALL_PREFIX ${ROCM_PATH} CACHE PATH "Install path prefix, prepended
 # CMake modules
 list(APPEND CMAKE_MODULE_PATH
      ${CMAKE_CURRENT_SOURCE_DIR}/cmake
+     ${ROCM_PATH}/lib/cmake/hip
      ${ROCM_PATH}/hip/cmake)
 
 # Set a default build type if none was specified
@@ -78,7 +79,7 @@ include(cmake/Dependencies.cmake)
 # Availability of rocm_check_target_ids command assures that we can also build
 # for gfx90a target
 if(COMMAND rocm_check_target_ids)
-    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+;gfx90a:xnack-;gfx90a:xnack+")
+    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+;gfx90a:xnack-;gfx90a:xnack+;gfx940;gfx941;gfx942")
 else()
     set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+")
 endif()

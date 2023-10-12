@@ -569,7 +569,7 @@ int main(int argc, char * argv[]) {
   }
   else
   {
-    printf("\n*** WARNING *** THIS IS NOT A VALID RUN ***\n");
+    if (rank==0) printf("\n*** WARNING *** THIS IS NOT A VALID RUN ***\n");
   }
 
   DeleteVector(x);

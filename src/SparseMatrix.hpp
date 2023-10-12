@@ -263,30 +263,33 @@ inline void ReplaceMatrixDiagonal(SparseMatrix & A, Vector & diagonal) {
  */
 inline void DeleteMatrix(SparseMatrix & A) {
 
+  if (A.matrixValues) {
 #ifndef HPCG_CONTIGUOUS_ARRAYS
-  for (local_int_t i = 0; i< A.localNumberOfRows; ++i) {
-    delete [] A.matrixValues[i];
-    delete [] A.mtxIndG[i];
-    delete [] A.mtxIndL[i];
-  }
+    for (local_int_t i = 0; i< A.localNumberOfRows; ++i) {
+      if (A.matrixValues[i]) delete [] A.matrixValues[i];
+      if (A.mtxIndG[i])      delete [] A.mtxIndG[i];
+      if (A.mtxIndL[i])      delete [] A.mtxIndL[i];
+    }
 #else
-  delete [] A.matrixValues[0];
-  delete [] A.mtxIndG[0];
-  delete [] A.mtxIndL[0];
+    if (A.matrixValues[0]) delete [] A.matrixValues[0];
+    if (A.mtxIndG[0])      delete [] A.mtxIndG[0];
+    if (A.mtxIndL[0])      delete [] A.mtxIndL[0];
 #endif
-  if (A.title)                  delete [] A.title;
-  if (A.nonzerosInRow)             delete [] A.nonzerosInRow;
-  if (A.mtxIndG) delete [] A.mtxIndG;
-  if (A.mtxIndL) delete [] A.mtxIndL;
-  if (A.matrixValues) delete [] A.matrixValues;
-  if (A.matrixDiagonal)           delete [] A.matrixDiagonal;
+  }
+
+  if (A.title)          delete [] A.title;
+  if (A.nonzerosInRow)  delete [] A.nonzerosInRow;
+  if (A.mtxIndG)        delete [] A.mtxIndG;
+  if (A.mtxIndL)        delete [] A.mtxIndL;
+  if (A.matrixValues)   delete [] A.matrixValues;
+  if (A.matrixDiagonal) delete [] A.matrixDiagonal;
 
 #ifndef HPCG_NO_MPI
-  if (A.elementsToSend)       delete [] A.elementsToSend;
-  if (A.neighbors)              delete [] A.neighbors;
-  if (A.receiveLength)            delete [] A.receiveLength;
-  if (A.sendLength)            delete [] A.sendLength;
-  if (A.sendBuffer)            delete [] A.sendBuffer;
+  if (A.elementsToSend) delete [] A.elementsToSend;
+  if (A.neighbors)      delete [] A.neighbors;
+  if (A.receiveLength)  delete [] A.receiveLength;
+  if (A.sendLength)     delete [] A.sendLength;
+  if (A.sendBuffer)     delete [] A.sendBuffer;
 
   if(A.recv_request) delete[] A.recv_request;
   if(A.send_request) delete[] A.send_request;

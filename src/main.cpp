@@ -565,23 +565,24 @@ int main(int argc, char * argv[]) {
   // Clean up
   if(params.verify)
   {
-    DeleteMatrix(A); // This delete will recursively delete all coarse grid data
-    DeleteCGData(data);
-    HIPDeleteCGData(data);
-    DeleteVector(x);
-    DeleteVector(b);
-    DeleteVector(xexact);
-    HIPDeleteVector(x);
-    HIPDeleteVector(b);
-    HIPDeleteVector(xexact);
-    DeleteVector(x_overlap);
-    DeleteVector(b_computed);
     delete [] testnorms_data.values;
   }
   else
   {
     printf("\n*** WARNING *** THIS IS NOT A VALID RUN ***\n");
   }
+
+  DeleteVector(x);
+  DeleteVector(b);
+  DeleteVector(xexact);
+  DeleteVector(x_overlap);
+  DeleteVector(b_computed);
+  HIPDeleteVector(x);
+  HIPDeleteVector(b);
+  HIPDeleteVector(xexact);
+  DeleteCGData(data);
+  HIPDeleteCGData(data);
+  DeleteMatrix(A); // This delete will recursively delete all coarse grid data
 
   HPCG_Finalize();
 

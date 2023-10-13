@@ -74,12 +74,13 @@ int ComputeProlongation(const SparseMatrix& Af, Vector& xf)
     dim3 blocks((Af.mgData->rc->localLength - 1) / 128 + 1);
     dim3 threads(128);
 
-    kernel_prolongation<128><<<blocks, threads>>>(Af.mgData->rc->localLength,
-                                                  Af.mgData->d_f2cOperator,
-                                                  Af.mgData->xc->d_values,
-                                                  xf.d_values,
-                                                  Af.perm,
-                                                  Af.Ac->perm);
+    kernel_prolongation<128><<<blocks, threads, 0, stream_interior>>>(
+        Af.mgData->rc->localLength,
+        Af.mgData->d_f2cOperator,
+        Af.mgData->xc->d_values,
+        xf.d_values,
+        Af.perm,
+        Af.Ac->perm);
 
     return 0;
 }

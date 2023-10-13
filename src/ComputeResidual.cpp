@@ -60,7 +60,7 @@ __device__ void reduce_max(local_int_t tid, double* data)
 
     if(BLOCKSIZE > 512) { if(tid < 512 && tid + 512 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 512]); } __syncthreads(); }
     if(BLOCKSIZE > 256) { if(tid < 256 && tid + 256 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 256]); } __syncthreads(); }
-    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 128]); } __syncthreads(); } 
+    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 128]); } __syncthreads(); }
     if(BLOCKSIZE >  64) { if(tid <  64 && tid +  64 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  64]); } __syncthreads(); }
     if(BLOCKSIZE >  32) { if(tid <  32 && tid +  32 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  32]); } __syncthreads(); }
     if(BLOCKSIZE >  16) { if(tid <  16 && tid +  16 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  16]); } __syncthreads(); }
@@ -118,11 +118,15 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
 {
     double* tmp = reinterpret_cast<double*>(workspace);
 
-    kernel_residual_part1<256><<<256, 256>>>(n, v1.d_values, v2.d_values, tmp);
-    kernel_residual_part2<256><<<1, 256>>>(tmp);
+    kernel_residual_part1<256><<<256, 256, 0, stream_interior>>>(n,
+                                                                 v1.d_values,
+                                                                 v2.d_values,
+                                                                 tmp);
+    kernel_residual_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
 
     double local_residual;
-    HIP_CHECK(hipMemcpy(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpyAsync(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    HIP_CHECK(hipStreamSynchronize(stream_interior));
 
 #ifndef HPCG_NO_MPI
     double global_residual = 0.0;

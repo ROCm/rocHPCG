@@ -70,6 +70,7 @@ const char* NULLDEVICE="/dev/null";
 
 hipStream_t stream_interior;
 hipStream_t stream_halo;
+hipEvent_t halo_gather;
 void* workspace;
 hipAllocator_t allocator;
 
@@ -215,6 +216,9 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
   // Create streams
   HIP_CHECK(hipStreamCreate(&stream_interior));
   HIP_CHECK(hipStreamCreate(&stream_halo));
+
+  // Create Events
+  HIP_CHECK(hipEventCreate(&halo_gather));
 
   // Initialize memory allocator
 #ifdef HPCG_MEMMGMT

@@ -70,7 +70,10 @@
         dim3 blocks((A.halo_rows - 1) / blocksize + 1);          \
         dim3 threads(blocksize);                                 \
                                                                  \
-        kernel_spmv_halo<blocksize, width><<<blocks, threads>>>( \
+        kernel_spmv_halo<blocksize, width><<<blocks,             \
+                                             threads,            \
+                                             0,                  \
+                                             stream_interior>>>( \
             A.halo_rows,                                         \
             A.localNumberOfColumns,                              \
             A.halo_row_ind,                                      \
@@ -255,7 +258,10 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
         dim3 blocks((A.mgData->rc->localLength - 1) / 1024 + 1);
         dim3 threads(1024);
 
-        kernel_spmv_ell_coarse<1024><<<blocks, threads>>>(
+        kernel_spmv_ell_coarse<1024><<<blocks,
+                                       threads,
+                                       0,
+                                       stream_interior>>>(
             A.mgData->rc->localLength,
             A.localNumberOfRows,
             A.localNumberOfColumns,

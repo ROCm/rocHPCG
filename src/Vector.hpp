@@ -103,7 +103,7 @@ inline void ZeroVector(Vector & v) {
 
 inline void HIPZeroVector(Vector& v)
 {
-    HIP_CHECK(hipMemset(v.d_values, 0, sizeof(double) * v.localLength));
+    HIP_CHECK(hipMemsetAsync(v.d_values, 0, sizeof(double) * v.localLength, stream_interior));
 }
 
 /*!
@@ -162,10 +162,11 @@ inline void CopyVector(const Vector & v, Vector & w) {
 
 inline void HIPCopyVector(const Vector& v, Vector& w)
 {
-    HIP_CHECK(hipMemcpy(w.d_values,
-                        v.d_values,
-                        sizeof(double) * v.localLength,
-                        hipMemcpyDeviceToDevice));
+    HIP_CHECK(hipMemcpyAsync(w.d_values,
+                             v.d_values,
+                             sizeof(double) * v.localLength,
+                             hipMemcpyDeviceToDevice,
+                             stream_interior));
 }
 
 /*!

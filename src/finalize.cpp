@@ -61,6 +61,9 @@ HPCG_Finalize(void) {
   HIP_CHECK(hipStreamDestroy(stream_interior));
   HIP_CHECK(hipStreamDestroy(stream_halo));
 
+  // Destroy events
+  HIP_CHECK(hipEventDestroy(halo_gather));
+
   // Free workspace
   HIP_CHECK(deviceFree(workspace));
 

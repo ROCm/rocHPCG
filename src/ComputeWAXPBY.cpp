@@ -119,12 +119,13 @@ int ComputeWAXPBY(local_int_t n,
     dim3 blocks((n - 1) / 1024 + 1);
     dim3 threads(1024);
 
-    kernel_waxpby<1024><<<blocks, threads>>>(n,
-                                             alpha,
-                                             x.d_values,
-                                             beta,
-                                             y.d_values,
-                                             w.d_values);
+    kernel_waxpby<1024><<<blocks, threads, 0, stream_interior>>>(
+        n,
+        alpha,
+        x.d_values,
+        beta,
+        y.d_values,
+        w.d_values);
 
     return 0;
 }
@@ -202,11 +203,16 @@ int ComputeFusedWAXPBYDot(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-    kernel_fused_waxpby_dot_part1<256><<<256, 256>>>(n, alpha, x.d_values, y.d_values, tmp);
-    kernel_fused_waxpby_dot_part2<256><<<1, 256>>>(tmp);
+    kernel_fused_waxpby_dot_part1<256><<<256, 256, 0, stream_interior>>>(n,
+                                                                         alpha,
+                                                                         x.d_values,
+                                                                         y.d_values,
+                                                                         tmp);
+    kernel_fused_waxpby_dot_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
 
     double local_result;
-    HIP_CHECK(hipMemcpy(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    HIP_CHECK(hipStreamSynchronize(stream_interior));
 
 #ifndef HPCG_NO_MPI
     double t0 = mytimer();

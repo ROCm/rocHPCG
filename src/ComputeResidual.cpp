@@ -53,6 +53,10 @@
 
 #include <hip/hip_runtime.h>
 
+#ifdef OPT_ROCTX
+#include <roctracer/roctx.h>
+#endif
+
 template <unsigned int BLOCKSIZE>
 __device__ void reduce_max(local_int_t tid, double* data)
 {
@@ -60,7 +64,7 @@ __device__ void reduce_max(local_int_t tid, double* data)
 
     if(BLOCKSIZE > 512) { if(tid < 512 && tid + 512 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 512]); } __syncthreads(); }
     if(BLOCKSIZE > 256) { if(tid < 256 && tid + 256 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 256]); } __syncthreads(); }
-    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 128]); } __syncthreads(); } 
+    if(BLOCKSIZE > 128) { if(tid < 128 && tid + 128 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid + 128]); } __syncthreads(); }
     if(BLOCKSIZE >  64) { if(tid <  64 && tid +  64 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  64]); } __syncthreads(); }
     if(BLOCKSIZE >  32) { if(tid <  32 && tid +  32 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  32]); } __syncthreads(); }
     if(BLOCKSIZE >  16) { if(tid <  16 && tid +  16 < BLOCKSIZE) { data[tid] = max(data[tid], data[tid +  16]); } __syncthreads(); }
@@ -126,7 +130,15 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
 
 #ifndef HPCG_NO_MPI
     double global_residual = 0.0;
+
+#ifdef OPT_ROCTX
+    roctxRangePush("MPI AllReduce");
+#endif
     MPI_Allreduce(&local_residual, &global_residual, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#ifdef OPT_ROCTX
+    roctxRangePop();
+#endif
+
     residual = global_residual;
 #else
     residual = local_residual;

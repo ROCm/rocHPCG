@@ -54,6 +54,10 @@
 #include <cstdlib>
 #include <hip/hip_runtime.h>
 
+#ifdef OPT_ROCTX
+#include <roctracer/roctx.h>
+#endif
+
 /*!
   Communicates data that is at the border of the part of the domain assigned to this processor.
 
@@ -241,9 +245,15 @@ void ObtainRecvBuffer(const SparseMatrix& A, Vector& x)
 {
     int num_neighbors = A.numberOfSendNeighbors;
 
+#ifdef OPT_ROCTX
+    roctxRangePush("MPI ExchangeHalo");
+#endif
     // Synchronize boundary transfers
     EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.recv_request, MPI_STATUSES_IGNORE));
     EXIT_IF_HPCG_ERROR(MPI_Waitall(num_neighbors, A.send_request, MPI_STATUSES_IGNORE));
+#ifdef OPT_ROCTX
+    roctxRangePop();
+#endif
 
 #ifndef GPU_AWARE_MPI
     // Update boundary values

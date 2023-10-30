@@ -56,7 +56,10 @@
         dim3 blocks((A.sizes[i] - 1) / blocksize + 1);              \
         dim3 threads(blocksize);                                    \
                                                                     \
-        kernel_symgs_sweep<blocksize, width><<<blocks,  threads>>>( \
+        kernel_symgs_sweep<blocksize, width><<<blocks,              \
+                                               threads,             \
+                                               0,                   \
+                                               stream_interior>>>(  \
             A.localNumberOfRows,                                    \
             A.localNumberOfColumns,                                 \
             A.sizes[i],                                             \
@@ -91,7 +94,10 @@
         dim3 blocks((A.halo_rows - 1) / blocksize + 1);           \
         dim3 threads(blocksize);                                  \
                                                                   \
-        kernel_symgs_halo<blocksize, width><<<blocks, threads>>>( \
+        kernel_symgs_halo<blocksize, width><<<blocks,             \
+                                              threads,            \
+                                              0,                  \
+                                              stream_interior>>>( \
             A.halo_rows,                                          \
             A.localNumberOfColumns,                               \
             A.sizes[0],                                           \
@@ -402,7 +408,10 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     assert(x.localLength == A.localNumberOfColumns);
 
     // Solve L
-    kernel_pointwise_mult<256><<<(A.sizes[0] - 1) / 256 + 1, 256>>>(
+    kernel_pointwise_mult<256><<<(A.sizes[0] - 1) / 256 + 1,
+                                 256,
+                                 0,
+                                 stream_interior>>>(
         A.sizes[0],
         r.d_values,
         A.inv_diag,
@@ -410,7 +419,10 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 
     for(local_int_t i = 1; i < A.nblocks; ++i)
     {
-        kernel_forward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1, 1024>>>(
+        kernel_forward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1,
+                                       1024,
+                                       0,
+                                       stream_interior>>>(
             A.localNumberOfRows,
             A.sizes[i],
             A.offsets[i],
@@ -424,7 +436,10 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
     // Solve U
     for(local_int_t i = A.ublocks; i >= 0; --i)
     {
-        kernel_backward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1, 1024>>>(
+        kernel_backward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1,
+                                        1024,
+                                        0,
+                                        stream_interior>>>(
             A.localNumberOfRows,
             A.sizes[i],
             A.offsets[i],

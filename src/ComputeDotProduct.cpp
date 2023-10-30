@@ -186,17 +186,21 @@ int ComputeDotProduct(local_int_t n,
 
     if(x.d_values == y.d_values)
     {
-        kernel_dot1_part1<1024><<<1024, 1024>>>(n, x.d_values, tmp);
-        kernel_dot_part2<1024><<<1, 1024>>>(tmp);
+        kernel_dot1_part1<1024><<<1024, 1024, 0, stream_interior>>>(n, x.d_values, tmp);
+        kernel_dot_part2<1024><<<1, 1024, 0, stream_interior>>>(tmp);
     }
     else
     {
-        kernel_dot2_part1<256><<<256, 256>>>(n, x.d_values, y.d_values, tmp);
-        kernel_dot_part2<256><<<1, 256>>>(tmp);
+        kernel_dot2_part1<256><<<256, 256, 0, stream_interior>>>(n,
+                                                                 x.d_values,
+                                                                 y.d_values,
+                                                                 tmp);
+        kernel_dot_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
     }
 
     double local_result;
-    HIP_CHECK(hipMemcpy(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    HIP_CHECK(hipStreamSynchronize(stream_interior));
 
 #ifndef HPCG_NO_MPI
     double t0 = mytimer();

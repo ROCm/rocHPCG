@@ -122,11 +122,15 @@ int ComputeResidual(local_int_t n, const Vector& v1, const Vector& v2, double& r
 {
     double* tmp = reinterpret_cast<double*>(workspace);
 
-    kernel_residual_part1<256><<<256, 256>>>(n, v1.d_values, v2.d_values, tmp);
-    kernel_residual_part2<256><<<1, 256>>>(tmp);
+    kernel_residual_part1<256><<<256, 256, 0, stream_interior>>>(n,
+                                                                 v1.d_values,
+                                                                 v2.d_values,
+                                                                 tmp);
+    kernel_residual_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
 
     double local_residual;
-    HIP_CHECK(hipMemcpy(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpyAsync(&local_residual, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    HIP_CHECK(hipStreamSynchronize(stream_interior));
 
 #ifndef HPCG_NO_MPI
     double global_residual = 0.0;

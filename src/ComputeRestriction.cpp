@@ -184,13 +184,14 @@ int ComputeRestriction(const SparseMatrix& A, const Vector& rf)
     dim3 blocks((A.mgData->rc->localLength - 1) / 128 + 1);
     dim3 threads(128);
 
-    kernel_restrict<128><<<blocks, threads>>>(A.mgData->rc->localLength,
-                                              A.mgData->d_f2cOperator,
-                                              rf.d_values,
-                                              A.mgData->Axf->d_values,
-                                              A.mgData->rc->d_values,
-                                              A.perm,
-                                              A.Ac->perm);
+    kernel_restrict<128><<<blocks, threads, 0, stream_interior>>>(
+        A.mgData->rc->localLength,
+        A.mgData->d_f2cOperator,
+        rf.d_values,
+        A.mgData->Axf->d_values,
+        A.mgData->rc->d_values,
+        A.perm,
+        A.Ac->perm);
 
     return 0;
 }
@@ -215,16 +216,20 @@ int ComputeFusedSpMVRestriction(const SparseMatrix& A, const Vector& rf, Vector&
         dim3 blocks((A.halo_rows - 1) / 128 + 1);
         dim3 threads(128);
 
-        kernel_fused_restrict_spmv_halo<128><<<blocks, threads>>>(A.halo_rows,
-                                                                  A.localNumberOfColumns,
-                                                                  A.mgData->d_c2fOperator,
-                                                                  A.ell_width,
-                                                                  A.halo_row_ind,
-                                                                  A.halo_col_ind,
-                                                                  A.halo_val,
-                                                                  xf.d_values,
-                                                                  A.mgData->rc->d_values,
-                                                                  A.Ac->perm);
+        kernel_fused_restrict_spmv_halo<128><<<blocks,
+                                               threads,
+                                               0,
+                                               stream_interior>>>(
+            A.halo_rows,
+            A.localNumberOfColumns,
+            A.mgData->d_c2fOperator,
+            A.ell_width,
+            A.halo_row_ind,
+            A.halo_col_ind,
+            A.halo_val,
+            xf.d_values,
+            A.mgData->rc->d_values,
+            A.Ac->perm);
     }
 #endif
 

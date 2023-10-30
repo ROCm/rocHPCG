@@ -37,6 +37,8 @@
 // Streams
 extern hipStream_t stream_interior;
 extern hipStream_t stream_halo;
+// Events
+extern hipEvent_t halo_gather;
 // Workspace
 extern void* workspace;
 // Memory allocator

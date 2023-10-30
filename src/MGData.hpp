@@ -84,6 +84,7 @@ typedef struct MGData_STRUCT MGData;
 inline void InitializeMGData(local_int_t* d_f2cOperator, local_int_t* d_c2fOperator, Vector* rc, Vector* xc, Vector* Axf, MGData & data) {
   data.numberOfPresmootherSteps = 1;
   data.numberOfPostsmootherSteps = 1;
+  data.f2cOperator = nullptr;
   data.d_f2cOperator = d_f2cOperator; // Space for injection operator
   data.d_c2fOperator = d_c2fOperator;
   data.rc = rc;
@@ -99,7 +100,7 @@ inline void InitializeMGData(local_int_t* d_f2cOperator, local_int_t* d_c2fOpera
  */
 inline void DeleteMGData(MGData & data) {
 
-  delete [] data.f2cOperator;
+  if (data.f2cOperator) delete [] data.f2cOperator;
   DeleteVector(*data.Axf);
   DeleteVector(*data.rc);
   DeleteVector(*data.xc);

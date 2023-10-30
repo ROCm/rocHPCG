@@ -58,14 +58,14 @@
 
 struct Vector_STRUCT {
   local_int_t localLength;  //!< length of local portion of the vector
-  double * values;          //!< array of values
+  double * values = nullptr;          //!< array of values
   /*!
    This is for storing optimized data structures created in OptimizeProblem and
    used inside optimized ComputeSPMV().
    */
-  void * optimizationData;
+  void * optimizationData = nullptr;
 
-  double* d_values;
+  double* d_values = nullptr;
 };
 typedef struct Vector_STRUCT Vector;
 
@@ -175,7 +175,7 @@ inline void HIPCopyVector(const Vector& v, Vector& w)
  */
 inline void DeleteVector(Vector & v) {
 
-  delete [] v.values;
+  if (v.values) delete [] v.values;
   v.localLength = 0;
   return;
 }

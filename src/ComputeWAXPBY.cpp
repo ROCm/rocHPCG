@@ -54,6 +54,10 @@
 #include <cassert>
 #include <hip/hip_runtime.h>
 
+#ifdef OPT_ROCTX
+#include <roctracer/roctx.h>
+#endif
+
 #include "ComputeWAXPBY.hpp"
 
 template <unsigned int BLOCKSIZE>
@@ -212,7 +216,13 @@ int ComputeFusedWAXPBYDot(local_int_t n,
     double t0 = mytimer();
     double global_result = 0.0;
 
+#ifdef OPT_ROCTX
+    roctxRangePush("MPI AllReduce");
+#endif
     MPI_Allreduce(&local_result, &global_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#ifdef OPT_ROCTX
+    roctxRangePop();
+#endif
 
     result = global_result;
     time_allreduce += mytimer() - t0;

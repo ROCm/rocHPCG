@@ -32,6 +32,7 @@ set(CMAKE_INSTALL_PREFIX ${ROCM_PATH} CACHE PATH "Install path prefix, prepended
 # CMake modules
 list(APPEND CMAKE_MODULE_PATH
      ${CMAKE_CURRENT_SOURCE_DIR}/cmake
+     ${ROCM_PATH}/lib/cmake/hip
      ${ROCM_PATH}/hip/cmake)
 
 # Set a default build type if none was specified
@@ -75,18 +76,24 @@ option(OPT_ROCTX "Enable rocTX markers" OFF)
 # Dependencies
 include(cmake/Dependencies.cmake)
 
-# Availability of rocm_check_target_ids command assures that we can also build
-# for gfx90a target
-if(COMMAND rocm_check_target_ids)
-    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+;gfx90a:xnack-;gfx90a:xnack+;gfx940;gfx941;gfx942")
-else()
-    set(DEFAULT_AMDGPU_TARGETS "gfx900:xnack-;gfx906:xnack-;gfx908:xnack-;gfx908:xnack+")
-endif()
-set(AMDGPU_TARGETS "${DEFAULT_AMDGPU_TARGETS}" CACHE STRING "List of specific machine types for library to target")
-
 # Find HIP package
 find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
+
+# GPU arch targets
+set(AMDGPU_TARGETS "gfx900;gfx906" CACHE STRING "List of specific machine types for library to target")
+if(HIP_VERSION VERSION_GREATER_EQUAL "3.7")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx908")
+endif()
+if(HIP_VERSION VERSION_GREATER_EQUAL "4.3")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx90a")
+endif()
+if (HIP_VERSION VERSION_GREATER_EQUAL "5.3")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx940")
+endif()
+if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx941;gfx942")
+endif()
 
 # Setup version
 rocm_setup_version(VERSION 0.8.5)

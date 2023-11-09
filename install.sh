@@ -144,10 +144,10 @@ install_packages( )
   fi
 
   if [[ "${with_rocm}" == /opt/rocm ]]; then
-    library_dependencies_ubuntu+=("rocm-dev" "rocprim")
-    library_dependencies_centos+=("rocm-dev" "rocprim")
-    library_dependencies_fedora+=("rocm-dev" "rocprim")
-    library_dependencies_sles+=("rocm-dev" "rocprim")
+    library_dependencies_ubuntu+=("rocm-dev" "rocprim-dev")
+    library_dependencies_centos+=("rocm-dev" "rocprim-devel")
+    library_dependencies_fedora+=("rocm-dev" "rocprim-devel")
+    library_dependencies_sles+=("rocm-dev" "rocprim-devel")
   fi
 
   case "${ID}" in

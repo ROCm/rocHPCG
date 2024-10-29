@@ -94,6 +94,8 @@ endif()
 if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx941;gfx942")
 endif()
+# Don't force, as users should be able to override GPU_TARGETS at the command line if desired
+set(GPU_TARGETS "${AMDGPU_TARGETS}" CACHE STRING "GPU architectures to build for")
 
 # Setup version
 rocm_setup_version(VERSION 0.8.5)

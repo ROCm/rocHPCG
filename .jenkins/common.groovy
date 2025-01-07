@@ -7,13 +7,12 @@ def runCompileCommand(platform, project, jobName)
         
     def command
     def getDependencies = auxiliary.getLibrary('rocPRIM', platform.jenkinsLabel,'develop')
-    def compiler = jobName.contains('hipclang') ? '/opt/rocm/bin/hipcc' : '/opt/rocm/bin/hcc'
 
     command = """#!/usr/bin/env bash
                 set -x
                 ${getDependencies}
                 cd ${project.paths.project_build_prefix}
-                CXX=${compiler} ${project.paths.build_command}
+                ${project.paths.build_command}
               """
 
     platform.runCommand(this, command)

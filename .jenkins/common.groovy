@@ -9,7 +9,7 @@ def runCompileCommand(platform, project, jobName)
     def getDependencies = auxiliary.getLibrary('rocPRIM', platform.jenkinsLabel,'develop')
 
     command = """#!/usr/bin/env bash
-                set -x
+                set -ex
                 ${getDependencies}
                 cd ${project.paths.project_build_prefix}
                 ${project.paths.build_command}
@@ -22,7 +22,7 @@ def runTestCommand (platform, project)
 {
     String sudo = auxiliary.sudo(platform.jenkinsLabel)
     def command = """#!/usr/bin/env bash
-                    set -x
+                    set -ex
                     cd ${project.paths.project_build_prefix}/build/release/tests
                     ${sudo} ./rochpcg-test --gtest_output=xml --gtest_color=yes
                   """

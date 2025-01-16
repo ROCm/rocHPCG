@@ -81,6 +81,9 @@ find_package(HIP REQUIRED)
 find_package(rocprim REQUIRED)
 
 # GPU arch targets
+if(AMDGPU_TARGETS AND NOT GPU_TARGETS)
+  message( DEPRECATION "AMDGPU_TARGETS use is deprecated. Use GPU_TARGETS." )
+endif()
 set(AMDGPU_TARGETS "gfx900;gfx906" CACHE STRING "List of specific machine types for library to target")
 if(HIP_VERSION VERSION_GREATER_EQUAL "3.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx908")

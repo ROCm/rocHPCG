@@ -10,10 +10,10 @@ def runCompileCommand(platform, project, jobName)
     def compiler = '/opt/rocm/bin/amdclang++'
 
     command = """#!/usr/bin/env bash
-                set -x
+                set -ex
                 ${getDependencies}
                 cd ${project.paths.project_build_prefix}
-                CXX=${compiler} ${project.paths.build_command}
+                ${project.paths.build_command}
               """
 
     platform.runCommand(this, command)
@@ -23,7 +23,7 @@ def runTestCommand (platform, project)
 {
     String sudo = auxiliary.sudo(platform.jenkinsLabel)
     def command = """#!/usr/bin/env bash
-                    set -x
+                    set -ex
                     cd ${project.paths.project_build_prefix}/build/release/tests
                     ${sudo} ./rochpcg-test --gtest_output=xml --gtest_color=yes
                   """

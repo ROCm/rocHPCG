@@ -88,15 +88,15 @@ endif()
 if(HIP_VERSION VERSION_GREATER_EQUAL "4.3")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx90a")
 endif()
-if (HIP_VERSION VERSION_GREATER_EQUAL "5.3")
-  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx940")
-endif()
 if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
-  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx941;gfx942")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx942")
+endif()
+if (HIP_VERSION VERSION_GREATER_EQUAL "6.5")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950")
 endif()
 
 # Setup version
-rocm_setup_version(VERSION 0.8.5)
+rocm_setup_version(VERSION 0.8.6)
 
 # rocHPCG source directory
 add_subdirectory(src)

@@ -98,7 +98,7 @@ list(APPEND CMAKE_HOST_FLAGS "-g")
 endif()
 
 # AMD targets
-foreach(target ${AMDGPU_TARGETS})
+foreach(target ${GPU_TARGETS})
   list(APPEND HIP_HIPCC_FLAGS "--offload-arch=${target}")
 endforeach()
 

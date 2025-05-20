@@ -21,6 +21,8 @@
 #include "globals.hpp"
 #include "OptimizeProblem.hpp"
 
+#include <cstdio>
+
 #if defined(HPCG_USE_MULTICOLORING)
 void ColorSparseMatrixRows(SparseMatrix & A) {
   const local_int_t nrow = A.localNumberOfRows;

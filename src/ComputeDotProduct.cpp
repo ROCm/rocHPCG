@@ -64,6 +64,9 @@ template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_dot1_part1(local_int_t n, const double* x, double* workspace)
 {
+    // Make sure we have a power-of-two for BLOCKSIZE
+    static_assert((BLOCKSIZE > 0) && ((BLOCKSIZE & (BLOCKSIZE-1)) == 0));
+
     local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
     local_int_t inc = gridDim.x * BLOCKSIZE;
 
@@ -102,6 +105,9 @@ __global__ void kernel_dot2_part1(local_int_t n,
                                   const double* y,
                                   double* workspace)
 {
+    // Make sure we have a power-of-two for BLOCKSIZE
+    static_assert((BLOCKSIZE > 0) && ((BLOCKSIZE & (BLOCKSIZE-1)) == 0));
+
     local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
     local_int_t inc = gridDim.x * BLOCKSIZE;
 
@@ -134,6 +140,9 @@ template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_dot_part2(double* workspace)
 {
+    // Make sure we have a power-of-two for BLOCKSIZE
+    static_assert((BLOCKSIZE > 0) && ((BLOCKSIZE & (BLOCKSIZE-1)) == 0));
+
     __shared__ double sdata[BLOCKSIZE];
     sdata[threadIdx.x] = workspace[threadIdx.x];
 

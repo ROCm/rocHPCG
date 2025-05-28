@@ -138,9 +138,14 @@ __global__ void kernel_dot_part2(double* workspace)
     sdata[threadIdx.x] = workspace[threadIdx.x];
 
     __syncthreads();
-
-    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
+    if constexpr(BLOCKSIZE > 512)
+    {
+        if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
+    }
+    if constexpr(BLOCKSIZE > 256)
+    {
+        if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
+    }
     if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
     if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
     if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();

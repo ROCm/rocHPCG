@@ -29,7 +29,6 @@ def runTestCommand (platform, project)
                   """
 
     platform.runCommand(this, command)
-    junit "${project.paths.project_build_prefix}/build/release/tests/*.xml"
 }
 
 return this

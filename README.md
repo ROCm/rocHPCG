@@ -95,10 +95,10 @@ Please use [the issue tracker][] for bugs and feature requests.
 The [license file][] can be found in the main repository.
 
 [HPCG]: https://www.hpcg-benchmark.org/
-[ROCm]: https://github.com/RadeonOpenCompute/ROCm
-[HIP]: https://github.com/GPUOpen-ProfessionalCompute-Tools/HIP/
-[rocPRIM]: https://github.com/ROCmSoftwarePlatform/rocPRIM
+[ROCm]: https://github.com/ROCm/ROCm
+[HIP]: https://github.com/ROCm/HIP/
+[rocPRIM]: https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocprim
 [OpenMPI]: https://github.com/open-mpi/ompi
 [UCX]: https://github.com/openucx/ucx
-[the issue tracker]: https://github.com/ROCmSoftwarePlatform/rocHPCG/issues
-[license file]: https://github.com/ROCmSoftwarePlatform/rocHPCG
+[the issue tracker]: https://github.com/ROCm/rocHPCG/issues
+[license file]: https://github.com/ROCm/rocHPCG

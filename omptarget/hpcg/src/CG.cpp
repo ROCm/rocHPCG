@@ -155,6 +155,9 @@ int CG(const SparseMatrix & A, CGData & data, const Vector & b, Vector & x,
   return 0;
 }
 
+// Note: we assume the matrix is already allocated on the device using something
+// such as map(to: A). This is relevant because it means that the members are
+// already present on the device and thus available for pointer attachment.
 void MapMultiGridSparseMatrix(SparseMatrix &A) {
   int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
 #ifdef HPCG_OPENMP_TARGET
@@ -168,8 +171,8 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 
 #ifndef HPCG_CONTIGUOUS_ARRAYS
 // If 1 array per row is used
-#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: A.mtxIndL[:A.localNumberOfRows])
   for (int i = 0; i < A.localNumberOfRows; ++i) {
 #pragma omp target enter data map(to: A.matrixValues[i][:A.nonzerosInRow[i]])
 #pragma omp target enter data map(to: A.mtxIndL[i][:A.nonzerosInRow[i]])
@@ -180,8 +183,8 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
 #pragma omp target enter data map(to: A.matrixValuesSOA[:totalNonZeroValues])
 #pragma omp target enter data map(to: A.mtxIndLSOA[:totalNonZeroValues])
 #else
-#pragma omp target enter data map(to: A.matrixValues[:A.localNumberOfRows])
-#pragma omp target enter data map(to: A.mtxIndL[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: A.matrixValues[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: A.mtxIndL[:A.localNumberOfRows])
 #pragma omp target enter data map(to: A.matrixValues[0][:totalNonZeroValues])
 #pragma omp target enter data map(to: A.mtxIndL[0][:totalNonZeroValues])
   // Connect the pointers in the pointer array with the pointed positions
@@ -233,6 +236,9 @@ void MapMultiGridSparseMatrix(SparseMatrix &A) {
   }
 }
 
+// Note: we assume that the matrix itself is going to be released by the caller
+// after this method. As a result, it's not necessary to release individual
+// members here.
 void UnMapMultiGridSparseMatrix(SparseMatrix &A) {
   int totalNonZeroValues = MAP_MAX_LENGTH * A.localNumberOfRows;
   // Recursive call to make sure ALL layers are unmapped:

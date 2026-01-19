@@ -92,12 +92,12 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
 
   // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: b.values) map(to: b.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: x.values) map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: data.p.values) map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: data.z.values) map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: data.Ap.values) map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: data.r.values) map(to: data.r.values[:A.localNumberOfRows])
 #endif
 
   int niters = 0;
@@ -140,12 +140,12 @@ int TestCG(SparseMatrix & A, CGData & data, Vector & b, Vector & x, TestCGData &
 
   // Clean-up device array mappings:
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
-#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
-#pragma omp target exit data map(from: data.p.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: data.z.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows])
-#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: b.values[:A.localNumberOfRows]) map(release: b.values)
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows]) map(release: x.values)
+#pragma omp target exit data map(from: data.p.values[:A.localNumberOfColumns]) map(release: data.p.values)
+#pragma omp target exit data map(from: data.z.values[:A.localNumberOfColumns]) map(release: data.z.values)
+#pragma omp target exit data map(from: data.Ap.values[:A.localNumberOfRows]) map(release: data.Ap.values)
+#pragma omp target exit data map(from: data.r.values[:A.localNumberOfRows]) map(release: data.r.values)
 #endif
 
   // Restore matrix diagonal and RHS

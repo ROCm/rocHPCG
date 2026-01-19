@@ -276,12 +276,12 @@ int main(int argc, char * argv[]) {
 
   // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target enter data map(to: b.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: x.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: data.p.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: data.z.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: data.Ap.values[:A.localNumberOfRows])
-#pragma omp target enter data map(to: data.r.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: b.values) map(to: b.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: x.values) map(to: x.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: data.p.values) map(to: data.p.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: data.z.values) map(to: data.z.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: data.Ap.values) map(to: data.Ap.values[:A.localNumberOfRows])
+#pragma omp target enter data map(alloc: data.r.values) map(to: data.r.values[:A.localNumberOfRows])
 #endif
 
   niters = 0;
@@ -379,12 +379,12 @@ int main(int argc, char * argv[]) {
 
   // Clean-up the rest of the arrays:
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target exit data map(release: b.values[:A.localNumberOfRows])
-#pragma omp target exit data map(from: x.values[:A.localNumberOfRows])
-#pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: data.z.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows])
-#pragma omp target exit data map(release: data.r.values[:A.localNumberOfRows])
+#pragma omp target exit data map(release: b.values[:A.localNumberOfRows], b.values)
+#pragma omp target exit data map(from: x.values[:A.localNumberOfRows]) map(release: x.values)
+#pragma omp target exit data map(release: data.p.values[:A.localNumberOfColumns], data.p.values)
+#pragma omp target exit data map(release: data.z.values[:A.localNumberOfColumns], data.z.values)
+#pragma omp target exit data map(release: data.Ap.values[:A.localNumberOfRows], data.Ap.values)
+#pragma omp target exit data map(release: data.r.values[:A.localNumberOfRows], data.r.values)
 #endif
 
   // Compute difference between known exact solution and computed solution

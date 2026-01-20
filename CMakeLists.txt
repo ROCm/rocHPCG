@@ -78,6 +78,19 @@ include(cmake/Dependencies.cmake)
 
 # Find HIP package
 find_package(HIP REQUIRED)
+
+# FindHIP.cmake (module) does not define hip::host; create a minimal target.
+if(NOT TARGET hip::host)
+  add_library(hip::host INTERFACE IMPORTED)
+  if(DEFINED ROCM_PATH)
+    set_target_properties(hip::host PROPERTIES
+      INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_AMD__=1"
+      INTERFACE_INCLUDE_DIRECTORIES "${ROCM_PATH}/include"
+      INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${ROCM_PATH}/include"
+      INTERFACE_LINK_LIBRARIES "${ROCM_PATH}/lib/libamdhip64.so"
+    )
+  endif()
+endif()
 find_package(rocprim REQUIRED)
 
 # GPU arch targets
@@ -95,7 +108,7 @@ if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx942")
 endif()
 if (HIP_VERSION VERSION_GREATER_EQUAL "6.5")
-  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950;gfx1100")
 endif()
 # Don't force, as users should be able to override GPU_TARGETS at the command line if desired
 set(GPU_TARGETS "${AMDGPU_TARGETS}" CACHE STRING "GPU architectures to build for")

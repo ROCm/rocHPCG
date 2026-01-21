@@ -220,5 +220,5 @@ set(package_name rochpcg)
 
 rocm_create_package(
   NAME ${package_name}
-  DESCRIPTION "Radeon Open Compute HPCG application"
+  DESCRIPTION "ROCm HPCG application"
   MAINTAINER "rocHPCG Maintainer <rochpcg-maintainer@amd.com>")

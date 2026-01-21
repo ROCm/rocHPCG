@@ -52,7 +52,7 @@ hipAllocator_t::hipAllocator_t(void)
 hipAllocator_t::~hipAllocator_t(void)
 {
     // Call clear function
-    this->Clear();
+    HIP_CHECK(this->Clear());
 }
 
 hipError_t hipAllocator_t::Initialize(int rank,
@@ -68,7 +68,7 @@ hipError_t hipAllocator_t::Initialize(int rank,
 
     size_t free_mem;
     size_t total_mem;
-    hipMemGetInfo(&free_mem, &total_mem);
+    HIP_CHECK(hipMemGetInfo(&free_mem, &total_mem));
 
     if(size > free_mem)
     {

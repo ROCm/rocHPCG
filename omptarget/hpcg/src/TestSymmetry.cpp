@@ -89,9 +89,9 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 
  // Map additional arrays:
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target enter data map(to: x_ncol.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: y_ncol.values[:A.localNumberOfColumns])
-#pragma omp target enter data map(to: z_ncol.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: x_ncol.values) map(to: x_ncol.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: y_ncol.values) map(to: y_ncol.values[:A.localNumberOfColumns])
+#pragma omp target enter data map(alloc: z_ncol.values) map(to: z_ncol.values[:A.localNumberOfColumns])
 #endif
 
  // Next, compute x'*A*y
@@ -145,9 +145,9 @@ int TestSymmetry(SparseMatrix & A, Vector & b, Vector & xexact, TestSymmetryData
 #endif
 
 #ifdef HPCG_OPENMP_TARGET
-#pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns])
-#pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns])
+#pragma omp target exit data map(from: x_ncol.values[:A.localNumberOfColumns]) map(release: x_ncol.values)
+#pragma omp target exit data map(from: y_ncol.values[:A.localNumberOfColumns]) map(release: y_ncol.values)
+#pragma omp target exit data map(from: z_ncol.values[:A.localNumberOfColumns]) map(release: z_ncol.values)
 #endif
 
  CopyVector(xexact, x_ncol); // Copy exact answer into overlap vector

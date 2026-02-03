@@ -30,7 +30,7 @@
 #define UTILS_HPP
 
 #include <cstdio>
-#include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
 
 #include "Memory.hpp"
 

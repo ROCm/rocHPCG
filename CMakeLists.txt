@@ -78,19 +78,6 @@ include(cmake/Dependencies.cmake)
 
 # Find HIP package
 find_package(HIP REQUIRED)
-
-# FindHIP.cmake (module) does not define hip::host; create a minimal target.
-if(NOT TARGET hip::host)
-  add_library(hip::host INTERFACE IMPORTED)
-  if(DEFINED ROCM_PATH)
-    set_target_properties(hip::host PROPERTIES
-      INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_AMD__=1"
-      INTERFACE_INCLUDE_DIRECTORIES "${ROCM_PATH}/include"
-      INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${ROCM_PATH}/include"
-      INTERFACE_LINK_LIBRARIES "${ROCM_PATH}/lib/libamdhip64.so"
-    )
-  endif()
-endif()
 find_package(rocprim REQUIRED)
 
 # GPU arch targets

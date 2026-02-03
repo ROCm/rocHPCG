@@ -95,7 +95,7 @@ if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx942")
 endif()
 if (HIP_VERSION VERSION_GREATER_EQUAL "6.5")
-  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950")
+  set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950;gfx1100")
 endif()
 # Don't force, as users should be able to override GPU_TARGETS at the command line if desired
 set(GPU_TARGETS "${AMDGPU_TARGETS}" CACHE STRING "GPU architectures to build for")

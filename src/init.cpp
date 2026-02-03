@@ -201,7 +201,7 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
     if(ndevs <= params.device)
     {
       fprintf(stderr, "Error: invalid device ID\n");
-      hipDeviceReset();
+      HIP_CHECK(hipDeviceReset());
       exit(1);
     }
   }

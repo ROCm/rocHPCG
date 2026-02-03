@@ -47,32 +47,32 @@ extern hipAllocator_t allocator;
 #define RNG_SEED 0x586744
 #define MAX_COLORS 128
 
-#define NULL_CHECK(ptr)                                 \
-{                                                       \
-    if(ptr == NULL)                                     \
-    {                                                   \
-        fprintf(stderr, "ERROR in file %s ; line %d\n", \
-                __FILE__,                               \
-                __LINE__);                              \
-                                                        \
-        hipDeviceReset();                               \
-        exit(1);                                        \
-    }                                                   \
+
+#define NULL_CHECK(ptr) nullCheck((ptr), __FILE__, __LINE__)
+inline void nullCheck(void*         ptr,
+                     const char* const file,
+                     const int         line) {
+  if(ptr == NULL) {
+    fprintf(stderr, "NULL POINTER ERROR in file %s ; line %d\n", \
+                file,                                           \
+                line);
+    std::exit(-1);
+  }
 }
 
-#define HIP_CHECK(err)                                              \
-{                                                                   \
-    if(err != hipSuccess)                                           \
-    {                                                               \
-        fprintf(stderr, "HIP ERROR %s (%d) in file %s ; line %d\n", \
+#define HIP_CHECK(val) hipCheck((val), #val, __FILE__, __LINE__)
+inline void hipCheck(hipError_t        err,
+                     const char* const func,
+                     const char* const file,
+                     const int         line) {
+  if(err != hipSuccess) {
+    fprintf(stderr, "HIP ERROR  %s (%d) in file %s ; line %d\n", \
                 hipGetErrorString(err),                             \
                 err,                                                \
-                __FILE__,                                           \
-                __LINE__);                                          \
-                                                                    \
-        hipDeviceReset();                                           \
-        exit(1);                                                    \
-    }                                                               \
+                file,                                           \
+                line);
+    std::exit(-1);
+  }
 }
 
 #define RETURN_IF_HIP_ERROR(err)    \
@@ -91,13 +91,12 @@ extern hipAllocator_t allocator;
     }                               \
 }
 
-#define EXIT_IF_HPCG_ERROR(err) \
-{                               \
-    if(err != 0)                \
-    {                           \
-        hipDeviceReset();       \
-        exit(1);                \
-    }                           \
+
+#define EXIT_IF_HPCG_ERROR(err) exit_if_HPCG_ERROR((err))
+inline void exit_if_HPCG_ERROR(int  err) {
+  if(err != 0) {
+    std::exit(1);
+  }
 }
 
 #endif // UTILS_HPP

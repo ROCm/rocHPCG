@@ -67,18 +67,18 @@
 // Use TICK and TOCK to time a code section in MATLAB-like fashion
 #ifdef OPT_ROCTX // add roctx in TICK/TOCK
 #ifndef HPCG_NO_MPI
-#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
+#define TICK(x)  HIP_CHECK(hipDeviceSynchronize()); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
 #else
-#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
+#define TICK(x)  HIP_CHECK(hipDeviceSynchronize()); t0 = mytimer(); roctxRangePush(x) //!< record current time in 't0'
 #endif
-#define TOCK(t) hipDeviceSynchronize(); roctxRangePop(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
+#define TOCK(t) HIP_CHECK(hipDeviceSynchronize()); roctxRangePop(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
 #else // don't include markers
 #ifndef HPCG_NO_MPI
-#define TICK(x)  hipDeviceSynchronize(); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
+#define TICK(x)  HIP_CHECK(hipDeviceSynchronize()); MPI_Barrier(MPI_COMM_WORLD); t0 = mytimer() //!< record current time in 't0'
 #else
-#define TICK(x)  hipDeviceSynchronize(); t0 = mytimer() //!< record current time in 't0'
+#define TICK(x)  HIP_CHECK(hipDeviceSynchronize()); t0 = mytimer() //!< record current time in 't0'
 #endif
-#define TOCK(t) hipDeviceSynchronize(); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
+#define TOCK(t) HIP_CHECK(hipDeviceSynchronize()); t += mytimer() - t0 //!< store time difference in 't' using time in 't0'
 #endif
 
 /*!

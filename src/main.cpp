@@ -139,7 +139,7 @@ int main(int argc, char * argv[]) {
   if(rank == 0)
   {
     hipDeviceProp_t prop;
-    hipGetDeviceProperties(&prop, params.device);
+    HIP_CHECK(hipGetDeviceProperties(&prop, params.device));
 
     printf("Using HIP device (%d): %s (%lu MB global memory)\n",
            params.device,
@@ -255,8 +255,8 @@ int main(int argc, char * argv[]) {
     {
       if(curLevelMatrix->mgData != NULL)
       {
-        deviceFree(curLevelMatrix->Ac->d_nonzerosInRow);
-        deviceFree(curLevelMatrix->Ac->d_matrixDiagonal);
+        HIP_CHECK(deviceFree(curLevelMatrix->Ac->d_nonzerosInRow));
+        HIP_CHECK(deviceFree(curLevelMatrix->Ac->d_matrixDiagonal));
         curLevelMatrix = curLevelMatrix->Ac;
       }
     }

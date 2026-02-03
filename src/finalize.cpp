@@ -73,7 +73,7 @@ HPCG_Finalize(void) {
 #endif
 
   // Reset HIP device
-  hipDeviceReset();
+  HIP_CHECK(hipDeviceReset());
 
   return 0;
 }

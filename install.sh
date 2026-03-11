@@ -143,13 +143,6 @@ install_packages( )
     fi
   fi
 
-  if [[ "${with_rocm}" == /opt/rocm ]]; then
-    library_dependencies_ubuntu+=("rocprim-dev")
-    library_dependencies_centos+=("rocprim-devel")
-    library_dependencies_fedora+=("rocprim-devel")
-    library_dependencies_sles+=("rocprim-devel")
-  fi
-
   case "${ID}" in
     ubuntu)
       elevate_if_not_root apt update

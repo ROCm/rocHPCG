@@ -206,7 +206,7 @@ rocm_install_targets(TARGETS rochpcg
 rocm_install_symlink_subdir(rochpcg)
 
 # Package specific CPACK vars
-rocm_package_add_dependencies(DEPENDS "rocm-dev >= 4.1.0")
+rocm_package_add_dependencies(DEPENDS "hip-runtime-amd >= 4.5.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.md")
 
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)

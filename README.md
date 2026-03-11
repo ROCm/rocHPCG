@@ -61,9 +61,9 @@ You can run the rocHPCG benchmark application by either using command line param
 ```
 rochpcg <nx> <ny> <nz> <runtime>
 # where
-# nx      - is the global problem size in x dimension
-# ny      - is the global problem size in y dimension
-# nz      - is the global problem size in z dimension
+# nx      - is the local (per-rank) problem size in x dimension
+# ny      - is the local (per-rank) problem size in y dimension
+# nz      - is the local (per-rank) problem size in z dimension
 # runtime - is the desired benchmarking time in seconds (> 1800s for official runs)
 ```
 

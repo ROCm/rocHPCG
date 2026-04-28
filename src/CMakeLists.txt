@@ -170,6 +170,9 @@ endif()
 # OpenMP
 if(HPCG_OPENMP)
   target_link_libraries(rochpcg PRIVATE OpenMP::OpenMP_CXX)
+  # Explicitly propagate OpenMP flags to the HIP linker to ensure
+  # __kmpc_* symbols are resolved
+  target_link_options(rochpcg PRIVATE ${OpenMP_CXX_FLAGS})
 else()
   target_compile_definitions(rochpcg PRIVATE HPCG_NO_OPENMP)
 endif()

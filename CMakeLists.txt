@@ -101,7 +101,7 @@ endif()
 set(GPU_TARGETS "${AMDGPU_TARGETS}" CACHE STRING "GPU architectures to build for")
 
 # Setup version
-rocm_setup_version(VERSION 0.8.9)
+rocm_setup_version(VERSION 0.9.0)
 
 # rocHPCG source directory
 add_subdirectory(src)

@@ -56,7 +56,7 @@ inline void nullCheck(void*         ptr,
     fprintf(stderr, "NULL POINTER ERROR in file %s ; line %d\n", \
                 file,                                           \
                 line);
-    std::exit(-1);
+    std::exit(EXIT_FAILURE);
   }
 }
 
@@ -71,7 +71,7 @@ inline void hipCheck(hipError_t        err,
                 err,                                                \
                 file,                                           \
                 line);
-    std::exit(-1);
+    std::exit(EXIT_FAILURE);
   }
 }
 

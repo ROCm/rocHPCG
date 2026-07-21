@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -57,9 +57,9 @@ hipAllocator_t::~hipAllocator_t(void)
 
 hipError_t hipAllocator_t::Initialize(int rank,
                                       int nprocs,
-                                      local_int_t nx,
-                                      local_int_t ny,
-                                      local_int_t nz)
+                                      index_int_t nx,
+                                      index_int_t ny,
+                                      index_int_t nz)
 {
     this->rank_ = rank;
 
@@ -277,11 +277,11 @@ hipError_t hipAllocator_t::Free(void* ptr)
 }
 
 size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
-                                                     local_int_t nx,
-                                                     local_int_t ny,
-                                                     local_int_t nz) const
+                                                     index_int_t nx,
+                                                     index_int_t ny,
+                                                     index_int_t nz) const
 {
-    local_int_t m = nx * ny * nz;
+    index_int_t m = nx * ny * nz;
     int numberOfMgLevels = 4;
 
     // Alignment
@@ -315,25 +315,25 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
 
 #ifndef HPCG_NO_MPI
     // Determine two largest dimensions
-    local_int_t max_dim_1 = std::max(nx, std::max(ny, nz));
-    local_int_t max_dim_2 = ((nx >= ny && nx <= nz) || (nx >= nz && nx <= ny)) ? nx
+    index_int_t max_dim_1 = std::max(nx, std::max(ny, nz));
+    index_int_t max_dim_2 = ((nx >= ny && nx <= nz) || (nx >= nz && nx <= ny)) ? nx
                           : ((ny >= nz && ny <= nx) || (ny >= nx && ny <= nz)) ? ny
                           : nz;
-    local_int_t max_sending  = (std::min(nprocs, 27) - 1) * max_dim_1 * max_dim_2;
-    local_int_t max_boundary = 27 * (6 * max_dim_1 * max_dim_2 + 12 * max_dim_1 + 8);
-    local_int_t max_elements = std::min(max_sending, max_boundary);
+    index_int_t max_sending  = (std::min(nprocs, 27) - 1) * max_dim_1 * max_dim_2;
+    index_int_t max_boundary = 27 * (6 * max_dim_1 * max_dim_2 + 12 * max_dim_1 + 8);
+    index_int_t max_elements = std::min(max_sending, max_boundary);
 
     // send_buffer
     size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
 
     // elementsToSend
-    size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+    size += ((sizeof(index_int_t) * max_elements - 1) / align + 1) * align;
 
     // halo_row_ind
-    size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+    size += ((sizeof(index_int_t) * max_elements - 1) / align + 1) * align;
 
     // halo_col_ind
-    size += ((sizeof(local_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+    size += ((sizeof(index_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
 
     // halo_val
     size += ((sizeof(double) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
@@ -384,13 +384,13 @@ size_t hipAllocator_t::ComputeMaxMemoryRequirements_(int nprocs,
         size += ((sizeof(double) * max_elements - 1) / align + 1) * align;
 
         // elementsToSend
-        size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+        size += ((sizeof(index_int_t) * max_elements - 1) / align + 1) * align;
 
         // halo_row_ind
-        size += ((sizeof(local_int_t) * max_elements - 1) / align + 1) * align;
+        size += ((sizeof(index_int_t) * max_elements - 1) / align + 1) * align;
 
         // halo_col_ind
-        size += ((sizeof(local_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
+        size += ((sizeof(index_int_t) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;
 
         // halo_val
         size += ((sizeof(double) * std::min(max_sending * 27, max_boundary) - 1) / align + 1) * align;

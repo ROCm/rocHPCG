@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -65,11 +65,11 @@
 #if __cplusplus < 201103L
 // for C++03
 #include <map>
-typedef std::map< global_int_t, local_int_t > GlobalToLocalMap;
+typedef std::map< global_int_t, index_int_t > GlobalToLocalMap;
 #else
 // for C++11 or greater
 #include <unordered_map>
-using GlobalToLocalMap = std::unordered_map< global_int_t, local_int_t >;
+using GlobalToLocalMap = std::unordered_map< global_int_t, index_int_t >;
 #endif
 
 struct SparseMatrix_STRUCT {
@@ -101,13 +101,13 @@ struct SparseMatrix_STRUCT {
   void * optimizationData;  // pointer that can be used to store implementation-specific data
 
 #ifndef HPCG_NO_MPI
-  local_int_t numberOfExternalValues; //!< number of entries that are external to this process
+  index_int_t numberOfExternalValues; //!< number of entries that are external to this process
   int numberOfSendNeighbors; //!< number of neighboring processes that will be send local data
-  local_int_t totalToBeSent; //!< total number of entries to be sent
-  local_int_t * elementsToSend; //!< elements to send to neighboring processes
+  index_int_t totalToBeSent; //!< total number of entries to be sent
+  index_int_t * elementsToSend; //!< elements to send to neighboring processes
   int * neighbors; //!< neighboring processes
-  local_int_t * receiveLength; //!< lenghts of messages received from neighboring processes
-  local_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
+  index_int_t * receiveLength; //!< lenghts of messages received from neighboring processes
+  index_int_t * sendLength; //!< lenghts of messages sent to neighboring processes
   double * sendBuffer; //!< send buffer for non-blocking sends
 
 
@@ -116,19 +116,19 @@ struct SparseMatrix_STRUCT {
   MPI_Request* recv_request;
   MPI_Request* send_request;
 
-  local_int_t* d_elementsToSend;
+  index_int_t* d_elementsToSend;
 
   double* recv_buffer;
   double* send_buffer;
   double* d_send_buffer;
 
   // ELL matrix storage format arrays for halo part
-  local_int_t halo_rows;
-  local_int_t* halo_col_ind;
+  index_int_t halo_rows;
+  index_int_t* halo_col_ind;
   double* halo_val;
 #endif
 
-  local_int_t* halo_row_ind;
+  index_int_t* halo_row_ind;
 
   // HPCG matrix storage format arrays
   char* d_nonzerosInRow;
@@ -140,19 +140,19 @@ struct SparseMatrix_STRUCT {
   local_int_t* d_rowHash;
 
   // ELL matrix storage format arrays
-  local_int_t ell_width; //!< Maximum nnz per row
-  local_int_t* ell_col_ind; //!< ELL column indices
+  index_int_t ell_width; //!< Maximum nnz per row
+  index_int_t* ell_col_ind; //!< ELL column indices
   double* ell_val; //!< ELL values
 
-  local_int_t* diag_idx; //!< Index to diagonal value in ell_val
+  index_int_t* diag_idx; //!< Index to diagonal value in ell_val
   double* inv_diag; //!< Inverse diagonal values
 
   // SymGS structures
   int nblocks; //!< Number of independent sets
   int ublocks; //!< Number of upper triangular sets
-  local_int_t* sizes; //!< Number of rows of independent sets
-  local_int_t* offsets; //!< Pointer to the first row of each independent set
-  local_int_t* perm; //!< Permutation obtained by independent set
+  index_int_t* sizes; //!< Number of rows of independent sets
+  index_int_t* offsets; //!< Pointer to the first row of each independent set
+  index_int_t* perm; //!< Permutation obtained by independent set
 };
 typedef struct SparseMatrix_STRUCT SparseMatrix;
 

@@ -469,7 +469,7 @@ void ReportResults(const SparseMatrix & A, int numberOfMgLevels, int numberOfCgS
 #endif
 
     // Print some numbers to screen
-    printf("\nLocal domain: %d x %d x %d\n", A.geom->nx, A.geom->ny, A.geom->nz);
+    printf("\nLocal domain: %lld x %lld x %lld\n", (long long)A.geom->nx, (long long)A.geom->ny, (long long)A.geom->nz);
     printf("Global domain: %lld x %lld x %lld\n", A.geom->gnx, A.geom->gny, A.geom->gnz);
     printf("Process domain: %d x %d x %d\n", A.geom->npx, A.geom->npy, A.geom->npz);
     printf("\nTotal Time: %0.2lf sec\n", times[0]);

@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -78,7 +78,7 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     ConvertToELL(A);
 
     // Defrag permutation vector
-    HIP_CHECK(deviceDefrag((void**)&A.perm, sizeof(local_int_t) * A.localNumberOfRows));
+    HIP_CHECK(deviceDefrag((void**)&A.perm, sizeof(index_int_t) * A.localNumberOfRows));
 
     // Permute matrix rows
     PermuteRows(A);
@@ -87,11 +87,11 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     ExtractDiagonal(A);
 
     // Defrag
-    HIP_CHECK(deviceDefrag((void**)&A.diag_idx, sizeof(local_int_t) * A.localNumberOfRows));
+    HIP_CHECK(deviceDefrag((void**)&A.diag_idx, sizeof(index_int_t) * A.localNumberOfRows));
     HIP_CHECK(deviceDefrag((void**)&A.inv_diag, sizeof(double) * A.localNumberOfRows));
 #ifndef HPCG_NO_MPI
     HIP_CHECK(deviceDefrag((void**)&A.d_send_buffer, sizeof(double) * A.totalToBeSent));
-    HIP_CHECK(deviceDefrag((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(deviceDefrag((void**)&A.d_elementsToSend, sizeof(index_int_t) * A.totalToBeSent));
 #endif
 
     // Permute vectors
@@ -116,9 +116,9 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
         ConvertToELL(*M);
 
         // Defrag matrix arrays and permutation vector
-        HIP_CHECK(deviceDefrag((void**)&M->ell_col_ind, sizeof(local_int_t) * M->ell_width * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->ell_col_ind, sizeof(index_int_t) * M->ell_width * M->localNumberOfRows));
         HIP_CHECK(deviceDefrag((void**)&M->ell_val, sizeof(double) * M->ell_width * M->localNumberOfRows));
-        HIP_CHECK(deviceDefrag((void**)&M->perm, sizeof(local_int_t) * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->perm, sizeof(index_int_t) * M->localNumberOfRows));
 
         // Permute matrix rows
         PermuteRows(*M);
@@ -127,11 +127,11 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
         ExtractDiagonal(*M);
 
         // Defrag
-        HIP_CHECK(deviceDefrag((void**)&M->diag_idx, sizeof(local_int_t) * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&M->diag_idx, sizeof(index_int_t) * M->localNumberOfRows));
         HIP_CHECK(deviceDefrag((void**)&M->inv_diag, sizeof(double) * M->localNumberOfRows));
 #ifndef HPCG_NO_MPI
         HIP_CHECK(deviceDefrag((void**)&M->d_send_buffer, sizeof(double) * M->totalToBeSent));
-        HIP_CHECK(deviceDefrag((void**)&M->d_elementsToSend, sizeof(local_int_t) * M->totalToBeSent));
+        HIP_CHECK(deviceDefrag((void**)&M->d_elementsToSend, sizeof(index_int_t) * M->totalToBeSent));
 #endif
 
         // Go to next level in hierarchy
@@ -146,7 +146,7 @@ int OptimizeProblem(SparseMatrix & A, CGData & data, Vector & b, Vector & x, Vec
     {
         M = M->Ac;
 
-        HIP_CHECK(deviceDefrag((void**)&mg->d_f2cOperator, sizeof(local_int_t) * M->localNumberOfRows));
+        HIP_CHECK(deviceDefrag((void**)&mg->d_f2cOperator, sizeof(index_int_t) * M->localNumberOfRows));
         HIP_CHECK(deviceDefrag((void**)&mg->rc->d_values, sizeof(double) * mg->rc->localLength));
         HIP_CHECK(deviceDefrag((void**)&mg->xc->d_values, sizeof(double) * mg->xc->localLength));
 #ifdef HPCG_REFERENCE

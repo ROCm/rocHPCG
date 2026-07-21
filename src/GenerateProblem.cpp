@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -51,6 +51,9 @@
 #endif
 
 #include <hip/hip_runtime.h>
+#include <limits>
+#include <cstdio>
+#include <cstdlib>
 
 #include "utils.hpp"
 #include "GenerateProblem.hpp"
@@ -375,9 +378,9 @@ __global__ void kernel_local_nnz_part2(local_int_t* workspace)
 void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
 {
     // Local dimension in x, y and z direction
-    local_int_t nx = A.geom->nx;
-    local_int_t ny = A.geom->ny;
-    local_int_t nz = A.geom->nz;
+    global_int_t nx = A.geom->nx;
+    global_int_t ny = A.geom->ny;
+    global_int_t nz = A.geom->nz;
 
     // Global dimension in x, y and z direction
     global_int_t gnx = A.geom->gnx;
@@ -390,7 +393,7 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     global_int_t giz0 = A.geom->giz0;
 
     // Local number of rows
-    local_int_t localNumberOfRows = nx * ny * nz;
+    global_int_t localNumberOfRows = nx * ny * nz;
     assert(localNumberOfRows > 0);
 
     // Maximum number of entries per row in 27pt stencil
@@ -399,6 +402,31 @@ void GenerateProblem(SparseMatrix & A, Vector * b, Vector * x, Vector * xexact)
     // Global number of rows
     global_int_t totalNumberOfRows = gnx * gny * gnz;
     assert(totalNumberOfRows > 0);
+
+    // Guard against overflows
+    if(localNumberOfRows > (local_int_t)(std::numeric_limits<index_int_t>::max()))
+    {
+        if(A.geom->rank == 0)
+        {
+            fprintf(stderr,
+                    "rocHPCG: localNumberOfRows (%lld) exceeds index_int_t max (%lld). "
+                    "Widen index_int_t in Geometry.hpp.\n",
+                    localNumberOfRows,
+                    (long long)std::numeric_limits<index_int_t>::max());
+        }
+        exit(EXIT_FAILURE);
+    }
+
+    if(localNumberOfRows > std::numeric_limits<local_int_t>::max() / numberOfNonzerosPerRow)
+    {
+        if(A.geom->rank == 0)
+        {
+            fprintf(stderr,
+                    "rocHPCG: nnz (ell_width * localNumberOfRows) overflows local_int_t. "
+                    "Widen local_int_t in Geometry.hpp.\n");
+        }
+        exit(EXIT_FAILURE);
+    }
 
     // Allocate vectors
     if(b != NULL) HIPInitializeVector(*b, localNumberOfRows);

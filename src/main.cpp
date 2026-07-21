@@ -422,7 +422,8 @@ int main(int argc, char * argv[]) {
     double last_cummulative_time = opt_times[0];
     ierr = CG( A, data, b, x, optMaxIters, refTolerance, niters, normr, normr0, &opt_times[0], true, true);
     if (ierr) ++err_count; // count the number of errors in CG
-    if (normr / normr0 > refTolerance) ++tolerance_failures; // the number of failures to reduce residual
+    // Convergence check accepts an error of no more than 6 significant digits of relTolerance
+    if (normr / normr0 > refTolerance * (1.0 + 1.0e-6)) ++tolerance_failures; // the number of failures to reduce residual
 
     // pick the largest number of iterations to guarantee convergence
     if (niters > optNiters) optNiters = niters;
@@ -457,7 +458,7 @@ int main(int argc, char * argv[]) {
 #else
     size_t free_mem;
     size_t total_mem;
-    hipMemGetInfo(&free_mem, &total_mem);
+    HIP_CHECK(hipMemGetInfo(&free_mem, &total_mem));
 
     size_t used_mem = total_mem - free_mem;
 #endif

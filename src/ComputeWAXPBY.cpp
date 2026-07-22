@@ -144,19 +144,28 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
                                               double* y,
                                               double* workspace)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * blockDim.x;
+
+    local_int_t gid = 2 * (blockIdx.x * BLOCKSIZE + threadIdx.x);
+    local_int_t inc = 2 * gridDim.x * BLOCKSIZE;
+
+    double sum = 0.0;
+    for(local_int_t idx = gid; idx + 1 < size; idx += inc)
+    {
+        double x1 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->x);
+        double x2 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->y);
+        // load y as cached for possible re-use
+        double y1 = y[idx];
+        double y2 = y[idx+1];
+        double val1 = fma(alpha, x1, y1);
+        double val2 = fma(alpha, x2, y2);
+        y[idx] = val1;
+        y[idx+1] = val2;
+        sum = fma(val1, val1, sum);
+        sum = fma(val2, val2, sum);
+    }
 
     __shared__ double sdata[BLOCKSIZE];
-    sdata[threadIdx.x] = 0.0;
-
-    for(local_int_t idx = gid; idx < size; idx += inc)
-    {
-        double val = fma(alpha, x[idx], y[idx]);
-
-        y[idx] = val;
-        sdata[threadIdx.x] = fma(val, val, sdata[threadIdx.x]);
-    }
+    sdata[threadIdx.x] = sum;
 
     __syncthreads();
 
@@ -209,12 +218,9 @@ int ComputeFusedWAXPBYDot(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-    kernel_fused_waxpby_dot_part1<256><<<256, 256, 0, stream_interior>>>(n,
-                                                                         alpha,
-                                                                         x.d_values,
-                                                                         y.d_values,
-                                                                         tmp);
-    kernel_fused_waxpby_dot_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
+    constexpr unsigned blocksize = 1024;
+    kernel_fused_waxpby_dot_part1<blocksize><<<blocksize, blocksize, 0, stream_interior>>>(n, alpha, x.d_values, y.d_values, tmp);
+    kernel_fused_waxpby_dot_part2<blocksize><<<1, blocksize, 0, stream_interior>>>(tmp);
 
     double local_result;
     //HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));

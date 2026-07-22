@@ -109,9 +109,9 @@ __global__ void kernel_spmv_ell_coarse(index_int_t size,
 
     double sum = 0.0;
 
-    for(index_int_t p = 0; p < ell_width; ++p)
+    for(global_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = (local_int_t)p * m + row;
+        global_int_t idx = p * m + row;
         index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < n)
@@ -127,14 +127,49 @@ __global__ void kernel_spmv_ell_coarse(index_int_t size,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-template <unsigned int BLOCKSIZE, unsigned int WIDTH>
+template<int UF>
+__device__ void spmv_unroller(index_int_t m,
+                              global_int_t& idx,
+                              double& sum,
+                              const index_int_t* __restrict__ ell_col_ind,
+                              const double* __restrict__ ell_val,
+                              const double* __restrict__ x) {
+
+    index_int_t cols[UF];
+    index_int_t inbounds_mask = 0;
+    global_int_t idx_start = idx;
+    #pragma unroll UF
+    for(int q = 0; q < UF; q++)
+    {
+        cols[q] = __builtin_nontemporal_load(&ell_col_ind[idx]);
+        // test values here to unroll
+        index_int_t inbounds = (cols[q] >= 0 && cols[q] < m);
+        inbounds_mask |= (inbounds << q);
+        idx += m;
+    }
+    idx = idx_start - m;
+    #pragma unroll UF
+    for (index_int_t q = 0; q < UF; ++q) {
+        idx += m;
+        if (!(inbounds_mask & (1 << q))) {
+            continue;
+        }
+        // Every entry above offset is zero
+        sum = fma(__builtin_nontemporal_load(&ell_val[idx]),
+                  x[cols[q]],
+                  sum);
+    }
+    idx += m;
+}
+
+template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell(index_int_t m,
                                 index_int_t rows_per_block,
-                                const index_int_t* ell_col_ind,
-                                const double* ell_val,
-                                const double* x,
-                                double* y)
+                                const index_int_t* __restrict__ ell_col_ind,
+                                const double* __restrict__ ell_val,
+                                const double* __restrict__ x,
+                                double* __restrict__ y)
 {
     // Applies for chunks of BLOCKSIZE * nblocks
     index_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
@@ -151,20 +186,29 @@ __global__ void kernel_spmv_ell(index_int_t m,
     }
 
     double sum = 0.0;
-    local_int_t idx = row;
+    global_int_t idx = row;
 
-#pragma unroll
-    for(index_int_t p = 0; p < WIDTH; ++p)
-    {
-        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
-
-        if(col >= 0 && col < m)
+    if (UNROLL) {
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, x);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, x);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, x);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, x);
+        spmv_unroller<3>(m, idx, sum, ell_col_ind, ell_val, x);
+    } else {
+        #pragma unroll
+        for(index_int_t p = 0; p < WIDTH; ++p)
         {
-            sum = fma(__builtin_nontemporal_load(ell_val + idx), x[col], sum);
-        }
+            index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
-        idx += m;
+            if(col >= 0 && col < m)
+            {
+                sum = fma(__builtin_nontemporal_load(ell_val + idx), x[col], sum);
+            }
+
+            idx += m;
+        }
     }
+
 
     __builtin_nontemporal_store(sum, y + row);
 }
@@ -173,12 +217,12 @@ template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_halo(index_int_t m,
                                  index_int_t n,
-                                 const index_int_t* halo_row_ind,
-                                 const index_int_t* halo_col_ind,
-                                 const double* halo_val,
-                                 const index_int_t* perm,
-                                 const double* x,
-                                 double* y)
+                                 const index_int_t* __restrict__ halo_row_ind,
+                                 const index_int_t* __restrict__ halo_col_ind,
+                                 const double* __restrict__ halo_val,
+                                 const index_int_t* __restrict__ perm,
+                                 const double* __restrict__ x,
+                                 double* __restrict__ y)
 {
     index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -189,7 +233,7 @@ __global__ void kernel_spmv_halo(index_int_t m,
 
     double sum = 0.0;
 
-    local_int_t idx = row;
+    index_int_t idx = row;
 
 #pragma unroll
     for(index_int_t p = 0; p < WIDTH; ++p)

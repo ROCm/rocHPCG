@@ -78,7 +78,42 @@ __global__ void kernel_restrict(index_int_t size,
     coarse[perm_coarse[idx_coarse]] = fine[idx_fine] - data[idx_fine];
 }
 
-template <unsigned int BLOCKSIZE, unsigned int WIDTH>
+template<int UF>
+__device__ void spmv_unroller(index_int_t m,
+                              global_int_t& idx,
+                              double& sum,
+                              const index_int_t* __restrict__ ell_col_ind,
+                              const double* __restrict__ ell_val,
+                              const double* __restrict__ x) {
+
+    index_int_t cols[UF];
+    index_int_t inbounds_mask = 0;
+    global_int_t idx_start = idx;
+    #pragma unroll UF
+    for(int q = 0; q < UF; q++)
+    {
+        cols[q] = __builtin_nontemporal_load(&ell_col_ind[idx]);
+        // test values here to unroll
+        index_int_t inbounds = (cols[q] >= 0 && cols[q] < m);
+        inbounds_mask |= (inbounds << q);
+        idx += m;
+    }
+    idx = idx_start - m;
+    #pragma unroll UF
+    for (index_int_t q = 0; q < UF; ++q) {
+        idx += m;
+        if (!(inbounds_mask & (1 << q))) {
+            continue;
+        }
+        // Every entry above offset is zero
+        sum = fma(-__builtin_nontemporal_load(&ell_val[idx]),
+                  x[cols[q]],
+                  sum);
+    }
+    idx += m;
+}
+
+template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_fused_restrict_spmv(index_int_t size,
                                            const index_int_t* f2cOperator,
@@ -105,19 +140,27 @@ __global__ void kernel_fused_restrict_spmv(index_int_t size,
 
     double sum = __builtin_nontemporal_load(fine + idx_perm_fine);
 
-    local_int_t idx = idx_perm_fine;
+    global_int_t idx = idx_perm_fine;
 
-#pragma unroll
-    for(index_int_t p = 0; p < WIDTH; ++p)
-    {
-        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
-
-        if(col >= 0 && col < m)
+    if (UNROLL) {
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, xf);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, xf);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, xf);
+        spmv_unroller<6>(m, idx, sum, ell_col_ind, ell_val, xf);
+        spmv_unroller<3>(m, idx, sum, ell_col_ind, ell_val, xf);
+    } else {
+        #pragma unroll
+        for(index_int_t p = 0; p < WIDTH; ++p)
         {
-            sum = fma(-__builtin_nontemporal_load(ell_val + idx), xf[col], sum);
-        }
+            index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
-        idx += m;
+            if(col >= 0 && col < m)
+            {
+                sum = fma(-__builtin_nontemporal_load(ell_val + idx), xf[col], sum);
+            }
+
+            idx += m;
+        }
     }
 
     __builtin_nontemporal_store(sum, coarse + idx_perm_coarse);
@@ -155,7 +198,7 @@ __global__ void kernel_fused_restrict_spmv_halo(index_int_t m,
 
     for(index_int_t p = 0; p < halo_width; ++p)
     {
-        local_int_t idx = (local_int_t)p * m + row;
+        index_int_t idx = p * m + row;
         index_int_t col = halo_col_ind[idx];
 
         if(col >= 0 && col < n)

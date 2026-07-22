@@ -110,17 +110,54 @@
             x.d_values);                                          \
     }
 
-template <unsigned int BLOCKSIZE, unsigned int WIDTH>
+template<int UF>
+__device__ void sweep_unroller(index_int_t m,
+                               index_int_t n,
+                               global_int_t& idx,
+                               index_int_t offset,
+                               double& sum,
+                               index_int_t row,
+                               const index_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               double* __restrict__ y) {
+    index_int_t cols[UF];
+    index_int_t inbounds_mask = 0;
+    global_int_t idx_start = idx;
+    #pragma unroll UF
+    for(int q = 0; q < UF; q++)
+    {
+        cols[q] = __builtin_nontemporal_load(&ell_col_ind[idx]);
+        // test values here to unroll
+        index_int_t inbounds = (cols[q] >= 0 && cols[q] < n && cols[q] != row);
+        inbounds_mask |= (inbounds << q);
+        idx += m;
+    }
+    idx = idx_start - m;
+    #pragma unroll UF
+    for (index_int_t q = 0; q < UF; ++q) {
+        idx += m;
+        if (!(inbounds_mask & (1 << q))) {
+            continue;
+        }
+        // Every entry above offset is zero
+        sum = fma(-__builtin_nontemporal_load(&ell_val[idx]),
+                  y[cols[q]],
+                  sum);
+    }
+    idx += m;
+}
+
+template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_sweep(index_int_t m,
                                    index_int_t n,
                                    index_int_t block_nrow,
                                    index_int_t offset,
-                                   const index_int_t* ell_col_ind,
-                                   const double* ell_val,
-                                   const double* inv_diag,
-                                   const double* x,
-                                   double* y)
+                                   const index_int_t* __restrict__ ell_col_ind,
+                                   const double* __restrict__ ell_val,
+                                   const double* __restrict__ inv_diag,
+                                   const double* __restrict__ x,
+                                   double* __restrict__ y)
 {
     index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -130,21 +167,29 @@ __global__ void kernel_symgs_sweep(index_int_t m,
     }
 
     index_int_t row = gid + offset;
-    local_int_t idx = row;
+    global_int_t idx = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
-#pragma unroll
-    for(index_int_t p = 0; p < WIDTH; ++p)
-    {
-        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
-
-        if(col >= 0 && col < n && col != row)
+    if (UNROLL) {
+        sweep_unroller<6>(m, n, idx, offset, sum, row, ell_col_ind, ell_val, y);
+        sweep_unroller<6>(m, n, idx, offset, sum, row, ell_col_ind, ell_val, y);
+        sweep_unroller<6>(m, n, idx, offset, sum, row, ell_col_ind, ell_val, y);
+        sweep_unroller<6>(m, n, idx, offset, sum, row, ell_col_ind, ell_val, y);
+        sweep_unroller<3>(m, n, idx, offset, sum, row, ell_col_ind, ell_val, y);
+    } else {
+        #pragma unroll
+        for(index_int_t p = 0; p < WIDTH; ++p)
         {
-            sum = fma(-__builtin_nontemporal_load(ell_val + idx), y[col], sum);
-        }
+            index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
-        idx += m;
+            if(col >= 0 && col < n && col != row)
+            {
+                sum = fma(-__builtin_nontemporal_load(ell_val + idx), y[col], sum);
+            }
+
+            idx += m;
+        }
     }
 
     __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
@@ -154,11 +199,11 @@ template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_interior(index_int_t m,
                                       index_int_t block_nrow,
-                                      const index_int_t* ell_col_ind,
-                                      const double* ell_val,
-                                      const double* inv_diag,
-                                      const double* x,
-                                      double* y)
+                                      const index_int_t* __restrict__ ell_col_ind,
+                                      const double* __restrict__ ell_val,
+                                      const double* __restrict__ inv_diag,
+                                      const double* __restrict__ x,
+                                      double* __restrict__ y)
 {
     index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -167,7 +212,7 @@ __global__ void kernel_symgs_interior(index_int_t m,
         return;
     }
 
-    local_int_t idx = row;
+    global_int_t idx = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
@@ -192,13 +237,13 @@ __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_symgs_halo(index_int_t m,
                                   index_int_t n,
                                   index_int_t block_nrow,
-                                  const index_int_t* halo_row_ind,
-                                  const index_int_t* halo_col_ind,
-                                  const double* halo_val,
-                                  const double* inv_diag,
-                                  const index_int_t* perm,
-                                  const double* x,
-                                  double* y)
+                                  const index_int_t* __restrict__ halo_row_ind,
+                                  const index_int_t* __restrict__ halo_col_ind,
+                                  const double* __restrict__ halo_val,
+                                  const double* __restrict__ inv_diag,
+                                  const index_int_t* __restrict__ perm,
+                                  const double* __restrict__ x,
+                                  double* __restrict__ y)
 {
     index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -215,7 +260,7 @@ __global__ void kernel_symgs_halo(index_int_t m,
         return;
     }
 
-    local_int_t idx = row;
+    index_int_t idx = row;
 
     double sum = 0.0;
 
@@ -252,16 +297,109 @@ __global__ void kernel_pointwise_mult(index_int_t size,
     out[gid] = x[gid] * y[gid];
 }
 
-template <unsigned int BLOCKSIZE>
+template<int FUF>
+__device__ void fwd_sweep_unroller(index_int_t m,
+                               global_int_t& idx,
+                               index_int_t offset,
+                               double& sum,
+                               const index_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               double* __restrict__ y) {
+    index_int_t cols[FUF];
+    index_int_t inbounds_mask = 0;
+    global_int_t idx_start = idx;
+    #pragma unroll FUF
+    for(index_int_t q = 0; q < FUF; q++)
+    {
+        cols[q] = __builtin_nontemporal_load(&ell_col_ind[idx]);
+        // test values here to unroll
+        index_int_t inbounds = (cols[q] >= 0 && cols[q] < offset);
+        inbounds_mask |= (inbounds << q);
+        idx += m;
+    }
+    idx = idx_start - m;
+    #pragma unroll FUF
+    for (index_int_t q = 0; q < FUF; ++q) {
+        idx += m;
+        if (!(inbounds_mask & (1 << q))) {
+            continue;
+        }
+        // Every entry above offset is zero
+        sum = fma(-__builtin_nontemporal_load(&ell_val[idx]),
+                  y[cols[q]],
+                  sum);
+    }
+    idx += m;
+}
+
+__device__ void fwd_sweep_nounroll(index_int_t p,
+                               index_int_t diag,
+                               index_int_t m,
+                               global_int_t& idx,
+                               index_int_t offset,
+                               double& sum,
+                               const index_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               double* __restrict__ y) {
+    for(; p < diag; ++p)
+    {
+        index_int_t col = __builtin_nontemporal_load(&ell_col_ind[idx]);
+
+        // Every entry above offset is zero
+        if(col >= 0 && col < offset)
+        {
+            sum = fma(-(__builtin_nontemporal_load(&ell_val[idx])),
+                      y[col],
+                      sum);
+        }
+
+        idx += m;
+    }
+}
+
+// FUF = forward unroll factor
+template <unsigned FUF=4>
+__device__ void fluff_unroller(
+    index_int_t diag,
+    index_int_t m,
+    global_int_t& idx,
+    index_int_t offset,
+    double& sum,
+    const index_int_t* __restrict__ ell_col_ind,
+    const double* __restrict__ ell_val,
+    double* __restrict__ y) {
+    for(index_int_t p = 0; p < (diag/FUF)*FUF; p+=FUF) {
+        fwd_sweep_unroller<FUF>(
+            m,
+            idx,
+            offset,
+            sum,
+            ell_col_ind,
+            ell_val,
+            y);
+    }
+    fwd_sweep_nounroll(
+        (diag/FUF)*FUF,
+        diag,
+        m,
+        idx,
+        offset,
+        sum,
+        ell_col_ind,
+        ell_val,
+        y);
+}
+
+template <unsigned int BLOCKSIZE, bool UNROLL=true, unsigned FUF=4>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_forward_sweep_0(index_int_t m,
                                        index_int_t block_nrow,
                                        index_int_t offset,
-                                       const index_int_t* ell_col_ind,
-                                       const double* ell_val,
-                                       const index_int_t* diag_idx,
-                                       const double* x,
-                                       double* y)
+                                       const index_int_t* __restrict__ ell_col_ind,
+                                       const double* __restrict__ ell_val,
+                                       const index_int_t* __restrict__ diag_idx,
+                                       const double* __restrict__ x,
+                                       double* __restrict__ y)
 {
     index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -271,22 +409,16 @@ __global__ void kernel_forward_sweep_0(index_int_t m,
     }
 
     index_int_t row  = gid + offset;
-    local_int_t idx  = row;
     index_int_t diag = __builtin_nontemporal_load(diag_idx + row);
+
+    global_int_t idx  = row;
 
     double sum = __builtin_nontemporal_load(x + row);
 
-    for(index_int_t p = 0; p < diag; ++p)
-    {
-        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
-
-        // Every entry above offset is zero
-        if(col >= 0 && col < offset)
-        {
-            sum = fma(-__builtin_nontemporal_load(ell_val + idx), y[col], sum);
-        }
-
-        idx += m;
+    if (UNROLL) {
+        fluff_unroller<FUF>(diag, m, idx, offset, sum, ell_col_ind, ell_val, y);
+    } else {
+        fwd_sweep_nounroll(0, diag, m, idx, offset, sum, ell_col_ind, ell_val, y);
     }
 
     sum *= __drcp_rn(__builtin_nontemporal_load(ell_val + idx));
@@ -294,16 +426,109 @@ __global__ void kernel_forward_sweep_0(index_int_t m,
     __builtin_nontemporal_store(sum, y + row);
 }
 
-template <unsigned int BLOCKSIZE>
+template<int BUF>
+__device__ void bck_sweep_unroller(index_int_t m,
+                               global_int_t& idx,
+                               index_int_t offset,
+                               double& sum,
+                               const index_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               double* __restrict__ y) {
+    index_int_t cols[BUF];
+    index_int_t inbounds_mask = 0;
+    global_int_t idx_start = idx;
+    #pragma unroll BUF
+    for(index_int_t q = 0; q < BUF; q++)
+    {
+        cols[q] = __builtin_nontemporal_load(&ell_col_ind[idx]);
+        // test values here to unroll
+        index_int_t inbounds = (cols[q] >= offset && cols[q] < m);
+        inbounds_mask |= (inbounds << q);
+        idx += m;
+    }
+    idx = idx_start - m;
+    #pragma unroll BUF
+    for (index_int_t q = 0; q < BUF; ++q) {
+        idx += m;
+        if (!(inbounds_mask & (1 << q))) {
+            continue;
+        }
+        // Every entry above offset is zero
+        sum = fma(-__builtin_nontemporal_load(&ell_val[idx]),
+                  y[cols[q]],
+                  sum);
+    }
+    idx += m;
+}
+
+__device__ void bck_sweep_nounroll(index_int_t p,
+                               index_int_t size,
+                               index_int_t m,
+                               global_int_t& idx,
+                               index_int_t offset,
+                               double& sum,
+                               const index_int_t* __restrict__ ell_col_ind,
+                               const double* __restrict__ ell_val,
+                               double* __restrict__ y) {
+    for(; p < size; ++p)
+    {
+        index_int_t col = __builtin_nontemporal_load(&ell_col_ind[idx]);
+
+        // Every entry above offset is zero
+        if(col >= offset && col < m)
+        {
+            sum = fma(-__builtin_nontemporal_load(&ell_val[idx]),
+                      y[col],
+                      sum);
+        }
+
+        idx += m;
+    }
+}
+
+// BUF = forward unroll factor
+template <unsigned BUF=4>
+__device__ __forceinline__ void bluff_unroller(
+    index_int_t size,
+    index_int_t m,
+    global_int_t& idx,
+    index_int_t offset,
+    double& sum,
+    const index_int_t* __restrict__ ell_col_ind,
+    const double* __restrict__ ell_val,
+    double* __restrict__ y) {
+    for(index_int_t p = 0; p < (size/BUF)*BUF; p+=BUF) {
+        bck_sweep_unroller<BUF>(
+            m,
+            idx,
+            offset,
+            sum,
+            ell_col_ind,
+            ell_val,
+            y);
+    }
+    bck_sweep_nounroll(
+        (size/BUF)*BUF,
+        size,
+        m,
+        idx,
+        offset,
+        sum,
+        ell_col_ind,
+        ell_val,
+        y);
+}
+
+template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true, unsigned BUF=4>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_backward_sweep_0(index_int_t m,
                                         index_int_t block_nrow,
                                         index_int_t offset,
                                         index_int_t ell_width,
-                                        const index_int_t* ell_col_ind,
-                                        const double* ell_val,
-                                        const index_int_t* diag_idx,
-                                        double* x)
+                                        const index_int_t* __restrict__ ell_col_ind,
+                                        const double* __restrict__ ell_val,
+                                        const index_int_t* __restrict__ diag_idx,
+                                        double* __restrict__ x)
 {
     index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
@@ -314,7 +539,8 @@ __global__ void kernel_backward_sweep_0(index_int_t m,
 
     index_int_t row  = gid + offset;
     index_int_t diag = __builtin_nontemporal_load(diag_idx + row);
-    local_int_t idx  = (local_int_t)diag * m + row;
+
+    global_int_t idx = (global_int_t)diag * m + row;
 
     double diag_val = __builtin_nontemporal_load(ell_val + idx);
     idx += m;
@@ -322,17 +548,12 @@ __global__ void kernel_backward_sweep_0(index_int_t m,
     // Scale result with diagonal entry
     double sum = x[row] * diag_val;
 
-    for(index_int_t p = diag + 1; p < ell_width; ++p)
-    {
-        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
-
-        // Every entry below offset should not be taken into account
-        if(col >= offset && col < m)
-        {
-            sum = fma(-__builtin_nontemporal_load(ell_val + idx), x[col], sum);
-        }
-
-        idx += m;
+    index_int_t size = WIDTH - (diag + 1);
+    if (UNROLL) {
+        bluff_unroller<BUF>(size,m, idx, offset, sum, ell_col_ind, ell_val, x);
+    }
+    else {
+        bck_sweep_nounroll(0, size, m, idx, offset, sum, ell_col_ind, ell_val, x);
     }
 
     sum *= __drcp_rn(diag_val);
@@ -403,9 +624,66 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     return 0;
 }
 
+template<int FUF>
+void launch_fwd_sweep(int i, const SparseMatrix& A, const Vector& r, Vector& x, hipStream_t stream_interior) {
+    kernel_forward_sweep_0<1024, true, FUF><<<(A.sizes[i] - 1) / 1024 + 1, 1024, 0, stream_interior>>>(
+        A.localNumberOfRows,
+        A.sizes[i],
+        A.offsets[i],
+        A.ell_col_ind,
+        A.ell_val,
+        A.diag_idx,
+        r.d_values,
+        x.d_values);
+}
+
+void select_fwd_unroll_factor(int i, const SparseMatrix& A, const Vector& r, Vector& x, hipStream_t stream_interior) {
+    if (i == 1) {
+        launch_fwd_sweep<2>(i, A, r, x, stream_interior);
+    } else if (i == 2) {
+        launch_fwd_sweep<3>(i, A, r, x, stream_interior);
+    } else if (i == 5) {
+        launch_fwd_sweep<5>(i, A, r, x, stream_interior);
+    } else {
+        launch_fwd_sweep<4>(i, A, r, x, stream_interior);
+    }
+}
+
+template<int BUF>
+void launch_back_sweep(int i, const SparseMatrix& A, const Vector& r, Vector& x, hipStream_t stream_interior) {
+    kernel_backward_sweep_0<1024, 27, true, BUF><<<(A.sizes[i] - 1) / 1024 + 1, 1024, 0, stream_interior>>>(
+                A.localNumberOfRows,
+                A.sizes[i],
+                A.offsets[i],
+                A.ell_width,
+                A.ell_col_ind,
+                A.ell_val,
+                A.diag_idx,
+                x.d_values);
+}
+
+void select_bck_unroll_factor(int i, const SparseMatrix& A, const Vector& r, Vector& x, hipStream_t stream_interior) {
+    if (i == 0) {
+        launch_back_sweep<6>(i, A, r, x, stream_interior);
+    } else if (i == 1) {
+        launch_back_sweep<4>(i, A, r, x, stream_interior);
+    } else if (i == 2) {
+        launch_back_sweep<2>(i, A, r, x, stream_interior);;
+    } else if (i == 4) {
+        launch_back_sweep<5>(i, A, r, x, stream_interior);
+    } else if (i == 5) {
+        launch_back_sweep<2>(i, A, r, x, stream_interior);
+    } else if (i == 7) {
+        launch_back_sweep<3>(i, A, r, x, stream_interior);
+    } else {
+        launch_back_sweep<4>(i, A, r, x, stream_interior);
+    }
+}
+
 int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 {
     assert(x.localLength == A.localNumberOfColumns);
+    assert(A.ell_width == 27 && "Can't use unroll mask here");
 
     // Solve L
     kernel_pointwise_mult<256><<<(A.sizes[0] - 1) / 256 + 1,
@@ -419,35 +697,13 @@ int ComputeSYMGSZeroGuess(const SparseMatrix& A, const Vector& r, Vector& x)
 
     for(index_int_t i = 1; i < A.nblocks; ++i)
     {
-        kernel_forward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1,
-                                       1024,
-                                       0,
-                                       stream_interior>>>(
-            A.localNumberOfRows,
-            A.sizes[i],
-            A.offsets[i],
-            A.ell_col_ind,
-            A.ell_val,
-            A.diag_idx,
-            r.d_values,
-            x.d_values);
+        select_fwd_unroll_factor(i, A, r, x, stream_interior);
     }
 
     // Solve U
     for(index_int_t i = A.ublocks; i >= 0; --i)
     {
-        kernel_backward_sweep_0<1024><<<(A.sizes[i] - 1) / 1024 + 1,
-                                        1024,
-                                        0,
-                                        stream_interior>>>(
-            A.localNumberOfRows,
-            A.sizes[i],
-            A.offsets[i],
-            A.ell_width,
-            A.ell_col_ind,
-            A.ell_val,
-            A.diag_idx,
-            x.d_values);
+        select_bck_unroll_factor(i, A, r, x, stream_interior);
     }
 
     return 0;

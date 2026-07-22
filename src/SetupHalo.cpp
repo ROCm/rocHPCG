@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -106,19 +106,19 @@
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_copy_indices(local_int_t size,
+__global__ void kernel_copy_indices(index_int_t size,
                                     const char* __restrict__ nonzerosInRow,
                                     const global_int_t* __restrict__ mtxIndG,
                                     local_int_t* __restrict__ mtxIndL)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    index_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     if(row >= size)
     {
         return;
     }
 
-    local_int_t idx = row * BLOCKSIZEX + threadIdx.x;
+    local_int_t idx = (local_int_t)row * BLOCKSIZEX + threadIdx.x;
 
     if(threadIdx.x < nonzerosInRow[row])
     {
@@ -132,19 +132,19 @@ __global__ void kernel_copy_indices(local_int_t size,
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_setup_halo(local_int_t m,
-                                  local_int_t max_boundary,
-                                  local_int_t max_sending,
-                                  local_int_t max_neighbors,
-                                  local_int_t nx,
-                                  local_int_t ny,
-                                  local_int_t nz,
+__global__ void kernel_setup_halo(index_int_t m,
+                                  index_int_t max_boundary,
+                                  index_int_t max_sending,
+                                  index_int_t max_neighbors,
+                                  index_int_t nx,
+                                  index_int_t ny,
+                                  index_int_t nz,
                                   bool xp2,
                                   bool yp2,
                                   bool zp2,
-                                  local_int_t npx,
-                                  local_int_t npy,
-                                  local_int_t npz,
+                                  index_int_t npx,
+                                  index_int_t npy,
+                                  index_int_t npz,
                                   global_int_t gnx,
                                   global_int_t gnxgny,
                                   global_int_t ipx0,
@@ -153,15 +153,15 @@ __global__ void kernel_setup_halo(local_int_t m,
                                   const char* __restrict__ nonzerosInRow,
                                   const global_int_t* __restrict__ mtxIndG,
                                   local_int_t* __restrict__ mtxIndL,
-                                  local_int_t* __restrict__ nsend_per_rank,
-                                  local_int_t* __restrict__ nrecv_per_rank,
+                                  index_int_t* __restrict__ nsend_per_rank,
+                                  index_int_t* __restrict__ nrecv_per_rank,
                                   int* __restrict__ neighbors,
-                                  local_int_t* __restrict__ send_indices,
+                                  index_int_t* __restrict__ send_indices,
                                   global_int_t* __restrict__ recv_indices,
                                   local_int_t* __restrict__ halo_indices)
 {
     // Each block processes blockDim.y rows
-    local_int_t currentLocalRow = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    index_int_t currentLocalRow = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     // Some shared memory to mark rows that need to be sent to neighboring processes
     __shared__ bool sdata[BLOCKSIZEX * BLOCKSIZEY];
@@ -176,7 +176,7 @@ __global__ void kernel_setup_halo(local_int_t m,
     }
 
     // Global ID for 1D grid of 2D blocks
-    local_int_t gid = currentLocalRow * BLOCKSIZEX + threadIdx.x;
+    local_int_t gid = (local_int_t)currentLocalRow * BLOCKSIZEX + threadIdx.x;
 
     // Process only non-zeros of current row ; each thread index in x direction processes one column entry
     if(threadIdx.x < nonzerosInRow[currentLocalRow])
@@ -189,16 +189,16 @@ __global__ void kernel_setup_halo(local_int_t m,
         global_int_t iy = (currentGlobalColumn - iz * gnxgny) / gnx;
         global_int_t ix = currentGlobalColumn % gnx;
 
-        local_int_t ipz = iz / nz;
-        local_int_t ipy = iy / ny;
-        local_int_t ipx = ix / nx;
+        index_int_t ipz = iz / nz;
+        index_int_t ipy = iy / ny;
+        index_int_t ipx = ix / nx;
 
         // Compute neighboring process id depending on the global column.
         // Each domain has at most 26 neighboring domains.
         // Since the numbering is following a fixed order, we can compute the
         // neighbor process id by the actual x,y,z coordinate of the entry, using
         // the domains offsets into the global numbering.
-        local_int_t neighborRankId = (ipz - ipz0) * 9 + (ipy - ipy0) * 3 + (ipx - ipx0);
+        index_int_t neighborRankId = (ipz - ipz0) * 9 + (ipy - ipy0) * 3 + (ipx - ipx0);
 
         // This will give us the neighboring process id between [-13, 13] where 0
         // is the local domain. We shift the resulting id by 13 to avoid negative indices.
@@ -214,7 +214,7 @@ __global__ void kernel_setup_halo(local_int_t m,
             neighbors[neighborRankId] = ipx + ipy * npx + ipz * npy * npx;
 
             // Count up the global column that we have to receive by a neighbor using atomics
-            local_int_t idx = atomicAdd(&nrecv_per_rank[neighborRankId], 1);
+            index_int_t idx = atomicAdd(nrecv_per_rank + neighborRankId, 1);
 
             // Halo indices array stores the global id, so we can easily access the matrix
             // column array at the halo position
@@ -226,12 +226,12 @@ __global__ void kernel_setup_halo(local_int_t m,
         else
         {
             // Determine local column index
-//            local_int_t lz = iz % nz;
-//            local_int_t ly = currentGlobalColumn / gnx % ny;
-//            local_int_t lx = currentGlobalColumn % nx;
-            local_int_t lz = (zp2) ? iz % nz : iz & (nz - 1);
-            local_int_t ly = (yp2) ? currentGlobalColumn / gnx % ny : currentGlobalColumn / gnx & (ny - 1);
-            local_int_t lx = (xp2) ? currentGlobalColumn % nx : currentGlobalColumn & (nx - 1);
+//            index_int_t lz = iz % nz;
+//            index_int_t ly = currentGlobalColumn / gnx % ny;
+//            index_int_t lx = currentGlobalColumn % nx;
+            index_int_t lz = (zp2) ? iz % nz : iz & (nz - 1);
+            index_int_t ly = (yp2) ? currentGlobalColumn / gnx % ny : currentGlobalColumn / gnx & (ny - 1);
+            index_int_t lx = (xp2) ? currentGlobalColumn % nx : currentGlobalColumn & (nx - 1);
 
             // Store the local column index in the local matrix column array
             mtxIndL[gid] = lz * ny * nx + ly * nx + lx;
@@ -249,22 +249,22 @@ __global__ void kernel_setup_halo(local_int_t m,
     if(sdata[threadIdx.x + threadIdx.y * BLOCKSIZEX] == true)
     {
         // If current row has been marked for sending, store its index
-        local_int_t idx = atomicAdd(&nsend_per_rank[threadIdx.x], 1);
+        index_int_t idx = atomicAdd(nsend_per_rank + threadIdx.x, 1);
         send_indices[threadIdx.x * max_sending + idx] = currentLocalRow;
     }
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_halo_columns(local_int_t size,
-                                    local_int_t m,
-                                    local_int_t rank_offset,
+__global__ void kernel_halo_columns(index_int_t size,
+                                    index_int_t m,
+                                    index_int_t rank_offset,
                                     const local_int_t* __restrict__ halo_indices,
                                     const global_int_t* __restrict__ offsets,
                                     local_int_t* __restrict__ mtxIndL)
 {
     // 1D thread indexing
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     // Do not run out of bounds
     if(gid >= size)
@@ -327,9 +327,9 @@ void SetupHalo(SparseMatrix& A)
     }
 
     // Local dimensions in x, y and z direction
-    local_int_t nx = A.geom->nx;
-    local_int_t ny = A.geom->ny;
-    local_int_t nz = A.geom->nz;
+    index_int_t nx = A.geom->nx;
+    index_int_t ny = A.geom->ny;
+    index_int_t nz = A.geom->nz;
 
     // Number of partitions with varying nz values have to be 1 in the current implementation
     assert(A.geom->npartz == 1);
@@ -344,43 +344,43 @@ void SetupHalo(SparseMatrix& A)
     assert(A.geom->partz_nz[0] == nz);
 
     // Determine two largest dimensions
-    local_int_t max_dim_1 = std::max(nx, std::max(ny, nz));
-    local_int_t max_dim_2 = ((nx >= ny && nx <= nz) || (nx >= nz && nx <= ny)) ? nx
+    index_int_t max_dim_1 = std::max(nx, std::max(ny, nz));
+    index_int_t max_dim_2 = ((nx >= ny && nx <= nz) || (nx >= nz && nx <= ny)) ? nx
                           : ((ny >= nz && ny <= nx) || (ny >= nx && ny <= nz)) ? ny
                           : nz;
 
     // Maximum of entries that can be sent to a single neighboring rank
-    local_int_t max_sending = max_dim_1 * max_dim_2;
+    index_int_t max_sending = max_dim_1 * max_dim_2;
 
     // 27 pt stencil has a maximum of 9 boundary entries per boundary plane
     // and thus, the maximum number of boundary elements can be computed to be
     // 9 * max_dim_1 * max_dim_2
-    local_int_t max_boundary = 9 * max_dim_1 * max_dim_2;
+    index_int_t max_boundary = 9 * max_dim_1 * max_dim_2;
 
     // A maximum of 27 neighbors, including outselves, is possible for each process
     int max_neighbors = 27;
 
     // Arrays to hold send and receive element offsets per rank
-    local_int_t* d_nsend_per_rank;
-    local_int_t* d_nrecv_per_rank;
+    index_int_t* d_nsend_per_rank;
+    index_int_t* d_nrecv_per_rank;
 
     // Number of elements is stored for each neighboring rank
-    HIP_CHECK(deviceMalloc((void**)&d_nsend_per_rank, sizeof(local_int_t) * max_neighbors));
-    HIP_CHECK(deviceMalloc((void**)&d_nrecv_per_rank, sizeof(local_int_t) * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_nsend_per_rank, sizeof(index_int_t) * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_nrecv_per_rank, sizeof(index_int_t) * max_neighbors));
 
     // Since we use increments, we have to initialize with 0
-    HIP_CHECK(hipMemset(d_nsend_per_rank, 0, sizeof(local_int_t) * max_neighbors));
-    HIP_CHECK(hipMemset(d_nrecv_per_rank, 0, sizeof(local_int_t) * max_neighbors));
+    HIP_CHECK(hipMemset(d_nsend_per_rank, 0, sizeof(index_int_t) * max_neighbors));
+    HIP_CHECK(hipMemset(d_nrecv_per_rank, 0, sizeof(index_int_t) * max_neighbors));
 
     // Array to store the neighboring process ids
     int* d_neighbors;
     HIP_CHECK(deviceMalloc((void**)&d_neighbors, sizeof(int) * max_neighbors));
 
     // Array to hold send indices
-    local_int_t* d_send_indices;
+    index_int_t* d_send_indices;
 
     // d_send_indices holds max_sending elements per neighboring rank, at max
-    HIP_CHECK(deviceMalloc((void**)&d_send_indices, sizeof(local_int_t) * max_sending * max_neighbors));
+    HIP_CHECK(deviceMalloc((void**)&d_send_indices, sizeof(index_int_t) * max_sending * max_neighbors));
 
     // Array to hold receive and halo indices
     global_int_t* d_recv_indices;
@@ -397,10 +397,10 @@ void SetupHalo(SparseMatrix& A)
     else                     LAUNCH_SETUP_HALO(27,  4)
 
     // Prefix sum to obtain send index offsets
-    std::vector<local_int_t> nsend_per_rank(max_neighbors + 1);
+    std::vector<index_int_t> nsend_per_rank(max_neighbors + 1);
     HIP_CHECK(hipMemcpy(nsend_per_rank.data() + 1,
                         d_nsend_per_rank,
-                        sizeof(local_int_t) * max_neighbors,
+                        sizeof(index_int_t) * max_neighbors,
                         hipMemcpyDeviceToHost));
     HIP_CHECK(deviceFree(d_nsend_per_rank));
 
@@ -414,7 +414,7 @@ void SetupHalo(SparseMatrix& A)
     A.totalToBeSent = nsend_per_rank[max_neighbors];
 
     // Array to hold number of entries that have to be sent to each process
-    A.sendLength = new local_int_t[A.geom->size - 1];
+    A.sendLength = new index_int_t[A.geom->size - 1];
 
     // Allocate receive and send buffers on GPU and CPU
     size_t buffer_size = ((A.totalToBeSent - 1) / (1 << 21) + 1) * (1 << 21);
@@ -432,7 +432,7 @@ void SetupHalo(SparseMatrix& A)
     // Sort send indices to obtain elementsToSend array
     // elementsToSend array has to be in increasing order, so other processes know
     // where to place the elements.
-    HIP_CHECK(deviceMalloc((void**)&A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(deviceMalloc((void**)&A.d_elementsToSend, sizeof(index_int_t) * A.totalToBeSent));
 
     // TODO segmented sort might be faster
     A.numberOfSendNeighbors = 0;
@@ -441,7 +441,7 @@ void SetupHalo(SparseMatrix& A)
     for(int i = 0; i < max_neighbors; ++i)
     {
         // Compute number of entries to be sent to i-th rank
-        local_int_t entriesToSend = nsend_per_rank[i + 1] - nsend_per_rank[i];
+        index_int_t entriesToSend = nsend_per_rank[i + 1] - nsend_per_rank[i];
 
         // Check if this is actually a neighbor that receives some data
         if(entriesToSend == 0)
@@ -478,10 +478,10 @@ void SetupHalo(SparseMatrix& A)
     HIP_CHECK(deviceFree(d_send_indices));
 
     // Prefix sum to obtain receive indices offsets (with duplicates)
-    std::vector<local_int_t> nrecv_per_rank(max_neighbors + 1);
+    std::vector<index_int_t> nrecv_per_rank(max_neighbors + 1);
     HIP_CHECK(hipMemcpy(nrecv_per_rank.data() + 1,
                         d_nrecv_per_rank,
-                        sizeof(local_int_t) * max_neighbors,
+                        sizeof(index_int_t) * max_neighbors,
                         hipMemcpyDeviceToHost));
     HIP_CHECK(deviceFree(d_nrecv_per_rank));
 
@@ -499,7 +499,7 @@ void SetupHalo(SparseMatrix& A)
 
     // Array to hold number of elements that have to be received from each neighboring
     // process
-    A.receiveLength = new local_int_t[A.geom->size - 1];
+    A.receiveLength = new index_int_t[A.geom->size - 1];
 
     // Counter for number of neighbors we are actually receiving data from
     int neighborCount = 0;
@@ -533,7 +533,7 @@ void SetupHalo(SparseMatrix& A)
     for(int i = 0; i < max_neighbors; ++i)
     {
         // Number of entries that have to be received from i-th rank
-        local_int_t entriesToRecv = nrecv_per_rank[i + 1] - nrecv_per_rank[i];
+        index_int_t entriesToRecv = nrecv_per_rank[i + 1] - nrecv_per_rank[i];
 
         // Check if we actually receive data
         if(entriesToRecv == 0)
@@ -655,11 +655,11 @@ void CopyHaloToHost(SparseMatrix& A)
 {
 #ifndef HPCG_NO_MPI
     // Allocate host structures
-    A.elementsToSend = new local_int_t[A.totalToBeSent];
+    A.elementsToSend = new index_int_t[A.totalToBeSent];
     A.sendBuffer = new double[A.totalToBeSent];
 
     // Copy GPU data to host
-    HIP_CHECK(hipMemcpy(A.elementsToSend, A.d_elementsToSend, sizeof(local_int_t) * A.totalToBeSent, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(A.elementsToSend, A.d_elementsToSend, sizeof(index_int_t) * A.totalToBeSent, hipMemcpyDeviceToHost));
 #endif
     HIP_CHECK(hipMemcpy(A.mtxIndL[0], A.d_mtxIndL, sizeof(local_int_t) * A.localNumberOfRows * A.numberOfNonzerosPerRow, hipMemcpyDeviceToHost));
 }

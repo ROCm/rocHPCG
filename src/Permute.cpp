@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -53,31 +53,31 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_permute_ell_rows(local_int_t m,
-                                        local_int_t p,
-                                        const local_int_t* __restrict__ tmp_cols,
+__global__ void kernel_permute_ell_rows(index_int_t m,
+                                        index_int_t p,
+                                        const index_int_t* __restrict__ tmp_cols,
                                         const double* __restrict__ tmp_vals,
-                                        const local_int_t* __restrict__ perm,
-                                        local_int_t* __restrict__ ell_col_ind,
+                                        const index_int_t* __restrict__ perm,
+                                        index_int_t* __restrict__ ell_col_ind,
                                         double* __restrict__ ell_val)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
         return;
     }
 
-    local_int_t idx = p * m + perm[row];
-    local_int_t col = tmp_cols[row];
+    local_int_t idx = (local_int_t)p * m + perm[row];
+    index_int_t col = tmp_cols[row];
 
     ell_col_ind[idx] = col;
     ell_val[idx] = tmp_vals[row];
 }
 
-__device__ void swap(local_int_t& key, double& val, int mask, int dir)
+__device__ void swap(index_int_t& key, double& val, int mask, int dir)
 {
-    local_int_t key1 = __shfl_xor(key, mask);
+    index_int_t key1 = __shfl_xor(key, mask);
     double val1 = __shfl_xor(val, mask);
 
     if(key < key1 == dir)
@@ -94,21 +94,21 @@ __device__ int get_bit(int x, int i)
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_perm_cols(local_int_t m,
-                                 local_int_t n,
-                                 local_int_t nonzerosPerRow,
-                                 const local_int_t* __restrict__ perm,
+__global__ void kernel_perm_cols(index_int_t m,
+                                 index_int_t n,
+                                 index_int_t nonzerosPerRow,
+                                 const index_int_t* __restrict__ perm,
                                  local_int_t* __restrict__ mtxIndL,
                                  double* __restrict__ matrixValues)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
-    local_int_t idx = row * nonzerosPerRow + threadIdx.x;
-    local_int_t key = n;
+    index_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    local_int_t idx = (local_int_t)row * nonzerosPerRow + threadIdx.x;
+    index_int_t key = n;
     double val = 0.0;
 
     if(threadIdx.x < nonzerosPerRow && row < m)
     {
-        local_int_t col = mtxIndL[idx];
+        index_int_t col = mtxIndL[idx];
         val = matrixValues[idx];
 
         if(col >= 0 && col < m)
@@ -186,21 +186,21 @@ void PermuteColumns(SparseMatrix& A)
 
 void PermuteRows(SparseMatrix& A)
 {
-    local_int_t m = A.localNumberOfRows;
+    index_int_t m = A.localNumberOfRows;
 
     // Temporary structures for row permutation
-    local_int_t* tmp_cols;
+    index_int_t* tmp_cols;
     double* tmp_vals;
 
-    HIP_CHECK(deviceMalloc((void**)&tmp_cols, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_cols, sizeof(index_int_t) * m));
     HIP_CHECK(deviceMalloc((void**)&tmp_vals, sizeof(double) * m));
 
     // Permute ELL rows
-    for(local_int_t p = 0; p < A.ell_width; ++p)
+    for(index_int_t p = 0; p < A.ell_width; ++p)
     {
-        local_int_t offset = p * m;
+        local_int_t offset = (local_int_t)p * m;
 
-        HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(local_int_t) * m, hipMemcpyDeviceToDevice));
+        HIP_CHECK(hipMemcpy(tmp_cols, A.ell_col_ind + offset, sizeof(index_int_t) * m, hipMemcpyDeviceToDevice));
         HIP_CHECK(hipMemcpy(tmp_vals, A.ell_val + offset, sizeof(double) * m, hipMemcpyDeviceToDevice));
 
         kernel_permute_ell_rows<1024><<<(m - 1) / 1024 + 1, 1024>>>(
@@ -219,12 +219,12 @@ void PermuteRows(SparseMatrix& A)
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_permute(local_int_t size,
-                               const local_int_t* __restrict__ perm,
+__global__ void kernel_permute(index_int_t size,
+                               const index_int_t* __restrict__ perm,
                                const double* __restrict__ in,
                                double* __restrict__ out)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -234,7 +234,7 @@ __global__ void kernel_permute(local_int_t size,
     out[perm[gid]] = in[gid];
 }
 
-void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm)
+void PermuteVector(index_int_t size, Vector& v, const index_int_t* perm)
 {
     double* buffer;
     HIP_CHECK(deviceMalloc((void**)&buffer, sizeof(double) * v.localLength));

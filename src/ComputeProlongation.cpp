@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -38,22 +38,22 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_prolongation(local_int_t size,
-                                    const local_int_t* __restrict__ f2cOperator,
+__global__ void kernel_prolongation(index_int_t size,
+                                    const index_int_t* __restrict__ f2cOperator,
                                     const double* __restrict__ coarse,
                                     double* __restrict__ fine,
-                                    const local_int_t* __restrict__ perm_fine,
-                                    const local_int_t* __restrict__ perm_coarse)
+                                    const index_int_t* __restrict__ perm_fine,
+                                    const index_int_t* __restrict__ perm_coarse)
 {
-    local_int_t idx_coarse = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t idx_coarse = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(idx_coarse >= size)
     {
         return;
     }
 
-    local_int_t idx_fine = __builtin_nontemporal_load(f2cOperator + idx_coarse);
-    local_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
+    index_int_t idx_fine = __builtin_nontemporal_load(f2cOperator + idx_coarse);
+    index_int_t idx_perm = __builtin_nontemporal_load(perm_coarse + idx_coarse);
 
     fine[perm_fine[idx_fine]] += coarse[idx_perm];
 }

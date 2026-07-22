@@ -59,35 +59,28 @@
 #endif
 
 #include "ComputeWAXPBY.hpp"
+#include "DeviceReduction.hpp"
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_waxpby(local_int_t size,
                               double alpha,
-                              const double* x,
+                              const double* __restrict__ x,
                               double beta,
-                              const double* y,
-                              double* w)
+                              const double* __restrict__ y,
+                              double* __restrict__ w)
 {
-    local_int_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    local_int_t gid = 2 * (blockIdx.x * BLOCKSIZE + threadIdx.x);
 
-    if(gid >= size)
+    if(gid + 1 >= size)
     {
         return;
     }
 
-    if(alpha == 1.0)
-    {
-        w[gid] = fma(beta, y[gid], x[gid]);
-    }
-    else if(beta == 1.0)
-    {
-        w[gid] = fma(alpha, x[gid], y[gid]);
-    }
-    else
-    {
-        w[gid] = fma(alpha, x[gid], beta * y[gid]);
-    }
+    double sum_1 = fma(alpha, __builtin_nontemporal_load(&x[gid]), beta * __builtin_nontemporal_load(&y[gid]));
+    double sum_2 = fma(alpha, __builtin_nontemporal_load(&x[gid+1]), beta * __builtin_nontemporal_load(&y[gid+1]));
+    __builtin_nontemporal_store(sum_1, &w[gid]);
+    __builtin_nontemporal_store(sum_2, &w[gid+1]);
 }
 
 /*!
@@ -120,16 +113,26 @@ int ComputeWAXPBY(local_int_t n,
     assert(y.localLength >= n);
     assert(w.localLength >= n);
 
-    dim3 blocks((n - 1) / 1024 + 1);
-    dim3 threads(1024);
+    constexpr int blocksize=1024;
+    // we launch half as many blocks because each block does 2 elements
+    dim3 blocks((n - 1) / (blocksize * 2) + 1);
+    dim3 threads(blocksize);
 
-    kernel_waxpby<1024><<<blocks, threads, 0, stream_interior>>>(
-        n,
-        alpha,
-        x.d_values,
-        beta,
-        y.d_values,
-        w.d_values);
+    kernel_waxpby<blocksize><<<blocks, threads,  0, stream_interior>>>(
+                                             n,
+                                             alpha,
+                                             x.d_values,
+                                             beta,
+                                             y.d_values,
+                                             w.d_values);
+    if ( n % 2 ) {
+        // if n is odd, this kernel will skip the last entry, e.g.
+        // if n == 3, then thread 1, block 0 will see
+        // gid = 2 * (512 * 0 + 1) = 2
+        // if (gid + 1) >= 3
+        //   return;
+        w.d_values[n - 1] = alpha * x.d_values[n - 1] + beta * y.d_values[n - 1];
+    }
 
     return 0;
 }
@@ -142,33 +145,37 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
                                               double* y,
                                               double* workspace)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * blockDim.x;
+
+    local_int_t gid = 2 * (blockIdx.x * BLOCKSIZE + threadIdx.x);
+    local_int_t inc = 2 * gridDim.x * BLOCKSIZE;
+
+    double sum = 0.0;
+    for(local_int_t idx = gid; idx + 1 < size; idx += inc)
+    {
+        double x1 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->x);
+        double x2 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->y);
+        // load y as cached for possible re-use
+        double y1 = y[idx];
+        double y2 = y[idx+1];
+        double val1 = fma(alpha, x1, y1);
+        double val2 = fma(alpha, x2, y2);
+        y[idx] = val1;
+        y[idx+1] = val2;
+        sum = fma(val1, val1, sum);
+        sum = fma(val2, val2, sum);
+    }
 
     __shared__ double sdata[BLOCKSIZE];
-    sdata[threadIdx.x] = 0.0;
-
-    for(local_int_t idx = gid; idx < size; idx += inc)
-    {
-        double val = fma(alpha, x[idx], y[idx]);
-
-        y[idx] = val;
-        sdata[threadIdx.x] = fma(val, val, sdata[threadIdx.x]);
-    }
+    sdata[threadIdx.x] = sum;
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        // store cache
+        workspace[blockIdx.x] = sum;
     }
 }
 
@@ -181,17 +188,12 @@ __global__ void kernel_fused_waxpby_dot_part2(double* workspace)
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    double sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0] + sdata[1];
+        // store cache
+        workspace[0] = sum;
     }
 }
 
@@ -207,16 +209,22 @@ int ComputeFusedWAXPBYDot(local_int_t n,
 
     double* tmp = reinterpret_cast<double*>(workspace);
 
-    kernel_fused_waxpby_dot_part1<256><<<256, 256, 0, stream_interior>>>(n,
-                                                                         alpha,
-                                                                         x.d_values,
-                                                                         y.d_values,
-                                                                         tmp);
-    kernel_fused_waxpby_dot_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
+    constexpr unsigned blocksize = 1024;
+    kernel_fused_waxpby_dot_part1<blocksize><<<blocksize, blocksize, 0, stream_interior>>>(n, alpha, x.d_values, y.d_values, tmp);
+    kernel_fused_waxpby_dot_part2<blocksize><<<1, blocksize, 0, stream_interior>>>(tmp);
 
     double local_result;
-    HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    //HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
     HIP_CHECK(hipStreamSynchronize(stream_interior));
+
+    local_result = tmp[0];
+
+    if (n % 2) {
+        // if n is odd, this kernel will skip the last entry
+        double value = alpha * x.d_values[n - 1] + y.d_values[n - 1];
+        y.d_values[n - 1] = value;
+        local_result += value * value;
+    }
 
 #ifndef HPCG_NO_MPI
     double t0 = mytimer();

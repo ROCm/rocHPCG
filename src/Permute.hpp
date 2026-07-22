@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -33,6 +33,6 @@
 
 void PermuteColumns(SparseMatrix& A);
 void PermuteRows(SparseMatrix& A);
-void PermuteVector(local_int_t size, Vector& v, const local_int_t* perm);
+void PermuteVector(index_int_t size, Vector& v, const index_int_t* perm);
 
 #endif // PERMUTE_HPP

@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -56,9 +56,9 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_identity(local_int_t size, local_int_t* __restrict__ data)
+__global__ void kernel_identity(index_int_t size, index_int_t* __restrict__ data)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -70,11 +70,11 @@ __global__ void kernel_identity(local_int_t size, local_int_t* __restrict__ data
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_create_perm(local_int_t size,
-                                   const local_int_t* __restrict__ in,
-                                   local_int_t* __restrict__ out)
+__global__ void kernel_create_perm(index_int_t size,
+                                   const index_int_t* __restrict__ in,
+                                   index_int_t* __restrict__ out)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -85,7 +85,7 @@ __global__ void kernel_create_perm(local_int_t size,
 }
 
 template <unsigned int BLOCKSIZE>
-__device__ void reduce_sum(local_int_t tid, local_int_t* data)
+__device__ void reduce_sum(index_int_t tid, index_int_t* data)
 {
     __syncthreads();
 
@@ -103,19 +103,19 @@ __device__ void reduce_sum(local_int_t tid, local_int_t* data)
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_count_color_part1(local_int_t size,
-                                         local_int_t color,
-                                         const local_int_t* __restrict__ colors,
-                                         local_int_t* __restrict__ workspace)
+__global__ void kernel_count_color_part1(index_int_t size,
+                                         index_int_t color,
+                                         const index_int_t* __restrict__ colors,
+                                         index_int_t* __restrict__ workspace)
 {
-    local_int_t tid = threadIdx.x;
-    local_int_t gid = blockIdx.x * BLOCKSIZE + tid;
-    local_int_t inc = gridDim.x * BLOCKSIZE;
+    index_int_t tid = threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + tid;
+    index_int_t inc = gridDim.x * BLOCKSIZE;
 
-    __shared__ local_int_t sdata[BLOCKSIZE];
+    __shared__ index_int_t sdata[BLOCKSIZE];
 
-    local_int_t sum = 0;
-    for(local_int_t idx = gid; idx < size; idx += inc)
+    index_int_t sum = 0;
+    for(index_int_t idx = gid; idx < size; idx += inc)
     {
         if(colors[idx] == color)
         {
@@ -135,9 +135,9 @@ __global__ void kernel_count_color_part1(local_int_t size,
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_count_color_part2(local_int_t* workspace)
+__global__ void kernel_count_color_part2(index_int_t* workspace)
 {
-    __shared__ local_int_t sdata[BLOCKSIZE];
+    __shared__ index_int_t sdata[BLOCKSIZE];
     sdata[threadIdx.x] = workspace[threadIdx.x];
 
     reduce_sum<BLOCKSIZE>(threadIdx.x, sdata);
@@ -150,15 +150,15 @@ __global__ void kernel_count_color_part2(local_int_t* workspace)
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_jpl(local_int_t m,
+__global__ void kernel_jpl(index_int_t m,
                            const local_int_t* __restrict__ hash,
                            int color1,
                            int color2,
                            const char* __restrict__ nonzerosInRow,
                            const local_int_t* __restrict__ mtxIndL,
-                           local_int_t* __restrict__ colors)
+                           index_int_t* __restrict__ colors)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    index_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     extern __shared__ bool sdata[];
     bool* min = &sdata[0];
@@ -187,8 +187,8 @@ __global__ void kernel_jpl(local_int_t m,
     // Get row hash value
     local_int_t row_hash = hash[row];
 
-    local_int_t idx = row * BLOCKSIZEX + threadIdx.x;
-    local_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
+    local_int_t idx = (local_int_t)row * BLOCKSIZEX + threadIdx.x;
+    index_int_t col = __builtin_nontemporal_load(mtxIndL + idx);
 
     if(col >= 0 && col < m)
     {
@@ -237,10 +237,10 @@ __global__ void kernel_jpl(local_int_t m,
 
 void JPLColoring(SparseMatrix& A)
 {
-    local_int_t m = A.localNumberOfRows;
+    index_int_t m = A.localNumberOfRows;
 
-    HIP_CHECK(deviceMalloc((void**)&A.perm, sizeof(local_int_t) * m));
-    HIP_CHECK(hipMemset(A.perm, -1, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&A.perm, sizeof(index_int_t) * m));
+    HIP_CHECK(hipMemset(A.perm, -1, sizeof(index_int_t) * m));
 
     A.nblocks = 0;
 
@@ -248,16 +248,16 @@ void JPLColoring(SparseMatrix& A)
     srand(RNG_SEED);
 
     // Temporary workspace
-    local_int_t* tmp = reinterpret_cast<local_int_t*>(workspace);
+    index_int_t* tmp = reinterpret_cast<index_int_t*>(workspace);
 
     // Counter for uncolored vertices
-    local_int_t colored = 0;
+    index_int_t colored = 0;
 
     // Number of vertices of each block
-    A.sizes = new local_int_t[MAX_COLORS];
+    A.sizes = new index_int_t[MAX_COLORS];
 
     // Offset into blocks
-    A.offsets = new local_int_t[MAX_COLORS];
+    A.offsets = new index_int_t[MAX_COLORS];
     A.offsets[0] = 0;
 
     // Determine blocksize
@@ -294,13 +294,13 @@ void JPLColoring(SparseMatrix& A)
         kernel_count_color_part2<256><<<1, 256>>>(tmp);
 
         // Copy colored max vertices for current iteration to host
-        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
+        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks], tmp, sizeof(index_int_t), hipMemcpyDeviceToHost));
 
         kernel_count_color_part1<256><<<256, 256>>>(m, color2, A.perm, tmp);
         kernel_count_color_part2<256><<<1, 256>>>(tmp);
 
         // Copy colored min vertices for current iteration to host
-        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks + 1], tmp, sizeof(local_int_t), hipMemcpyDeviceToHost));
+        HIP_CHECK(hipMemcpy(&A.sizes[A.nblocks + 1], tmp, sizeof(index_int_t), hipMemcpyDeviceToHost));
 
         // Total number of colored vertices after max
         colored += A.sizes[A.nblocks];
@@ -317,18 +317,18 @@ void JPLColoring(SparseMatrix& A)
 
     HIP_CHECK(deviceFree(A.d_rowHash));
 
-    local_int_t* tmp_color;
-    local_int_t* tmp_perm;
-    local_int_t* perm;
+    index_int_t* tmp_color;
+    index_int_t* tmp_perm;
+    index_int_t* perm;
 
-    HIP_CHECK(deviceMalloc((void**)&tmp_color, sizeof(local_int_t) * m));
-    HIP_CHECK(deviceMalloc((void**)&tmp_perm, sizeof(local_int_t) * m));
-    HIP_CHECK(deviceMalloc((void**)&perm, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_color, sizeof(index_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&tmp_perm, sizeof(index_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&perm, sizeof(index_int_t) * m));
 
     kernel_identity<1024><<<(m - 1) / 1024 + 1, 1024>>>(m, perm);
 
-    rocprim::double_buffer<local_int_t> keys(A.perm, tmp_color);
-    rocprim::double_buffer<local_int_t> vals(perm, tmp_perm);
+    rocprim::double_buffer<index_int_t> keys(A.perm, tmp_color);
+    rocprim::double_buffer<index_int_t> vals(perm, tmp_perm);
 
     size_t size;
     void* buf = NULL;

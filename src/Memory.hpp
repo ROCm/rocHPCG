@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -57,9 +57,9 @@ class hipAllocator_t
 
     hipError_t Initialize(int rank,
                           int nprocs,
-                          local_int_t nx,
-                          local_int_t ny,
-                          local_int_t nz);
+                          index_int_t nx,
+                          index_int_t ny,
+                          index_int_t nz);
     hipError_t Clear(void);
 
     hipError_t Alloc(void** ptr, size_t size);
@@ -77,9 +77,9 @@ class hipAllocator_t
 
     // Returns the maximum memory requirements
     size_t ComputeMaxMemoryRequirements_(int nprocs,
-                                         local_int_t nx,
-                                         local_int_t ny,
-                                         local_int_t nz) const;
+                                         index_int_t nx,
+                                         index_int_t ny,
+                                         index_int_t nz) const;
 
     // Total memory size
     size_t total_mem_;

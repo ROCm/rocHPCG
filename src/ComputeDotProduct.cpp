@@ -53,6 +53,7 @@
 
 #include "utils.hpp"
 #include "ComputeDotProduct.hpp"
+#include "DeviceReduction.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -62,19 +63,21 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot1_part1(local_int_t n, const double* x, double* workspace)
+__global__ void kernel_dot1_part1(local_int_t n, const double* __restrict__ x, double* __restrict__ workspace)
 {
     // Make sure we have a power-of-two for BLOCKSIZE
     static_assert((BLOCKSIZE > 0) && ((BLOCKSIZE & (BLOCKSIZE-1)) == 0));
 
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * BLOCKSIZE;
+    local_int_t gid = 2 * (blockIdx.x * BLOCKSIZE + threadIdx.x);
+    local_int_t inc = 2 * gridDim.x * BLOCKSIZE;
 
     double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += inc)
+    for(local_int_t idx = gid; idx + 1 < n; idx += inc)
     {
-        double val = x[idx];
-        sum = fma(val, val, sum);
+        double val1 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->x);
+        double val2 = __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->y);
+        sum = fma(val1, val1, sum);
+        sum = fma(val2, val2, sum);
     }
 
     __shared__ double sdata[BLOCKSIZE];
@@ -82,39 +85,32 @@ __global__ void kernel_dot1_part1(local_int_t n, const double* x, double* worksp
 
     __syncthreads();
 
-    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        // store cache
+        workspace[blockIdx.x] = sum;
     }
+
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_dot2_part1(local_int_t n,
-                                  const double* x,
-                                  const double* y,
-                                  double* workspace)
+__global__ void kernel_dot2_part1(local_int_t n, const double* __restrict__ x, const double* __restrict__ y, double* __restrict__ workspace)
 {
-    // Make sure we have a power-of-two for BLOCKSIZE
-    static_assert((BLOCKSIZE > 0) && ((BLOCKSIZE & (BLOCKSIZE-1)) == 0));
-
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
-    local_int_t inc = gridDim.x * BLOCKSIZE;
+    local_int_t gid = 2 * (blockIdx.x * BLOCKSIZE + threadIdx.x);
+    local_int_t inc = 2 * gridDim.x * BLOCKSIZE;
 
     double sum = 0.0;
-    for(local_int_t idx = gid; idx < n; idx += inc)
+    for(local_int_t idx = gid; idx + 1 < n; idx += inc)
     {
-        sum = fma(y[idx], x[idx], sum);
+        sum = fma(__builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&y[idx])->x),
+                  __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->x),
+                  sum);
+        sum = fma(__builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&y[idx])->y),
+                  __builtin_nontemporal_load(&reinterpret_cast<const double2* __restrict__>(&x[idx])->y),
+                  sum);
     }
 
     __shared__ double sdata[BLOCKSIZE];
@@ -122,17 +118,11 @@ __global__ void kernel_dot2_part1(local_int_t n,
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        workspace[blockIdx.x] = sum;
     }
 }
 
@@ -147,25 +137,12 @@ __global__ void kernel_dot_part2(double* workspace)
     sdata[threadIdx.x] = workspace[threadIdx.x];
 
     __syncthreads();
-    if constexpr(BLOCKSIZE > 512)
-    {
-        if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    }
-    if constexpr(BLOCKSIZE > 256)
-    {
-        if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    }
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    double sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0] + sdata[1];
+        workspace[0] = sum;
     }
 }
 
@@ -197,24 +174,32 @@ int ComputeDotProduct(local_int_t n,
     assert(y.localLength >= n);
 
     double* tmp = reinterpret_cast<double*>(workspace);
-
+    constexpr unsigned blocksize = 1024;
     if(x.d_values == y.d_values)
     {
-        kernel_dot1_part1<1024><<<1024, 1024, 0, stream_interior>>>(n, x.d_values, tmp);
-        kernel_dot_part2<1024><<<1, 1024, 0, stream_interior>>>(tmp);
+        kernel_dot1_part1<blocksize><<<blocksize, blocksize, 0, stream_interior>>>(n, x.d_values, tmp);
+        kernel_dot_part2<blocksize><<<1, blocksize, 0, stream_interior>>>(tmp);
     }
     else
     {
-        kernel_dot2_part1<256><<<256, 256, 0, stream_interior>>>(n,
-                                                                 x.d_values,
-                                                                 y.d_values,
-                                                                 tmp);
-        kernel_dot_part2<256><<<1, 256, 0, stream_interior>>>(tmp);
+        kernel_dot2_part1<blocksize><<<blocksize, blocksize, 0, stream_interior>>>(n, x.d_values, y.d_values, tmp);
+        kernel_dot_part2<blocksize><<<1, blocksize, 0, stream_interior>>>(tmp);
     }
 
     double local_result;
-    HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
+    //HIP_CHECK(hipMemcpyAsync(&local_result, tmp, sizeof(double), hipMemcpyDeviceToHost, stream_interior));
     HIP_CHECK(hipStreamSynchronize(stream_interior));
+
+    local_result = tmp[0];
+
+    if ( n % 2 ) {
+        // if n is odd, this kernel will skip the last entry
+        if (x.d_values == y.d_values) {
+            local_result += x.d_values[n - 1] * x.d_values[n - 1];
+        } else {
+            local_result += x.d_values[n - 1] * y.d_values[n - 1];
+        }
+    }
 
 #ifndef HPCG_NO_MPI
     double t0 = mytimer();

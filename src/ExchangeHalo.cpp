@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -68,14 +68,14 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
 
   // Extract Matrix pieces
 
-  local_int_t localNumberOfRows = A.localNumberOfRows;
+  index_int_t localNumberOfRows = A.localNumberOfRows;
   int num_neighbors = A.numberOfSendNeighbors;
-  local_int_t * receiveLength = A.receiveLength;
-  local_int_t * sendLength = A.sendLength;
+  index_int_t * receiveLength = A.receiveLength;
+  index_int_t * sendLength = A.sendLength;
   int * neighbors = A.neighbors;
   double * sendBuffer = A.sendBuffer;
-  local_int_t totalToBeSent = A.totalToBeSent;
-  local_int_t * elementsToSend = A.elementsToSend;
+  index_int_t totalToBeSent = A.totalToBeSent;
+  index_int_t * elementsToSend = A.elementsToSend;
 
   double * const xv = x.values;
 
@@ -101,7 +101,7 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   // Post receives first
   // TODO: Thread this loop
   for (int i = 0; i < num_neighbors; i++) {
-    local_int_t n_recv = receiveLength[i];
+    index_int_t n_recv = receiveLength[i];
     MPI_Irecv(x_external, n_recv, MPI_DOUBLE, neighbors[i], MPI_MY_TAG, MPI_COMM_WORLD, request+i);
     x_external += n_recv;
   }
@@ -112,7 +112,7 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   //
 
   // TODO: Thread this loop
-  for (local_int_t i=0; i<totalToBeSent; i++) sendBuffer[i] = xv[elementsToSend[i]];
+  for (index_int_t i=0; i<totalToBeSent; i++) sendBuffer[i] = xv[elementsToSend[i]];
 
   //
   // Send to each neighbor
@@ -120,7 +120,7 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
 
   // TODO: Thread this loop
   for (int i = 0; i < num_neighbors; i++) {
-    local_int_t n_send = sendLength[i];
+    index_int_t n_send = sendLength[i];
     MPI_Send(sendBuffer, n_send, MPI_DOUBLE, neighbors[i], MPI_MY_TAG, MPI_COMM_WORLD);
     sendBuffer += n_send;
   }
@@ -133,7 +133,7 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
   // TODO: Thread this loop
   for (int i = 0; i < num_neighbors; i++) {
     if ( MPI_Wait(request+i, &status) ) {
-      std::exit(-1); // TODO: have better error exit
+      std::exit(EXIT_FAILURE); // TODO: have better error exit
     }
   }
 
@@ -144,13 +144,13 @@ void ExchangeHalo(const SparseMatrix & A, Vector & x) {
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_gather(local_int_t size,
+__global__ void kernel_gather(index_int_t size,
                               const double* __restrict__ in,
-                              const local_int_t* __restrict__ map,
-                              const local_int_t* __restrict__ perm,
+                              const index_int_t* __restrict__ map,
+                              const index_int_t* __restrict__ perm,
                               double* __restrict__ out)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
@@ -192,7 +192,7 @@ void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
     int MPI_MY_TAG = 99;
 
     // Post async boundary receives
-    local_int_t offset = 0;
+    index_int_t offset = 0;
 
     // Receive buffer
 #ifdef GPU_AWARE_MPI
@@ -203,7 +203,7 @@ void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
 
     for(int n = 0; n < num_neighbors; ++n)
     {
-        local_int_t nrecv = A.receiveLength[n];
+        index_int_t nrecv = A.receiveLength[n];
 
         MPI_Irecv(recv_buffer + offset,
                   nrecv,
@@ -235,7 +235,7 @@ void ExchangeHaloAsync(const SparseMatrix& A, Vector& x)
 
     for(int n = 0; n < num_neighbors; ++n)
     {
-        local_int_t nsend = A.sendLength[n];
+        index_int_t nsend = A.sendLength[n];
 
         MPI_Isend(send_buffer + offset,
                   nsend,

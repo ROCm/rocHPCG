@@ -59,6 +59,7 @@
 #endif
 
 #include "ComputeWAXPBY.hpp"
+#include "DeviceReduction.hpp"
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
@@ -169,17 +170,12 @@ __global__ void kernel_fused_waxpby_dot_part1(local_int_t size,
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        // store cache
+        workspace[blockIdx.x] = sum;
     }
 }
 
@@ -192,17 +188,12 @@ __global__ void kernel_fused_waxpby_dot_part2(double* workspace)
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    double sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0] + sdata[1];
+        // store cache
+        workspace[0] = sum;
     }
 }
 

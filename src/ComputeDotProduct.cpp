@@ -53,6 +53,7 @@
 
 #include "utils.hpp"
 #include "ComputeDotProduct.hpp"
+#include "DeviceReduction.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -84,20 +85,14 @@ __global__ void kernel_dot1_part1(local_int_t n, const double* __restrict__ x, d
 
     __syncthreads();
 
-    if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        // store cache
+        workspace[blockIdx.x] = sum;
     }
+
 }
 
 template <unsigned int BLOCKSIZE>
@@ -123,17 +118,11 @@ __global__ void kernel_dot2_part1(local_int_t n, const double* __restrict__ x, c
 
     __syncthreads();
 
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+    sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[blockIdx.x] = sdata[0] + sdata[1];
+        workspace[blockIdx.x] = sum;
     }
 }
 
@@ -148,25 +137,12 @@ __global__ void kernel_dot_part2(double* workspace)
     sdata[threadIdx.x] = workspace[threadIdx.x];
 
     __syncthreads();
-    if constexpr(BLOCKSIZE > 512)
-    {
-        if(threadIdx.x < 512) sdata[threadIdx.x] += sdata[threadIdx.x + 512]; __syncthreads();
-    }
-    if constexpr(BLOCKSIZE > 256)
-    {
-        if(threadIdx.x < 256) sdata[threadIdx.x] += sdata[threadIdx.x + 256]; __syncthreads();
-    }
-    if(threadIdx.x < 128) sdata[threadIdx.x] += sdata[threadIdx.x + 128]; __syncthreads();
-    if(threadIdx.x <  64) sdata[threadIdx.x] += sdata[threadIdx.x +  64]; __syncthreads();
-    if(threadIdx.x <  32) sdata[threadIdx.x] += sdata[threadIdx.x +  32]; __syncthreads();
-    if(threadIdx.x <  16) sdata[threadIdx.x] += sdata[threadIdx.x +  16]; __syncthreads();
-    if(threadIdx.x <   8) sdata[threadIdx.x] += sdata[threadIdx.x +   8]; __syncthreads();
-    if(threadIdx.x <   4) sdata[threadIdx.x] += sdata[threadIdx.x +   4]; __syncthreads();
-    if(threadIdx.x <   2) sdata[threadIdx.x] += sdata[threadIdx.x +   2]; __syncthreads();
+
+    double sum = reducer<BLOCKSIZE>(sdata);
 
     if(threadIdx.x == 0)
     {
-        workspace[0] = sdata[0] + sdata[1];
+        workspace[0] = sum;
     }
 }
 

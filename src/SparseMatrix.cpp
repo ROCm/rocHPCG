@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -65,24 +65,24 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_copy_diagonal(local_int_t m,
-                                     local_int_t n,
-                                     local_int_t ell_width,
-                                     const local_int_t* __restrict__ ell_col_ind,
+__global__ void kernel_copy_diagonal(index_int_t m,
+                                     index_int_t n,
+                                     index_int_t ell_width,
+                                     const index_int_t* __restrict__ ell_col_ind,
                                      const double* __restrict__ ell_val,
                                      double* __restrict__ diagonal)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
         return;
     }
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+    for(index_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t idx = (local_int_t)p * m + row;
+        index_int_t col = ell_col_ind[idx];
 
         if(col >= 0 && col < n)
         {
@@ -112,15 +112,15 @@ void HIPCopyMatrixDiagonal(const SparseMatrix& A, Vector& diagonal)
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_replace_diagonal(local_int_t m,
-                                        local_int_t n,
+__global__ void kernel_replace_diagonal(index_int_t m,
+                                        index_int_t n,
                                         const double* __restrict__ diagonal,
-                                        local_int_t ell_width,
-                                        const local_int_t* __restrict__ ell_col_ind,
+                                        index_int_t ell_width,
+                                        const index_int_t* __restrict__ ell_col_ind,
                                         double* __restrict__ ell_val,
                                         double* __restrict__ inv_diag)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -129,10 +129,10 @@ __global__ void kernel_replace_diagonal(local_int_t m,
 
     double diag = diagonal[row];
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+    for(index_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t idx = (local_int_t)p * m + row;
+        index_int_t col = ell_col_ind[idx];
 
         if(col >= 0 && col < n)
         {
@@ -165,14 +165,14 @@ void HIPReplaceMatrixDiagonal(SparseMatrix& A, const Vector& diagonal)
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_to_ell_col(local_int_t m,
-                                  local_int_t nonzerosPerRow,
+__global__ void kernel_to_ell_col(index_int_t m,
+                                  index_int_t nonzerosPerRow,
                                   const local_int_t* __restrict__ mtxIndL,
-                                  local_int_t* __restrict__ ell_col_ind,
-                                  local_int_t* __restrict__ halo_rows,
-                                  local_int_t* __restrict__ halo_row_ind)
+                                  index_int_t* __restrict__ ell_col_ind,
+                                  index_int_t* __restrict__ halo_rows,
+                                  index_int_t* __restrict__ halo_row_ind)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    index_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
 #ifndef HPCG_NO_MPI
     __shared__ bool sdata[BLOCKSIZEY];
@@ -186,8 +186,8 @@ __global__ void kernel_to_ell_col(local_int_t m,
         return;
     }
 
-    local_int_t col = __ldg(mtxIndL + row * nonzerosPerRow + threadIdx.x);
-    ell_col_ind[threadIdx.x * m + row] = col;
+    index_int_t col = __ldg(mtxIndL + (local_int_t)row * nonzerosPerRow + threadIdx.x);
+    ell_col_ind[(local_int_t)threadIdx.x * m + row] = col;
 
 #ifndef HPCG_NO_MPI
     if(col >= m)
@@ -209,52 +209,52 @@ __global__ void kernel_to_ell_col(local_int_t m,
 
 template <unsigned int BLOCKSIZEX, unsigned int BLOCKSIZEY>
 __launch_bounds__(BLOCKSIZEX * BLOCKSIZEY)
-__global__ void kernel_to_ell_val(local_int_t m,
-                                  local_int_t nnz_per_row,
+__global__ void kernel_to_ell_val(index_int_t m,
+                                  index_int_t nnz_per_row,
                                   const double* __restrict__ matrixValues,
                                   double* __restrict__ ell_val)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
+    index_int_t row = blockIdx.x * BLOCKSIZEY + threadIdx.y;
 
     if(row >= m)
     {
         return;
     }
 
-    local_int_t idx = threadIdx.x * m + row;
-    ell_val[idx] = matrixValues[row * nnz_per_row + threadIdx.x];
+    local_int_t idx = (local_int_t)threadIdx.x * m + row;
+    ell_val[idx] = matrixValues[(local_int_t)row * nnz_per_row + threadIdx.x];
 }
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_to_halo(local_int_t halo_rows,
-                               local_int_t m,
-                               local_int_t n,
-                               local_int_t ell_width,
-                               const local_int_t* __restrict__ ell_col_ind,
+__global__ void kernel_to_halo(index_int_t halo_rows,
+                               index_int_t m,
+                               index_int_t n,
+                               index_int_t ell_width,
+                               const index_int_t* __restrict__ ell_col_ind,
                                const double* __restrict__ ell_val,
-                               const local_int_t* __restrict__ halo_row_ind,
-                               local_int_t* __restrict__ halo_col_ind,
+                               const index_int_t* __restrict__ halo_row_ind,
+                               index_int_t* __restrict__ halo_col_ind,
                                double* __restrict__ halo_val)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= halo_rows)
     {
         return;
     }
 
-    local_int_t row = halo_row_ind[gid];
+    index_int_t row = halo_row_ind[gid];
 
     int q = 0;
     for(int p = 0; p < ell_width; ++p)
     {
-        local_int_t ell_idx = p * m + row;
-        local_int_t col = ell_col_ind[ell_idx];
+        local_int_t ell_idx = (local_int_t)p * m + row;
+        index_int_t col = ell_col_ind[ell_idx];
 
         if(col >= m && col < n)
         {
-            local_int_t halo_idx = q++ * halo_rows + gid;
+            local_int_t halo_idx = q++ * (local_int_t)halo_rows + gid;
 
             halo_col_ind[halo_idx] = col;
             halo_val[halo_idx] = ell_val[ell_idx];
@@ -263,7 +263,7 @@ __global__ void kernel_to_halo(local_int_t halo_rows,
 
     for(; q < ell_width; ++q)
     {
-        local_int_t idx = q * halo_rows + gid;
+        local_int_t idx = (local_int_t)q * halo_rows + gid;
         halo_col_ind[idx] = -1;
     }
 }
@@ -300,19 +300,19 @@ void ConvertToELL(SparseMatrix& A)
     else                     LAUNCH_TO_ELL_VAL(27,  4)
 
     // We can re-use mtxIndG array for the ELL column indices
-    A.ell_col_ind = reinterpret_cast<local_int_t*>(A.d_matrixValues);
+    A.ell_col_ind = reinterpret_cast<index_int_t*>(A.d_matrixValues);
     A.d_matrixValues = NULL;
 
     // Resize the array
-    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(local_int_t) * A.ell_width * A.localNumberOfRows));
+    HIP_CHECK(deviceRealloc((void*)A.ell_col_ind, sizeof(index_int_t) * A.ell_width * A.localNumberOfRows));
 
     // Convert mtxIndL into ELL column indices
-    local_int_t* d_halo_rows = reinterpret_cast<local_int_t*>(workspace);
+    index_int_t* d_halo_rows = reinterpret_cast<index_int_t*>(workspace);
 
 #ifndef HPCG_NO_MPI
-    HIP_CHECK(deviceMalloc((void**)&A.halo_row_ind, sizeof(local_int_t) * A.totalToBeSent));
+    HIP_CHECK(deviceMalloc((void**)&A.halo_row_ind, sizeof(index_int_t) * A.totalToBeSent));
 
-    HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(local_int_t)));
+    HIP_CHECK(hipMemset(d_halo_rows, 0, sizeof(index_int_t)));
 #endif
 
     if     (blocksize == 32) LAUNCH_TO_ELL_COL(27, 32)
@@ -324,10 +324,10 @@ void ConvertToELL(SparseMatrix& A)
     HIP_CHECK(deviceFree(A.d_mtxIndL));
 
 #ifndef HPCG_NO_MPI
-    HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(local_int_t), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(&A.halo_rows, d_halo_rows, sizeof(index_int_t), hipMemcpyDeviceToHost));
     assert(A.halo_rows <= A.totalToBeSent);
 
-    HIP_CHECK(deviceMalloc((void**)&A.halo_col_ind, sizeof(local_int_t) * A.ell_width * A.halo_rows));
+    HIP_CHECK(deviceMalloc((void**)&A.halo_col_ind, sizeof(index_int_t) * A.ell_width * A.halo_rows));
     HIP_CHECK(deviceMalloc((void**)&A.halo_val, sizeof(double) * A.ell_width * A.halo_rows));
 
     size_t rocprim_size;
@@ -360,24 +360,24 @@ void ConvertToELL(SparseMatrix& A)
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_extract_diag_index(local_int_t m,
-                                          local_int_t ell_width,
-                                          const local_int_t* __restrict__ ell_col_ind,
+__global__ void kernel_extract_diag_index(index_int_t m,
+                                          index_int_t ell_width,
+                                          const index_int_t* __restrict__ ell_col_ind,
                                           const double* __restrict__ ell_val,
-                                          local_int_t* __restrict__ diag_idx,
+                                          index_int_t* __restrict__ diag_idx,
                                           double* __restrict__ inv_diag)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
         return;
     }
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+    for(index_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = ell_col_ind[idx];
+        local_int_t idx = (local_int_t)p * m + row;
+        index_int_t col = ell_col_ind[idx];
 
         if(col == row)
         {
@@ -390,10 +390,10 @@ __global__ void kernel_extract_diag_index(local_int_t m,
 
 void ExtractDiagonal(SparseMatrix& A)
 {
-    local_int_t m = A.localNumberOfRows;
+    index_int_t m = A.localNumberOfRows;
 
     // Allocate memory to extract diagonal entries
-    HIP_CHECK(deviceMalloc((void**)&A.diag_idx, sizeof(local_int_t) * m));
+    HIP_CHECK(deviceMalloc((void**)&A.diag_idx, sizeof(index_int_t) * m));
     HIP_CHECK(deviceMalloc((void**)&A.inv_diag, sizeof(double) * m));
 
     // Extract diagonal entries

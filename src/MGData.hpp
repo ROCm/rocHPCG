@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -69,8 +69,8 @@ struct MGData_STRUCT {
    */
   void * optimizationData;
 
-  local_int_t* d_f2cOperator; //!< f2cOperator on device
-  local_int_t* d_c2fOperator;
+  index_int_t* d_f2cOperator; //!< f2cOperator on device
+  index_int_t* d_c2fOperator;
 };
 typedef struct MGData_STRUCT MGData;
 
@@ -81,7 +81,7 @@ typedef struct MGData_STRUCT MGData;
  @param[in] f2cOperator -
  @param[out] data the data structure for CG vectors that will be allocated to get it ready for use in CG iterations
  */
-inline void InitializeMGData(local_int_t* d_f2cOperator, local_int_t* d_c2fOperator, Vector* rc, Vector* xc, Vector* Axf, MGData & data) {
+inline void InitializeMGData(index_int_t* d_f2cOperator, index_int_t* d_c2fOperator, Vector* rc, Vector* xc, Vector* Axf, MGData & data) {
   data.numberOfPresmootherSteps = 1;
   data.numberOfPostsmootherSteps = 1;
   data.f2cOperator = nullptr;

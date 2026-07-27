@@ -13,7 +13,7 @@
 //@HEADER
 
 /* ************************************************************************
- * Modifications (c) 2019-2021 Advanced Micro Devices, Inc.
+ * Modifications (c) 2019-2026 Advanced Micro Devices, Inc.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -86,33 +86,33 @@
 
 template <unsigned int BLOCKSIZE>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_spmv_ell_coarse(local_int_t size,
-                                       local_int_t m,
-                                       local_int_t n,
-                                       local_int_t ell_width,
-                                       const local_int_t* __restrict__ ell_col_ind,
+__global__ void kernel_spmv_ell_coarse(index_int_t size,
+                                       index_int_t m,
+                                       index_int_t n,
+                                       index_int_t ell_width,
+                                       const index_int_t* __restrict__ ell_col_ind,
                                        const double* __restrict__ ell_val,
-                                       const local_int_t* __restrict__ perm,
-                                       const local_int_t* __restrict__ f2cOperator,
+                                       const index_int_t* __restrict__ perm,
+                                       const index_int_t* __restrict__ f2cOperator,
                                        const double* __restrict__ x,
                                        double* __restrict__ y)
 {
-    local_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(gid >= size)
     {
         return;
     }
 
-    local_int_t f2c = __builtin_nontemporal_load(f2cOperator + gid);
-    local_int_t row = __builtin_nontemporal_load(perm + f2c);
+    index_int_t f2c = __builtin_nontemporal_load(f2cOperator + gid);
+    index_int_t row = __builtin_nontemporal_load(perm + f2c);
 
     double sum = 0.0;
 
-    for(local_int_t p = 0; p < ell_width; ++p)
+    for(index_int_t p = 0; p < ell_width; ++p)
     {
-        local_int_t idx = p * m + row;
-        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+        local_int_t idx = (local_int_t)p * m + row;
+        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < n)
         {
@@ -129,21 +129,21 @@ __global__ void kernel_spmv_ell_coarse(local_int_t size,
 
 template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_spmv_ell(local_int_t m,
-                                local_int_t rows_per_block,
-                                const local_int_t* ell_col_ind,
+__global__ void kernel_spmv_ell(index_int_t m,
+                                index_int_t rows_per_block,
+                                const index_int_t* ell_col_ind,
                                 const double* ell_val,
                                 const double* x,
                                 double* y)
 {
     // Applies for chunks of BLOCKSIZE * nblocks
-    local_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
+    index_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
 
     // Applies for chunks of BLOCKSIZE and restarts for each color_block_offset
-    local_int_t thread_block_offset = blockIdx.x * rows_per_block;
+    index_int_t thread_block_offset = blockIdx.x * rows_per_block;
 
     // Row entry point
-    local_int_t row = color_block_offset + thread_block_offset + threadIdx.x;
+    index_int_t row = color_block_offset + thread_block_offset + threadIdx.x;
 
     if(row >= m)
     {
@@ -154,9 +154,9 @@ __global__ void kernel_spmv_ell(local_int_t m,
     local_int_t idx = row;
 
 #pragma unroll
-    for(local_int_t p = 0; p < WIDTH; ++p)
+    for(index_int_t p = 0; p < WIDTH; ++p)
     {
-        local_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
 
         if(col >= 0 && col < m)
         {
@@ -171,16 +171,16 @@ __global__ void kernel_spmv_ell(local_int_t m,
 
 template <unsigned int BLOCKSIZE, unsigned int WIDTH>
 __launch_bounds__(BLOCKSIZE)
-__global__ void kernel_spmv_halo(local_int_t m,
-                                 local_int_t n,
-                                 const local_int_t* halo_row_ind,
-                                 const local_int_t* halo_col_ind,
+__global__ void kernel_spmv_halo(index_int_t m,
+                                 index_int_t n,
+                                 const index_int_t* halo_row_ind,
+                                 const index_int_t* halo_col_ind,
                                  const double* halo_val,
-                                 const local_int_t* perm,
+                                 const index_int_t* perm,
                                  const double* x,
                                  double* y)
 {
-    local_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
     if(row >= m)
     {
@@ -192,9 +192,9 @@ __global__ void kernel_spmv_halo(local_int_t m,
     local_int_t idx = row;
 
 #pragma unroll
-    for(local_int_t p = 0; p < WIDTH; ++p)
+    for(index_int_t p = 0; p < WIDTH; ++p)
     {
-        local_int_t col = __builtin_nontemporal_load(halo_col_ind + idx);
+        index_int_t col = __builtin_nontemporal_load(halo_col_ind + idx);
 
         if(col >= 0 && col < n)
         {

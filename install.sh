@@ -36,7 +36,7 @@ supported_distro( )
   fi
 
   case "${ID}" in
-    ubuntu|centos|rhel|fedora|sles|opensuse-leap)
+    ubuntu|centos|rhel|fedora|sles|opensuse-leap|tencentos)
         true
         ;;
     *)  printf "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES\n"
@@ -150,7 +150,7 @@ install_packages( )
 
       ;;
 
-    centos|rhel)
+    centos|rhel|tencentos)
 #     yum -y update brings *all* installed packages up to date
 #     without seeking user approval
 #     elevate_if_not_root yum -y update
@@ -325,7 +325,7 @@ fi
 cmake_executable=cmake
 
 case "${ID}" in
-  centos|rhel)
+  centos|rhel|tencentos)
   cmake_executable=cmake3
   ;;
 esac
@@ -416,7 +416,7 @@ pushd .
         ubuntu)
           elevate_if_not_root dpkg -i rochpcg[-\_]*.deb
         ;;
-        centos|rhel)
+        centos|rhel|tencentos)
           elevate_if_not_root yum -y localinstall rochpcg-*.rpm
         ;;
         fedora)

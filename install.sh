@@ -36,7 +36,7 @@ supported_distro( )
   fi
 
   case "${ID}" in
-    ubuntu|centos|rhel|fedora|sles|opensuse-leap|tencentos)
+    ubuntu|debian|centos|rhel|fedora|sles|opensuse-leap|tencentos)
         true
         ;;
     *)  printf "This script is currently supported on Ubuntu, CentOS, RHEL, Fedora and SLES\n"
@@ -144,7 +144,7 @@ install_packages( )
   fi
 
   case "${ID}" in
-    ubuntu)
+    ubuntu|debian)
       elevate_if_not_root apt update
       install_apt_packages "${library_dependencies_ubuntu[@]}"
 
@@ -413,7 +413,7 @@ pushd .
       check_exit_code
 
       case "${ID}" in
-        ubuntu)
+        ubuntu|debian)
           elevate_if_not_root dpkg -i rochpcg[-\_]*.deb
         ;;
         centos|rhel|tencentos)

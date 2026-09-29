@@ -49,20 +49,25 @@
 #include "ComputeSPMV.hpp"
 #include "ExchangeHalo.hpp"
 
+#include <cstring>
 #include <hip/hip_runtime.h>
 
-#define LAUNCH_SPMV_ELL(blocksize, width)                                                \
-    {                                                                                    \
-        dim3 blocks(A.nblocks, (A.localNumberOfRows - 1) / (A.nblocks * blocksize) + 1); \
-        dim3 threads(blocksize);                                                         \
-                                                                                         \
-        kernel_spmv_ell<blocksize, width><<<blocks, threads, 0, stream_interior>>>(      \
-            A.localNumberOfRows,                                                         \
-            A.localNumberOfRows / A.nblocks,                                             \
-            A.ell_col_ind,                                                               \
-            A.ell_val,                                                                   \
-            x.d_values,                                                                  \
-            y.d_values);                                                                 \
+// Interleaved: blocks of all colors covering the same region of the grid run
+// together, which keeps the gathered vector entries in cache
+#define LAUNCH_SPMV_ELL(blocksize, width, interleaved)                                                \
+    {                                                                                                 \
+        dim3 blocks = interleaved                                                                     \
+                          ? dim3(A.nblocks, (A.localNumberOfRows - 1) / (A.nblocks * blocksize) + 1) \
+                          : dim3((A.localNumberOfRows - 1) / blocksize + 1);                          \
+        dim3 threads(blocksize);                                                                      \
+                                                                                                      \
+        kernel_spmv_ell<blocksize, width, interleaved><<<blocks, threads, 0, stream_interior>>>(      \
+            A.localNumberOfRows,                                                                      \
+            A.localNumberOfRows / A.nblocks,                                                          \
+            A.ell_col_ind,                                                                            \
+            A.ell_val,                                                                                \
+            x.d_values,                                                                               \
+            y.d_values);                                                                              \
     }
 
 #define LAUNCH_SPMV_HALO(blocksize, width)                       \
@@ -162,7 +167,7 @@ __device__ void spmv_unroller(index_int_t m,
     idx += m;
 }
 
-template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true>
+template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool INTERLEAVED, bool UNROLL=true>
 __launch_bounds__(BLOCKSIZE)
 __global__ void kernel_spmv_ell(index_int_t m,
                                 index_int_t rows_per_block,
@@ -171,14 +176,19 @@ __global__ void kernel_spmv_ell(index_int_t m,
                                 const double* __restrict__ x,
                                 double* __restrict__ y)
 {
-    // Applies for chunks of BLOCKSIZE * nblocks
-    index_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
+    index_int_t row = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
-    // Applies for chunks of BLOCKSIZE and restarts for each color_block_offset
-    index_int_t thread_block_offset = blockIdx.x * rows_per_block;
+    if(INTERLEAVED)
+    {
+        // Applies for chunks of BLOCKSIZE * nblocks
+        index_int_t color_block_offset = BLOCKSIZE * blockIdx.y;
 
-    // Row entry point
-    index_int_t row = color_block_offset + thread_block_offset + threadIdx.x;
+        // Applies for chunks of BLOCKSIZE and restarts for each color_block_offset
+        index_int_t thread_block_offset = blockIdx.x * rows_per_block;
+
+        // Row entry point
+        row = color_block_offset + thread_block_offset + threadIdx.x;
+    }
 
     if(row >= m)
     {
@@ -251,6 +261,20 @@ __global__ void kernel_spmv_halo(index_int_t m,
     y[perm[halo_row_ind[row]]] += sum;
 }
 
+// On gfx9 (CDNA) GPUs, plain row order is faster than interleaving the colors
+static bool InterleaveColors()
+{
+    static const bool interleave = [] {
+        int device;
+        hipDeviceProp_t prop;
+        HIP_CHECK(hipGetDevice(&device));
+        HIP_CHECK(hipGetDeviceProperties(&prop, device));
+        return strncmp(prop.gcnArchName, "gfx9", 4) != 0;
+    }();
+
+    return interleave;
+}
+
 /*!
   Routine to compute sparse matrix vector product y = Ax where:
   Precondition: First call exchange_externals to get off-processor values of x
@@ -281,7 +305,11 @@ int ComputeSPMV(const SparseMatrix& A, Vector& x, Vector& y)
 
     if(&y != A.mgData->Axf)
     {
-        if(A.ell_width == 27) LAUNCH_SPMV_ELL(1024, 27);
+        if(A.ell_width == 27)
+        {
+            if(InterleaveColors()) LAUNCH_SPMV_ELL(1024, 27, true)
+            else                   LAUNCH_SPMV_ELL(1024, 27, false)
+        }
     }
 
 #ifndef HPCG_NO_MPI

@@ -51,12 +51,12 @@
 
 #include <hip/hip_runtime.h>
 
-#define LAUNCH_SYMGS_SWEEP(blocksize, width)                        \
+#define LAUNCH_SYMGS_SWEEP(kernel, blocksize, width)                \
     {                                                               \
         dim3 blocks((A.sizes[i] - 1) / blocksize + 1);              \
         dim3 threads(blocksize);                                    \
                                                                     \
-        kernel_symgs_sweep<blocksize, width><<<blocks,              \
+        kernel<blocksize, width><<<blocks,                          \
                                                threads,             \
                                                0,                   \
                                                stream_interior>>>(  \
@@ -70,6 +70,9 @@
             r.d_values,                                             \
             x.d_values);                                            \
     }
+
+// Colors with fewer rows than this use kernel_symgs_sweep_small
+#define SYMGS_SMALL_COLOR 200000
 
 #define LAUNCH_SYMGS_INTERIOR(blocksize, width)                      \
     {                                                                \
@@ -145,6 +148,48 @@ __device__ void sweep_unroller(index_int_t m,
                   sum);
     }
     idx += m;
+}
+
+// Branch-free variant for colors with few rows (coarse levels), where the
+// kernel is latency bound and all loads of a row are best issued back to back
+template <unsigned int BLOCKSIZE, unsigned int WIDTH>
+__launch_bounds__(BLOCKSIZE)
+__global__ void kernel_symgs_sweep_small(index_int_t m,
+                                         index_int_t n,
+                                         index_int_t block_nrow,
+                                         index_int_t offset,
+                                         const index_int_t* __restrict__ ell_col_ind,
+                                         const double* __restrict__ ell_val,
+                                         const double* __restrict__ inv_diag,
+                                         const double* __restrict__ x,
+                                         double* __restrict__ y)
+{
+    index_int_t gid = blockIdx.x * BLOCKSIZE + threadIdx.x;
+
+    if(gid >= block_nrow)
+    {
+        return;
+    }
+
+    index_int_t row = gid + offset;
+    global_int_t idx = row;
+
+    double sum = __builtin_nontemporal_load(x + row);
+
+#pragma unroll
+    for(index_int_t p = 0; p < WIDTH; ++p)
+    {
+        index_int_t col = __builtin_nontemporal_load(ell_col_ind + idx);
+        double val = __builtin_nontemporal_load(ell_val + idx);
+        bool valid = col >= 0 && col < n && col != row;
+
+        double prod = fma(-val, y[valid ? col : row], sum);
+        sum = valid ? prod : sum;
+
+        idx += m;
+    }
+
+    __builtin_nontemporal_store(sum * __builtin_nontemporal_load(inv_diag + row), y + row);
 }
 
 template <unsigned int BLOCKSIZE, unsigned int WIDTH, bool UNROLL=true>
@@ -612,13 +657,21 @@ int ComputeSYMGS(const SparseMatrix& A, const Vector& r, Vector& x)
     // Solve L
     for(; i < A.nblocks; ++i)
     {
-        if(A.ell_width == 27) LAUNCH_SYMGS_SWEEP(1024, 27);
+        if(A.ell_width == 27)
+        {
+            if(A.sizes[i] < SYMGS_SMALL_COLOR) LAUNCH_SYMGS_SWEEP(kernel_symgs_sweep_small, 256, 27)
+            else                               LAUNCH_SYMGS_SWEEP(kernel_symgs_sweep, 1024, 27)
+        }
     }
 
     // Solve U
     for(i = A.ublocks; i >= 0; --i)
     {
-        if(A.ell_width == 27) LAUNCH_SYMGS_SWEEP(1024, 27);
+        if(A.ell_width == 27)
+        {
+            if(A.sizes[i] < SYMGS_SMALL_COLOR) LAUNCH_SYMGS_SWEEP(kernel_symgs_sweep_small, 256, 27)
+            else                               LAUNCH_SYMGS_SWEEP(kernel_symgs_sweep, 1024, 27)
+        }
     }
 
     return 0;

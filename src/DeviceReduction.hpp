@@ -18,6 +18,8 @@ __device__ double reducer(double* shared) {
     sum = wave_reduction(sum);
     int lane_id = threadIdx.x % warpSize;
     int wave_id = threadIdx.x / warpSize;
+    // All threads must have read their entry before it is overwritten by a partial sum
+    __syncthreads();
     if (!lane_id) shared[wave_id] = sum;
     __syncthreads();
     sum = (threadIdx.x < BLOCKSIZE / warpSize) ? shared[lane_id] : 0;

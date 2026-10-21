@@ -23,17 +23,30 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
+
+if(NOT DEFINED ROCM_PATH)
+  if(DEFINED ENV{ROCM_PATH})
+    set(ROCM_PATH $ENV{ROCM_PATH})
+  else()
+    set(ROCM_PATH /opt/rocm)
+  endif()
+endif()
 
 # Consider removing this in the future
 # This should appear before the project command, because it does not use FORCE
 set(CMAKE_INSTALL_PREFIX ${ROCM_PATH} CACHE PATH "Install path prefix, prepended onto install directories")
 
+# HIP sources are compiled with amdclang++; this must be set before the project command
+if(NOT DEFINED CMAKE_HIP_COMPILER AND NOT DEFINED ENV{HIPCXX})
+  set(CMAKE_HIP_COMPILER "${ROCM_PATH}/bin/amdclang++" CACHE FILEPATH "HIP compiler")
+endif()
+# A preset HIP platform keeps CMake and hip-config from querying hipconfig
+set(CMAKE_HIP_PLATFORM "amd" CACHE STRING "HIP platform")
+set(HIP_PLATFORM "amd")
+
 # CMake modules
-list(APPEND CMAKE_MODULE_PATH
-     ${CMAKE_CURRENT_SOURCE_DIR}/cmake
-     ${ROCM_PATH}/lib/cmake/hip
-     ${ROCM_PATH}/hip/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -48,7 +61,7 @@ if(POLICY CMP0066)
 endif()
 
 # rocHPCG project
-project(rochpcg LANGUAGES CXX)
+project(rochpcg LANGUAGES CXX HIP)
 
 # Force library install path to lib (CentOS 7 defaults to lib64)
 set(CMAKE_INSTALL_LIBDIR "lib" CACHE INTERNAL "Installation directory for libraries" FORCE)
@@ -57,6 +70,9 @@ set(CMAKE_INSTALL_LIBDIR "lib" CACHE INTERNAL "Installation directory for librar
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_HIP_STANDARD 17)
+set(CMAKE_HIP_STANDARD_REQUIRED ON)
+set(CMAKE_HIP_EXTENSIONS OFF)
 
 # Build options
 option(HPCG_DEBUG "Compile with modest debugging turned on" OFF)
@@ -77,7 +93,7 @@ option(OPT_ROCTX "Enable rocTX markers" OFF)
 include(cmake/Dependencies.cmake)
 
 # Find HIP package
-find_package(HIP REQUIRED)
+find_package(hip REQUIRED CONFIG)
 find_package(rocprim REQUIRED)
 
 # GPU arch targets
@@ -85,16 +101,16 @@ if(AMDGPU_TARGETS AND NOT GPU_TARGETS)
   message( DEPRECATION "AMDGPU_TARGETS use is deprecated. Use GPU_TARGETS." )
 endif()
 set(AMDGPU_TARGETS "gfx900;gfx906" CACHE STRING "List of specific machine types for library to target")
-if(HIP_VERSION VERSION_GREATER_EQUAL "3.7")
+if(hip_VERSION VERSION_GREATER_EQUAL "3.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx908")
 endif()
-if(HIP_VERSION VERSION_GREATER_EQUAL "4.3")
+if(hip_VERSION VERSION_GREATER_EQUAL "4.3")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx90a")
 endif()
-if (HIP_VERSION VERSION_GREATER_EQUAL "5.7")
+if (hip_VERSION VERSION_GREATER_EQUAL "5.7")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx942")
 endif()
-if (HIP_VERSION VERSION_GREATER_EQUAL "6.5")
+if (hip_VERSION VERSION_GREATER_EQUAL "6.5")
   set(AMDGPU_TARGETS "${AMDGPU_TARGETS};gfx950;gfx1100")
 endif()
 # Don't force, as users should be able to override GPU_TARGETS at the command line if desired

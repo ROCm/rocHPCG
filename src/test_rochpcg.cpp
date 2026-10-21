@@ -85,7 +85,7 @@ class parameterized_rochpcg : public testing::TestWithParam<std::vector<local_in
     virtual void TearDown() {}
 };
 
-void check_niter(int size, const int* dim, int niters)
+void check_niter(int size, const local_int_t* dim, int niters)
 {
          if(size == 1 && dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 53); }
     else if(size == 2 && dim[0] ==  16 && dim[1] ==  16 && dim[2] ==  16) { EXPECT_LE(niters, 53); }
@@ -133,9 +133,9 @@ TEST_P(parameterized_rochpcg, rochpcg)
   hpcg_argv[6] = NULL;
 
   sprintf(hpcg_argv[0], "rochpcg-test");
-  sprintf(hpcg_argv[1], "%d", dim[0]);
-  sprintf(hpcg_argv[2], "%d", dim[1]);
-  sprintf(hpcg_argv[3], "%d", dim[2]);
+  sprintf(hpcg_argv[1], "%lld", dim[0]);
+  sprintf(hpcg_argv[2], "%lld", dim[1]);
+  sprintf(hpcg_argv[3], "%lld", dim[2]);
   sprintf(hpcg_argv[4], "%d", 10);
   sprintf(hpcg_argv[5], "--dev=%d", device_id);
 

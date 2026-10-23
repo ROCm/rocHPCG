@@ -84,32 +84,27 @@ set(rochpcg_source
 )
 
 # Flag source files as hip source files
-foreach(i ${rochpcg_hip_source})
-  set_source_files_properties(${i} PROPERTIES HIP_SOURCE_PROPERTY_FORMAT TRUE)
-endforeach()
+set_source_files_properties(${rochpcg_hip_source} PROPERTIES LANGUAGE HIP)
 
-# HIP flags workaround while target_compile_options does not work
-list(APPEND HIP_HIPCC_FLAGS "-std=c++17 -O3 -march=native -Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -ffp-contract=fast -ffast-math -funsafe-math-optimizations")
-list(APPEND CMAKE_HOST_FLAGS "-O3;-march=native")
+# Compiler flags
+list(APPEND rochpcg_hip_flags -O3 -march=native -Wno-unused-command-line-argument -Wno-duplicate-decl-specifier -ffp-contract=fast -ffast-math -funsafe-math-optimizations)
+list(APPEND rochpcg_host_flags -O3 -march=native)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-list(APPEND HIP_HIPCC_FLAGS "-g")
-list(APPEND CMAKE_HOST_FLAGS "-g")
+list(APPEND rochpcg_hip_flags -g)
+list(APPEND rochpcg_host_flags -g)
 endif()
-
-# AMD targets
-foreach(target ${GPU_TARGETS})
-  list(APPEND HIP_HIPCC_FLAGS "--offload-arch=${target}")
-endforeach()
 
 # Target executable
 if(BUILD_TEST)
-  hip_add_executable(rochpcg ${rochpcg_source} rochpcg_gtest_main.cpp test_rochpcg.cpp ${rochpcg_hip_source})
+  add_executable(rochpcg ${rochpcg_source} rochpcg_gtest_main.cpp test_rochpcg.cpp ${rochpcg_hip_source})
 else()
-  hip_add_executable(rochpcg ${rochpcg_source} main.cpp ${rochpcg_hip_source})
+  add_executable(rochpcg ${rochpcg_source} main.cpp ${rochpcg_hip_source})
 endif()
 
-target_compile_options(rochpcg PRIVATE ${CMAKE_HOST_FLAGS})
+target_compile_options(rochpcg PRIVATE
+                       "$<$<COMPILE_LANGUAGE:CXX>:${rochpcg_host_flags}>"
+                       "$<$<COMPILE_LANGUAGE:HIP>:${rochpcg_hip_flags}>")
 
 # Support only for contiguous arrays
 target_compile_definitions(rochpcg PRIVATE HPCG_CONTIGUOUS_ARRAYS)
@@ -189,7 +184,7 @@ endif()
 
 # Target properties
 set_target_properties(rochpcg PROPERTIES VERSION ${rochpcg_VERSION})
-set_property(TARGET rochpcg PROPERTY HIP_ARCHITECTURES ${AMDGPU_TARGETS})
+set_property(TARGET rochpcg PROPERTY HIP_ARCHITECTURES ${GPU_TARGETS})
 if(BUILD_TEST)
   set_target_properties(rochpcg PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
   set_target_properties(rochpcg PROPERTIES OUTPUT_NAME "rochpcg-test")

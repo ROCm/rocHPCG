@@ -61,6 +61,8 @@ const char* NULLDEVICE="/dev/null";
 
 #include <fstream>
 #include <iostream>
+#include <random>
+#include <string>
 #include <hip/hip_runtime_api.h>
 
 #include "utils.hpp"
@@ -75,6 +77,17 @@ void* workspace;
 hipAllocator_t allocator;
 
 std::ofstream HPCG_fout; //!< output file stream for logging activities during HPCG run
+
+static std::string randomHash(int length) {
+  static const char charset[] = "0123456789abcdef";
+  static std::mt19937 gen(std::random_device{}());
+  std::uniform_int_distribution<int> dist(0, 15);
+  std::string s(length, '0');
+  for (int i = 0; i < length; ++i) {
+    s[i] = charset[dist(gen)];
+  }
+  return s;
+}
 
 static int
 startswith(const char * s, const char * prefix) {
@@ -242,15 +255,16 @@ HPCG_Init(int * argc_p, char ** *argv_p, HPCG_Params & params) {
 
   time ( &rawtime );
   ptm = localtime(&rawtime);
-  sprintf( fname, "hpcg%04d%02d%02dT%02d%02d%02d.txt",
-      1900 + ptm->tm_year, ptm->tm_mon+1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec );
+  std::string hash = randomHash(8);
+  sprintf( fname, "hpcg%04d%02d%02dT%02d%02d%02d_%s.txt",
+      1900 + ptm->tm_year, ptm->tm_mon+1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, hash.c_str() );
 
   if (0 == params.comm_rank) {
     HPCG_fout.open(fname);
   } else {
 #if defined(HPCG_DEBUG) || defined(HPCG_DETAILED_DEBUG)
-    sprintf( fname, "hpcg%04d%02d%02dT%02d%02d%02d_%d.txt",
-        1900 + ptm->tm_year, ptm->tm_mon+1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, params.comm_rank );
+    sprintf( fname, "hpcg%04d%02d%02dT%02d%02d%02d_%s_%d.txt",
+        1900 + ptm->tm_year, ptm->tm_mon+1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, hash.c_str(), params.comm_rank );
     HPCG_fout.open(fname);
 #else
     HPCG_fout.open(NULLDEVICE);

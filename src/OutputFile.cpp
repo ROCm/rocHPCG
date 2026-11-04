@@ -15,6 +15,7 @@
 
 #include <fstream>
 #include <list>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -24,6 +25,17 @@ using std::string;
 using std::stringstream;
 using std::list;
 using std::ofstream;
+
+static std::string randomHash(int length) {
+  static const char charset[] = "0123456789abcdef";
+  static std::mt19937 gen(std::random_device{}());
+  std::uniform_int_distribution<int> dist(0, 15);
+  std::string s(length, '0');
+  for (int i = 0; i < length; ++i) {
+    s[i] = charset[dist(gen)];
+  }
+  return s;
+}
 
 OutputFile::OutputFile(const string & name_arg, const string & version_arg)
   : name(name_arg), version(version_arg), eol("\n"), keySeparator("::") {}
@@ -119,7 +131,7 @@ OutputFile::generate(void) {
         ptm->tm_mday, ptm->tm_hour, ptm->tm_min,ptm->tm_sec);
 
   string filename = name + "_" + version + "_";
-  filename += string(sdate) + ".txt";
+  filename += string(sdate) + "_" + randomHash(8) + ".txt";
 
   ofstream myfile(filename.c_str());
   myfile << result;
